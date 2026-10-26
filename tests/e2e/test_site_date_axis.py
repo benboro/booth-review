@@ -12,7 +12,7 @@ from collections.abc import Callable
 from itertools import pairwise
 
 import pytest
-from conftest import FIXTURE_GAMES, FIXTURE_RATED, FIXTURE_UNRATED
+from conftest import FIXTURE_BAND, FIXTURE_RATED, FIXTURE_SHOWN
 from playwright.sync_api import Page, Route, expect
 from test_site_chart import _RING_VISIBLE, _hover_dot
 
@@ -450,12 +450,12 @@ def test_no_na_strip_and_all_dots_plotted(date_page: Page) -> None:
     date_x = date_page.evaluate("Array.from(window.__testHooks.data.t.dateX)")
     # Every dot passes in the default state, so each telecast is drawn exactly once.
     # 12 rated dots on the log axis + 8 unrated dots in the band = all 20 games (04.13).
-    assert len(f["byIdx"]) == FIXTURE_GAMES
+    assert len(f["byIdx"]) == FIXTURE_SHOWN
     assert sorted(f["logXs"]) == sorted(date_x[:FIXTURE_RATED])
-    assert sorted(f["bandXs"]) == sorted(date_x[FIXTURE_RATED:])
+    assert sorted(f["bandXs"]) == sorted(date_x[FIXTURE_RATED : FIXTURE_RATED + FIXTURE_BAND])
     assert len(f["logXs"]) == FIXTURE_RATED
-    assert len(f["bandXs"]) == FIXTURE_UNRATED
-    assert sorted(f["xs"]) == sorted(date_x)
+    assert len(f["bandXs"]) == FIXTURE_BAND
+    assert sorted(f["xs"]) == sorted(date_x[:FIXTURE_SHOWN])
     assert f["range"][0] <= min(f["xs"]) and f["range"][1] >= max(f["xs"])
 
 

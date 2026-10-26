@@ -184,7 +184,9 @@ def test_band_holds_exactly_the_games_without_a_score(
         f"Array.from(window.__testHooks.data.{key}).flatMap((v, i) => (v == null ? [i] : []))"
     )
     assert {_NO_SCORE_RATED, nr} <= set(unscored)
-    assert sorted(band) == unscored
+    # An unplayed game has no score but is never drawn (v2.1), so it is not in the band.
+    unplayed = page.evaluate("Array.from(window.__testHooks.data.unplayed)")
+    assert sorted(band) == [i for i in unscored if not unplayed[i]]
     for i, y in band.items():
         assert y == pytest.approx(jitter[i])
     main = sorted(i for t in traces if t["meta"].startswith("family:") for i in t["customdata"])

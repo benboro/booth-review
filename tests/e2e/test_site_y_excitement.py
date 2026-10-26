@@ -19,7 +19,7 @@ pytestmark = pytest.mark.e2e
 
 _WAIT_TWO_FRAMES = "() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))"
 
-_NULL_EXCITEMENT = [2, 12, 19]
+_NULL_EXCITEMENT = [2, 12]  # 19 has none either but is unplayed and never drawn (v2.1)
 
 _FIG_JS = """
 () => {
@@ -159,7 +159,8 @@ def test_band_holds_exactly_the_null_excitement_games(
         assert t["symbol"] != "circle-open"
     # every game with a value is in a main trace, rated or not
     main = sorted(i for t in traces if t["meta"].startswith("family:") for i in t["customdata"])
-    assert main == sorted(set(range(20)) - set(_NULL_EXCITEMENT))
+    # ...except the unplayed game 19, which is never drawn (v2.1)
+    assert main == sorted(set(range(20)) - set(_NULL_EXCITEMENT) - {19})
     # the band is all filled: inert band points share their family's inert marker
     for t in traces:
         if t["meta"].startswith("unrated-"):
@@ -212,7 +213,7 @@ def test_corner_game_missing_both_values(
         if t["meta"].startswith("unrated-active:"):
             for k, i in enumerate(t["customdata"]):
                 pts[i] = (t["x"][k], t["y"][k], t["yaxis"])
-    for i in (12, 19):
+    for i in (12,):
         assert pts[i][0] == pytest.approx(sentinel)
         assert pts[i][2] == "y2"
         assert 0 <= pts[i][1] < 1

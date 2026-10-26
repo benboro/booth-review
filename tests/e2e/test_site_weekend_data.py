@@ -86,7 +86,7 @@ def test_scheduled_rows_never_join_the_merged_arrays(lead_page: Page) -> None:
     assert out["scheduled"] == 9 == out["facadeN"]
     assert out["weeks"] == 6
     assert out["weekend"] == "5"
-    assert out["view"] == 20
+    assert out["view"] == 19  # the unplayed game 19 is never drawn (v2.1)
 
 
 def test_cfb_weekend_games_cover_all_three_blocks_once(lead_page: Page) -> None:

@@ -242,6 +242,20 @@ export function prepareData(raw) {
   merged.cause = new Array(nRated).fill(null).concat(raw.telecasts_unrated.cause);
   const rated = new Uint8Array(n);
   rated.fill(1, 0, nRated);
+  // v2.1 (user rule, 2026-10-26): a current-season game with no figure, no score and a
+  // pending cause has not been played yet. Scatter, Bars, Butterfly, Map, Crews, the facets
+  // and the counts leave it out until it is played or rated; This weekend reads the blocks
+  // directly and still shows it with its crew.
+  const unplayed = new Uint8Array(n);
+  for (let i = nRated; i < n; i += 1) {
+    if (
+      merged.cause[i] === 'pending'
+      && merged.home_points[i] == null
+      && merged.away_points[i] == null
+    ) {
+      unplayed[i] = 1;
+    }
+  }
   // 04.13 D-05: band jitter is fixed per data file, implies no order, and ships
   // nothing; hashed by the unrated-block index so new rated games never move
   // band markers.
@@ -460,6 +474,7 @@ export function prepareData(raw) {
     n,
     nRated,
     rated,
+    unplayed,
     jitter,
     bandJitter,
     t,

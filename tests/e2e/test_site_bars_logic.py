@@ -712,9 +712,9 @@ def test_called_together_narrows_the_counted_games(guarded_page: Page, site_url:
     together = _model(guarded_page, "barsModel", {"people": people, "together": True})["model"]
     assert together["rows"] == []
     union = _model(guarded_page, "barsModel", {"people": people})["model"]
-    # Kris Venn: games 1, 6, 9, 13; Pat Rowan: 2, 5, 10, 15, 16, 19 -> 10 games, 20 team slots
-    # (Cedar Hollow 3 times); games 1, 2, 5, 6, 9, 10 are rated -> 12 rated slots.
-    assert sum(r["total"] for r in union["rows"]) == 20
+    # Kris Venn: games 1, 6, 9, 13; Pat Rowan: 2, 5, 10, 15, 16 (19 is unplayed, v2.1) -> 9
+    # games, 18 team slots (Cedar Hollow 3 times); games 1, 2, 5, 6, 9, 10 are rated -> 12 rated.
+    assert sum(r["total"] for r in union["rows"]) == 18
     assert sum(r["rated"] for r in union["rows"]) == 12
     assert ("Cedar Hollow", 3) in _rows(union)
 
@@ -789,19 +789,20 @@ def test_butterfly_two_announcers_and_together_is_ignored(
     assert [s["name"] for s in model["sides"]] == ["Kris Venn", "Pat Rowan"]
     assert [s["kind"] for s in model["sides"]] == ["person", "person"]
     assert model["shared"] == 0
+    # Pat Rowan's unplayed 2026 game (Ironpeak at Stonebridge) is never counted (v2.1).
     assert _sides(model) == [
-        ("Ironpeak", 2, 3),
         ("Foxhollow", 2, 2),
+        ("Ironpeak", 2, 2),
         ("Cedar Hollow", 1, 2),
         ("Boulder Pass", 0, 2),
         ("Lakeview", 1, 1),
         ("Northfield", 1, 1),
-        ("Stonebridge", 1, 1),
+        ("Stonebridge", 1, 0),
     ]
-    # Sorted by total games (5, 4, 3, 2...), so Ironpeak outranks Foxhollow.
+    # Sorted by total games (4, 4, 3, 2...); Foxhollow and Ironpeak tie and keep name order.
     assert [(r["label"], r["rated"]) for r in model["rows"]] == [
-        ("Ironpeak", 2),
         ("Foxhollow", 3),
+        ("Ironpeak", 2),
         ("Cedar Hollow", 3),
         ("Boulder Pass", 2),
         ("Lakeview", 1),
@@ -809,8 +810,8 @@ def test_butterfly_two_announcers_and_together_is_ignored(
         ("Stonebridge", 1),
     ]
     assert [(r["sides"][0]["rated"], r["sides"][1]["rated"]) for r in model["rows"]][:3] == [
-        (1, 1),
         (2, 1),
+        (1, 1),
         (1, 2),
     ]
     together = _model(guarded_page, "butterflyModel", {"people": people, "together": True})["model"]
@@ -985,20 +986,21 @@ def _main(model: dict[str, Any]) -> list[tuple[str, int, Any]]:
 def test_simple_announcer_rows_carry_main_family(guarded_page: Page, site_url: str) -> None:
     _load(guarded_page, site_url)
     model = _model(guarded_page, "barsModel", {"school": _THREE_SCHOOLS})["model"]
+    # The unplayed 2026 game (Pat Rowan and Sam Delgado, Alpha Sports) is never counted (v2.1).
     assert _main(model) == [
         ("Kris Venn", 4, "fox"),
-        ("Pat Rowan", 3, "disney"),
         ("Robin Teague", 3, "other"),
         ("Casey Lund", 2, "disney"),
         ("Jax Venn", 2, "fox"),
-        ("Sam Delgado", 2, "disney"),
+        ("Pat Rowan", 2, "disney"),
         ("Dale Harlow", 1, "disney"),
         ("Dale Harlow Jr.", 1, "disney"),
         ("Jamie Oaks", 1, "disney"),
         ("Morgan Ash", 1, "disney"),
+        ("Sam Delgado", 1, "conference"),
         ("Taylor Vance", 1, "fox"),
     ]
-    assert [r["rated"] for r in model["rows"]] == [3, 1, 3, 1, 2, 1, 1, 1, 0, 0, 1]
+    assert [r["rated"] for r in model["rows"]] == [3, 3, 1, 2, 1, 1, 1, 0, 0, 1, 1]
     # The family pill is drawn for any row with `family`, so it stays null.
     assert all(r["family"] is None for r in model["rows"])
 
@@ -1018,7 +1020,9 @@ def test_main_family_honors_the_role_filter(guarded_page: Page, site_url: str) -
         "model"
     ]
     by_label = {r["label"]: r["mainFamily"] for r in model["rows"]}
-    assert by_label["Sam Delgado"] == "disney"  # the unrated game 16 outweighs the rated one
+    # Sam Delgado as analyst: the unrated disney game 16 and a rated conference game tie, and
+    # the unplayed disney game 19 is never counted (v2.1), so the tie falls to conference.
+    assert by_label["Sam Delgado"] == "conference"
     assert by_label["Jax Venn"] == "fox"
 
 

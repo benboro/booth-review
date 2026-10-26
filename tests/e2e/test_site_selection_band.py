@@ -374,7 +374,7 @@ def test_a_broad_filter_alone_does_not_grow_the_selection_band(
     chart_top = _y(guarded_page, "#chart-area")
     open_app(guarded_page, "?slot=afternoon,prime,late")
     assert (
-        guarded_page.inner_text("#summary-count") == "8 rated of 14 games"
+        guarded_page.inner_text("#summary-count") == "8 rated of 13 games"
     )  # slots: rated 8 (1,2,4,5,7-10) + unrated 6 (U0,2,3,4,6,7)
     assert guarded_page.inner_text("#summary-detail").endswith(
         " +6 more"

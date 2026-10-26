@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import FIXTURE_GAMES
+from conftest import FIXTURE_SHOWN
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -352,7 +352,7 @@ def test_bowl_hosted_semifinal_in_round_and_bowl(loaded: Page, slug: str) -> Non
 def test_fade_vs_hide(loaded: Page) -> None:
     assert _view(loaded, {"game": "lakeshore", "dots": "hide"})["visibleCount"] == 2
     assert (
-        _view(loaded, {"game": "lakeshore"})["visibleCount"] == FIXTURE_GAMES
+        _view(loaded, {"game": "lakeshore"})["visibleCount"] == FIXTURE_SHOWN
     )  # fade keeps all 12 rated + 8 unrated drawn
 
 
@@ -380,7 +380,7 @@ def test_no_game_match_copy_and_state_untouched(loaded: Page) -> None:
 
 def test_unknown_slug_is_no_pick(loaded: Page) -> None:
     v = _view(loaded, {"game": "no-such-game"})
-    assert len(v["passing"]) == FIXTURE_GAMES  # no pick: 12 rated + 8 unrated all pass
+    assert len(v["passing"]) == FIXTURE_SHOWN  # no pick: every played game passes
 
 
 def test_hook_exposes_games_facet(

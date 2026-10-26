@@ -1130,13 +1130,14 @@ def _unrated_people_table(page: Page, open_app: Callable[[Page, str], None]) -> 
 def test_unrated_rows_listed_inline_with_no_rating_cells(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-09: pat-rowan's rated games plus unrated 15, 16, 19 (6 rows); unrated
-    cells read 'No public rating' / 'No figure to cite', muted, not numeric."""
+    """D-09: pat-rowan's rated games plus unrated 15, 16 (5 rows; 19 is unplayed and never
+    listed, v2.1); unrated cells read 'No public rating' / 'No figure to cite', muted, not
+    numeric."""
     _unrated_people_table(guarded_page, open_app)
     rows = guarded_page.locator("#games-table tbody tr")
-    assert rows.count() == 6
+    assert rows.count() == 5
     unrated = [r for r in rows.all() if "No public rating" in r.inner_text()]
-    assert len(unrated) == 3
+    assert len(unrated) == 2
     for row in unrated:
         viewers = row.locator("td").nth(4)
         source = row.locator("td").nth(5)
@@ -1159,15 +1160,14 @@ def test_unrated_rows_sort_by_date_and_last_on_viewers(
     in both directions, ordered by date."""
     _unrated_people_table(guarded_page, open_app)
     rows = _row_texts(guarded_page)
-    assert ["No public rating" in r for r in rows] == [False, True, True, False, False, True]
+    assert ["No public rating" in r for r in rows] == [False, True, True, False, False]
 
     guarded_page.click('button[data-sort="viewers"]')
     for _ in range(2):
         rows = _row_texts(guarded_page)
-        assert ["No public rating" in r for r in rows] == [False] * 3 + [True] * 3
+        assert ["No public rating" in r for r in rows] == [False] * 3 + [True] * 2
         assert "Dec 18, 2021" in rows[3]
         assert "Dec 28, 2021" in rows[4]
-        assert "Oct 3, 2026" in rows[5]
         guarded_page.click('button[data-sort="viewers"]')
 
 

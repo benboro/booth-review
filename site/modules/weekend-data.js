@@ -248,7 +248,8 @@ export function cfbWeekendPasses(data, state, game) {
   const scheduled = game.block === 'scheduled';
   const obj = scheduled ? scheduledFacade(data) : data;
   const i = game.index;
-  if (!passesFadeFilters(obj, pick, i)) return false;
+  // This weekend shows unplayed games, so the fade predicate is asked with `unplayedOk`.
+  if (!passesFadeFilters(obj, pick, i, { unplayedOk: true })) return false;
   const personIndexes = (pick.people ?? []).map((id) => data.personIndexById.get(id));
   if (personIndexes.length > 0 && !personMatch(obj, pick, personIndexes, i)) return false;
   if (pick.crew != null && (scheduled || crewIndex(data).keys[i] !== pick.crew)) return false;

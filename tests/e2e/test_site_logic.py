@@ -18,7 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from conftest import FIXTURE_GAMES, FIXTURE_RATED, FIXTURE_UNRATED
+from conftest import FIXTURE_GAMES, FIXTURE_RATED, FIXTURE_SHOWN, FIXTURE_UNRATED
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -185,7 +185,7 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
     distinct star (D-07)."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"people": ["kris-venn", "sam-delgado"]})
-    assert view["highlighted"] == [1, 2, 6, 9, 10, 13, 16, 19]
+    assert view["highlighted"] == [1, 2, 6, 9, 10, 13, 16]
     assert _highlighted(
         guarded_page, {"people": ["kris-venn", "sam-delgado"], "together": True}
     ) == [6]
@@ -199,7 +199,6 @@ def test_multi_person_or_default_and_together_mode_and_compare_symbols(
         "10": "square",
         "13": "circle",
         "16": "square",
-        "19": "square",
     }
 
 
@@ -239,7 +238,7 @@ def test_seasons_and_networks_fade_by_default_and_hide_in_hide_mode(
     04.1 D-13) and removes dots only in Hide mode; Networks does the same (04.16 D-15)."""
     _load(guarded_page, site_url)
     fade = _view(guarded_page, {"seasons": [2025, 2025]})
-    assert fade["visibleCount"] == FIXTURE_GAMES
+    assert fade["visibleCount"] == FIXTURE_SHOWN
     assert fade["passingCount"] == 6
     assert fade["passesFilters"] == [4, 5, 6, 7, 17, 18]
     hide = _view(guarded_page, {"seasons": [2025, 2025], "dots": "hide"})
@@ -247,11 +246,11 @@ def test_seasons_and_networks_fade_by_default_and_hide_in_hide_mode(
     assert hide["passesFilters"] == [4, 5, 6, 7, 17, 18]
 
     net_fade = _view(guarded_page, {"networks": ["net-a"]})
-    assert net_fade["visibleCount"] == FIXTURE_GAMES
-    assert net_fade["passesFilters"] == [0, 4, 8, 13, 14, 19]
+    assert net_fade["visibleCount"] == FIXTURE_SHOWN
+    assert net_fade["passesFilters"] == [0, 4, 8, 13, 14]
     net_hide = _view(guarded_page, {"networks": ["net-a"], "dots": "hide"})
-    assert net_hide["visibleCount"] == 6
-    assert net_hide["passesFilters"] == [0, 4, 8, 13, 14, 19]
+    assert net_hide["visibleCount"] == 5
+    assert net_hide["passesFilters"] == [0, 4, 8, 13, 14]
 
 
 @pytest.mark.parametrize(
@@ -273,7 +272,7 @@ def test_every_fade_filter_follows_the_switch(
     fade = _view(guarded_page, {**patch})
     hide = _view(guarded_page, {**patch, "dots": "hide"})
     assert fade["passesFilters"] == passes
-    assert fade["visibleCount"] == FIXTURE_GAMES
+    assert fade["visibleCount"] == FIXTURE_SHOWN
     assert hide["visibleCount"] == len(passes)
     assert hide["passesFilters"] == fade["passesFilters"]
     assert hide["seasonCounts"] == fade["seasonCounts"]
@@ -285,7 +284,7 @@ def test_only_the_exact_hide_value_hides(guarded_page: Page, site_url: str) -> N
     _load(guarded_page, site_url)
     assert (
         _view(guarded_page, {"dots": "bogus", "seasons": [2025, 2025]})["visibleCount"]
-        == FIXTURE_GAMES
+        == FIXTURE_SHOWN
     )
 
 
@@ -297,11 +296,11 @@ def test_hide_keeps_passing_dots_that_are_not_the_announcers(
     _load(guarded_page, site_url)
     partial = {"people": ["dale-harlow"], "seasons": [2026, 2026]}
     hide = _view(guarded_page, {**partial, "dots": "hide"})
-    assert hide["visibleCount"] == 5
-    assert hide["passesFilters"] == [8, 9, 10, 11, 19]
+    assert hide["visibleCount"] == 4
+    assert hide["passesFilters"] == [8, 9, 10, 11]
     assert hide["highlighted"] == [8]
     fade = _view(guarded_page, partial)
-    assert fade["visibleCount"] == FIXTURE_GAMES
+    assert fade["visibleCount"] == FIXTURE_SHOWN
     assert fade["highlighted"] == [8]
 
 
@@ -317,7 +316,7 @@ def test_head_to_head_keeps_only_games_between_the_two_schools(
     view = _view(guarded_page, _H2H)
     assert view["passesFilters"] == [0, 4, 16]
     assert view["matched"] == [0, 4, 16]
-    assert view["visibleCount"] == FIXTURE_GAMES
+    assert view["visibleCount"] == FIXTURE_SHOWN
     assert _view(guarded_page, {**_H2H, "dots": "hide"})["visibleCount"] == 3
     assert _view(guarded_page, {**_H2H, "h2h": False})["passesFilters"] == [
         0,
@@ -347,7 +346,6 @@ def test_head_to_head_keeps_only_games_between_the_two_schools(
         15,
         16,
         18,
-        19,
     ]
 
 
@@ -414,7 +412,7 @@ def test_postseason_exclude_and_only(guarded_page: Page, site_url: str) -> None:
     game_type; excluded games fade (SITE-41 / 04.7 D-06)."""
     _load(guarded_page, site_url)
     excluded = _view(guarded_page, {"postseason": "exclude"})["passesFilters"]
-    assert excluded == [i for i in range(FIXTURE_GAMES) if i not in (5, 7, 15, 16)]
+    assert excluded == [i for i in range(FIXTURE_SHOWN) if i not in (5, 7, 15, 16)]
     assert _view(guarded_page, {"postseason": "only"})["passesFilters"] == [5, 7, 15, 16]
 
 
@@ -424,7 +422,7 @@ def test_filter_wins_over_person_highlight(guarded_page: Page, site_url: str) ->
     filter wins."""
     _load(guarded_page, site_url)
     view = _view(guarded_page, {"people": ["pat-rowan"], "postseason": "exclude"})
-    assert view["highlighted"] == [2, 10, 19]
+    assert view["highlighted"] == [2, 10]
     assert 5 not in view["highlighted"]
 
 
@@ -455,7 +453,7 @@ def test_season_counts_use_fade_filters_and_ignore_season_range(
     the season range itself never changes them, in Fade or Hide (04.7 D-06)."""
     _load(guarded_page, site_url)
     net_counts = dict(_view(guarded_page, {"networks": ["net-a"]})["seasonCounts"])
-    assert net_counts == {2019: 1, 2021: 2, 2025: 1, 2026: 2}
+    assert net_counts == {2019: 1, 2021: 2, 2025: 1, 2026: 1}
 
     unfiltered_counts = _view(guarded_page, {})["seasonCounts"]
     ranged_counts = _view(guarded_page, {"seasons": [2025, 2025]})["seasonCounts"]
@@ -983,8 +981,9 @@ def test_summary_networks_ordered_by_matched_count_then_alphabetical(
     """A6: networks list dominant first (matched-telecast count desc), ties alphabetical."""
     _load(guarded_page, site_url)
     pat = _view(guarded_page, {"people": ["pat-rowan"]})["summary"]["networks"]
-    # Pat: Beta 2 (rated 5, unrated 16), Conference 2 (rated 2, 10), Alpha 1, Stream Plus 1.
-    assert pat == ["Beta Network", "Conference Network", "Alpha Sports", "Stream Plus"]
+    # Pat: Beta 2 (rated 5, unrated 16), Conference 2 (rated 2, 10), Stream Plus 1; the
+    # Alpha Sports game (19) is unplayed and never counted (v2.1).
+    assert pat == ["Beta Network", "Conference Network", "Stream Plus"]
     robin = _view(guarded_page, {"people": ["robin-teague"]})["summary"]["networks"]
     assert robin == ["Other Network", "Alpha Sports"]
     tie = _view(guarded_page, {"people": ["jamie-oaks"]})["summary"]["networks"]
@@ -1004,13 +1003,13 @@ async (summary) => {
     ("partial", "kind", "count", "rated"),
     [
         # No filter or selection: every game, 12 rated of 20.
-        ({}, "all", FIXTURE_GAMES, FIXTURE_RATED),
+        ({}, "all", FIXTURE_SHOWN, FIXTURE_RATED),
         # Networks = [net-e] (Stream Plus): unrated games 15 and 18 only.
         ({"networks": ["net-e"]}, "matches", 2, 0),
         # School Northfield: rated 0, 4, 8 plus unrated 13 (U1), 16 (U4) -> 5 games.
         ({"school": ["northfield"]}, "matches", 5, 3),
-        # net-a: rated 0, 4, 8 plus unrated 13, 14, 19 -> 6 games.
-        ({"networks": ["net-a"]}, "matches", 6, 3),
+        # net-a: rated 0, 4, 8 plus unrated 13, 14 -> 5 games (19 is unplayed, v2.1).
+        ({"networks": ["net-a"]}, "matches", 5, 3),
         # Season 2025: rated 4-7 plus unrated 17 (U5), 18 (U6) -> 6 games.
         ({"seasons": [2025, 2025]}, "matches", 6, 4),
         # Dale Harlow: rated 0, 8 plus unrated 17 -> 3 games; with 2026 only: 8.
@@ -1065,7 +1064,7 @@ def test_person_with_no_games_gets_the_no_games_summary(guarded_page: Page, site
 def test_role_alone_is_not_a_filter_for_the_summary(guarded_page: Page, site_url: str) -> None:
     """Role alone leaves the summary at the all-games view."""
     _load(guarded_page, site_url)
-    everything = {"kind": "all", "count": FIXTURE_GAMES, "rated": FIXTURE_RATED}
+    everything = {"kind": "all", "count": FIXTURE_SHOWN, "rated": FIXTURE_RATED}
     assert _view(guarded_page, {})["summary"] == everything
     assert _view(guarded_page, {"role": "pbp"})["summary"] == everything
 
@@ -1078,7 +1077,7 @@ def test_summary_shows_for_filters_alone_without_filling_the_table(
     view = _view(guarded_page, {"networks": ["net-a"]})
     summary = view["summary"]
     assert view["matched"] == []
-    assert summary["count"] == 6  # net-a: rated 0, 4, 8 plus unrated 13, 14, 19
+    assert summary["count"] == 5  # net-a: rated 0, 4, 8 plus unrated 13, 14 (19 is unplayed)
     assert summary["rated"] == 3
     assert "of" not in summary
     assert (summary["seasonMin"], summary["seasonMax"]) == (2019, 2026)
@@ -1169,12 +1168,12 @@ def test_facet_default_state_counts(guarded_page: Page, site_url: str) -> None:
     """Default state: every telecast counts once in each facet (D-12)."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {})
-    assert facets["total"] == FIXTURE_GAMES
-    assert facets["networks"] == [6, 5, 4, 3, 2]
-    assert facets["postseason"] == {"all": 20, "exclude": 16, "only": 4}
-    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 5}
-    assert facets["slots"] == {"noon": 5, "afternoon": 6, "prime": 7, "late": 1}
-    assert facets["role"] == {"pbp": 17, "analyst": 15}
+    assert facets["total"] == FIXTURE_SHOWN
+    assert facets["networks"] == [5, 5, 4, 3, 2]
+    assert facets["postseason"] == {"all": 19, "exclude": 15, "only": 4}
+    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 4}
+    assert facets["slots"] == {"noon": 5, "afternoon": 6, "prime": 6, "late": 1}
+    assert facets["role"] == {"pbp": 16, "analyst": 14}
 
 
 def test_facet_selected_person_narrows_other_facets_not_people(
@@ -1223,9 +1222,9 @@ def test_facet_role_limits_person_match_and_role_facet_ignores_state_role(
     _load(guarded_page, site_url)
     as_pbp = _facets(guarded_page, {"people": ["pat-rowan"], "role": "pbp"})
     as_analyst = _facets(guarded_page, {"people": ["pat-rowan"], "role": "analyst"})
-    assert as_pbp["networks"] == [1, 2, 2, 0, 1]
+    assert as_pbp["networks"] == [0, 2, 2, 0, 1]
     assert as_analyst["networks"] == [0, 0, 0, 0, 0]
-    assert as_pbp["role"] == {"pbp": 6, "analyst": 0}
+    assert as_pbp["role"] == {"pbp": 5, "analyst": 0}
     assert as_analyst["role"] == as_pbp["role"]
 
 
@@ -1234,7 +1233,7 @@ def test_facet_season_range_constrains_other_facets_only(guarded_page: Page, sit
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"seasons": [2019, 2019]})
     assert facets["networks"] == [1, 2, 0, 0, 0]
-    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 5}
+    assert facets["seasons"] == {"2019": 3, "2021": 6, "2025": 6, "2026": 4}
 
 
 def test_facet_season_counts_derive_from_seasons_facet(guarded_page: Page, site_url: str) -> None:
@@ -1250,9 +1249,9 @@ def test_facet_people_counts_reflect_other_filters(guarded_page: Page, site_url:
     """People counts are telecasts per person under the other filters."""
     _load(guarded_page, site_url)
     facets = _facets(guarded_page, {"networks": ["net-a"]})
-    # net-a dots are 0, 4, 8, 13, 14, 19: people 0,1 (dots 0, 8), 7,8 (dots 4, 14),
-    # 6 (dot 8), 2,10 (dot 13), 4,5 (dot 19).
-    assert facets["people"] == [2, 2, 1, 0, 1, 1, 1, 2, 2, 0, 1]
+    # net-a dots are 0, 4, 8, 13, 14 (19 is unplayed, v2.1): people 0,1 (dots 0, 8),
+    # 7,8 (dots 4, 14), 6 (dot 8), 2,10 (dot 13).
+    assert facets["people"] == [2, 2, 1, 0, 0, 0, 1, 2, 2, 0, 1]
 
 
 def test_named_game_info_and_rivalry_name(guarded_page: Page, site_url: str) -> None:
@@ -1443,7 +1442,7 @@ def test_cause_wording_and_format_viewers_null(guarded_page: Page, site_url: str
 def test_scatter_draws_rated_dots_and_band_rings(guarded_page: Page, site_url: str) -> None:
     """The figure holds every rated dot plus one band ring per unrated game."""
     _load(guarded_page, site_url)
-    assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_GAMES
+    assert guarded_page.evaluate(_FIGURE_JS) == FIXTURE_SHOWN
 
 
 def test_viewer_millions_read_mm_everywhere(guarded_page: Page, site_url: str) -> None:

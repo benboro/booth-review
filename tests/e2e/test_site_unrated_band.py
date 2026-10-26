@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import FIXTURE_BAND
 from playwright.sync_api import Page
 from test_site_chart import (
     _RING,
@@ -235,9 +236,9 @@ def test_default_unrated_markers(
     thin = guarded_page.evaluate(_THIN_JS)
     surface = guarded_page.evaluate(_PALETTE_JS)["surface"]
     pts = _unrated_points(guarded_page, "unrated-active:")
-    assert sorted(pts) == list(range(12, 20))
+    assert sorted(pts) == list(range(12, 19))  # 19 is unplayed and never drawn (v2.1)
     by_family = {t["meta"].split(":", 1)[1]: sorted(t["customdata"]) for t in active}
-    assert by_family["disney"] == [13, 14, 15, 18, 19]
+    assert by_family["disney"] == [13, 14, 15, 18]
     assert by_family["fox"] == [12, 16]
     assert by_family["conference"] == [17]
     for t in active:
@@ -341,7 +342,7 @@ def test_fade_filter_moves_failing_games_to_inert_and_enlarges_passing(
     inert = [t for t in traces if t["meta"].startswith("unrated-inert:")]
     passing = sorted(i for t in active for i in t["customdata"])
     assert passing == [13, 16]
-    assert sum(len(t["x"]) for t in inert) == 6
+    assert sum(len(t["x"]) for t in inert) == 5
     palette = guarded_page.evaluate(_PALETTE_JS)
     colors = _family_colors(guarded_page)
     rated = {t["meta"]: t for t in traces if t["meta"].startswith("family:")}
@@ -446,7 +447,7 @@ def test_date_trims_out_of_season_unrated_games_spread_fades_them(
     n_inert = sum(
         len(t["x"]) for t in _traces(guarded_page) if t["meta"].startswith("unrated-inert:")
     )
-    assert n_inert == 8 - n_shown
+    assert n_inert == FIXTURE_BAND - n_shown
 
 
 # ---------------------------------------------------------------------------
@@ -509,21 +510,21 @@ def test_compare_filled_shapes_and_filled_halo(
     hl = _highlight(guarded_page)
     assert hl[15] == {"symbol": "circle", "size": 10}
     assert hl[16] == {"symbol": "star", "size": 15}
-    assert hl[19] == {"symbol": "star", "size": 15}
+    assert 19 not in hl  # unplayed, never drawn (v2.1)
     by = _by_meta(guarded_page)
     t = by["highlight-unrated"]
     assert t["yaxis"] == "y2" and t["opacity"] == 1
     # like the rated highlight: circles take the 1.5px ACCENT line, other shapes none
     widths = dict(zip(t["customdata"], t["lineWidth"], strict=True))
-    assert widths[15] == 1.5 and widths[16] == 0 and widths[19] == 0
+    assert widths[15] == 1.5 and widths[16] == 0
     assert t["lineColor"] == guarded_page.evaluate(_PALETTE_JS)["accent"]
     halo = by["highlight-halo-unrated"]
     assert halo["yaxis"] == "y2"
     assert sorted(halo["x"]) == sorted(
-        [hl_x for i, hl_x in zip(t["customdata"], t["x"], strict=True) if i in (16, 19)]
+        [hl_x for i, hl_x in zip(t["customdata"], t["x"], strict=True) if i == 16]
     )
-    assert halo["symbol"] == ["star", "star"]
-    assert halo["size"] == [18, 18]
+    assert halo["symbol"] == ["star"]
+    assert halo["size"] == [18]
     assert halo["lineWidth"] == 0
     assert halo["hoverinfo"] == "skip"
     accent = guarded_page.evaluate(
@@ -660,7 +661,7 @@ def test_test_hooks_expose_rated_and_game_counts(
     ]
 
 
-@pytest.mark.parametrize(("axis_query", "index"), [("", 17), ("?axis=date", 19), ("", 3)])
+@pytest.mark.parametrize(("axis_query", "index"), [("", 17), ("?axis=date", 18), ("", 3)])
 def test_hover_ring_is_centered_on_band_and_rated_markers(
     guarded_page: Page, open_app: Callable[[Page, str], None], axis_query: str, index: int
 ) -> None:
@@ -865,7 +866,9 @@ _WHY_HREF = "methodology.html#games-with-no-public-rating"
     ("axis_query", "index", "line"),
     [
         ("", 17, "No public rating · Conference Network games are rarely rated"),
-        ("?axis=date", 19, "No public rating · viewership not posted yet"),
+        # Unrated 19 (the pending, unplayed game) is never drawn (v2.1), so the Date-axis
+        # case hovers 18, a rarely-rated Stream Plus game.
+        ("?axis=date", 18, "No public rating · Stream Plus games are rarely rated"),
     ],
 )
 def test_hover_band_marker_shows_cause_tooltip_ring_and_modal(

@@ -137,7 +137,7 @@ def test_hide_mode_draws_only_the_picked_tier(
     fade = _view(guarded_page, {"booth": ["a"], "dots": "fade"})
     hide = _view(guarded_page, {"booth": ["a"], "dots": "hide"})
     assert hide["visibleCount"] == 3
-    assert fade["visibleCount"] == 20
+    assert fade["visibleCount"] == 19  # the unplayed game is never drawn (v2.1)
 
 
 def test_other_includes_the_conference_lead(
