@@ -4,8 +4,10 @@
  * draws it with createElement/textContent (T-14-17), never markup-injecting APIs, and turns
  * header and row clicks into `setState` calls.
  *
- * Game quality per crew only: the table is never sorted by viewers by default, and a pick
- * (crew, or Announcers from a person row) highlights rows without ever dropping one.
+ * Game quality per crew only: the table is never sorted by viewers by default. A crew pick
+ * (a Crew-mode row click) narrows the table to that crew, as the NFL Booths pick does (user
+ * rule 2026-10-27); an Announcers pick (a PBP or Analyst row click) highlights rows without
+ * dropping one (U-06).
  */
 
 import { NATURAL_DIR, defaultSort, modelBreakSeason, sortCrewRows } from './crew-groups.js';

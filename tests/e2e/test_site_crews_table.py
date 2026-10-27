@@ -29,7 +29,8 @@ _MODEL_JS = """
 async ([mode, perSeason]) => {
   const G = await import('./modules/crew-groups.js');
   const h = window.__testHooks;
-  const m = G.buildCrewRows(h.data, h.getView(), { mode, perSeason });
+  // As the app builds it: a crew pick narrows the rows (user rule 2026-10-27).
+  const m = G.buildCrewRows(h.data, h.getView(), { mode, perSeason, crew: h.getState().crew });
   return { totalRows: m.totalRows, leftOut: m.leftOut, rows: m.rows.map((r) => ({
     rowKey: r.rowKey, crewKey: r.crewKey, names: r.names, games: r.gamesCount,
     personSlug: r.personSlug || null, partnersMore: r.partnersMore || 0,
@@ -347,15 +348,16 @@ def test_shown_count_resets_to_25(app: Page, change: str) -> None:
     expect(_rows(app)).to_have_count(25)
 
 
-def test_a_pick_past_the_cut_off_is_revealed(app: Page) -> None:
-    total = _model(app)["totalRows"]
+def test_a_pick_past_the_cut_off_is_the_only_row_shown(app: Page) -> None:
     key = _key(app, [CASE_PAST_CUT["pbp"], CASE_PAST_CUT["analyst"]])
     _set(app, {"crew": key})
     row = _rows(app).last
     expect(row).to_have_attribute("data-crew-key", key)
     expect(row).to_have_attribute("aria-pressed", "true")
-    # The pick sorts last, so the table grows to hold it and the button is gone.
-    expect(_rows(app)).to_have_count(total)
+    # The pick would sort last; the table narrows to it (user rule 2026-10-27), so the row
+    # is shown with no paging button, and clearing the pick restores the first page.
+    expect(_rows(app)).to_have_count(1)
+    assert _model(app)["totalRows"] == 1
     expect(app.locator("#crews-panel .crews-more")).to_have_count(0)
     _set(app, {"crew": None})
     expect(_rows(app)).to_have_count(25)
@@ -464,14 +466,45 @@ def test_person_row_click_sets_announcers_and_clears_crew(app: Page) -> None:
     assert _state(app)["people"] == []
 
 
-def test_crew_pick_never_filters_or_touches_booth(app: Page) -> None:
+def test_crew_row_click_narrows_the_table_to_the_crew_and_never_touches_booth(
+    app: Page,
+) -> None:
+    """todo 2026-10-23-cfb-crews-row-click-narrows (user rule 2026-10-27): a Crew-mode row
+    click narrows the table to that crew, as an NFL booth row click does; the tier Booth
+    filter stays untouched, and a second click on the row restores every row."""
     _set(app, {"booth": []})
     total = _model(app)["totalRows"]
     _show_all(app)
-    _row(app, _name(CASE_TRIO["pbp"])).click()
+    row = _row(app, _name(CASE_TRIO["pbp"]))
+    row.click()
     assert _state(app)["booth"] == []
-    assert _model(app)["totalRows"] == total
+    assert _model(app)["totalRows"] == 1
+    expect(_rows(app)).to_have_count(1)
+    expect(_rows(app).first).to_have_class(re.compile(r"is-picked"))
+    expect(app.locator("#crews-panel .crews-count")).to_have_text("Showing 1 of 1 rows.")
+    _rows(app).first.click()
+    assert _state(app)["crew"] is None
+    _show_all(app)
     expect(_rows(app)).to_have_count(total)
+    assert _model(app)["totalRows"] == total
+
+
+def test_crew_pick_narrows_the_person_modes_to_the_crew_s_people(app: Page) -> None:
+    """With a crew pick, PBP mode keeps the crew's play-by-play row and Analyst mode the
+    crew's analyst rows, so switching modes never widens past the picked crew."""
+    key = _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
+    _set(app, {"crew": key})
+    app.locator("#crews-panel button[data-cmode=pbp]").click()
+    expect(_rows(app)).to_have_count(1)
+    expect(_rows(app).first).to_contain_text(_name(CASE_TRIO["pbp"]))
+    app.locator("#crews-panel button[data-cmode=analyst]").click()
+    expect(_rows(app)).to_have_count(len(CASE_TRIO["analysts"]))
+    names = [_name(s) for s in CASE_TRIO["analysts"]]
+    for name in names:
+        expect(_row(app, name)).to_have_count(1)
+    assert _state(app)["crew"] == key
+    _set(app, {"crew": None})
+    assert _model(app)["totalRows"] > len(CASE_TRIO["analysts"])
 
 
 def test_chevron_click_sets_no_pick(app: Page) -> None:
