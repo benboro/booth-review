@@ -44,7 +44,7 @@ export const MAP_TRACE_NAMES = Object.freeze([
   'markers',
 ]);
 
-function outlineTrace(geometry, theme, splat) {
+export function outlineTrace(geometry, theme, splat) {
   const x = [];
   const y = [];
   for (const state of geometry) {
@@ -313,7 +313,7 @@ export function splatImageSpec(url) {
 }
 
 /** Rendered pixels per map unit for a plot of {w, h} CSS pixels (constrain: 'domain'). */
-function pxPerUnit(plot) {
+export function pxPerUnit(plot) {
   if (!plot || !(plot.w > 0) || !(plot.h > 0)) return 0;
   return Math.min(plot.w / MAP_WIDTH, plot.h / MAP_HEIGHT);
 }
