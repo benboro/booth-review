@@ -132,7 +132,7 @@ export function createSplatLayer(gd, { imageSpec, landFill, onFail }) {
         if (mine !== token) return;
         await serialLayout(() => apply(mine, blob, theme));
       } catch (err) {
-        if (mine === token) failed(err, theme);
+        if (mine === token) failed(err, theme, mine);
       }
     });
   }
