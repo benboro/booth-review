@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from booth_review.build.pages import (
-    CREDIT_LINE_TEXT,
+    CREDIT_ITEMS,
     NAV,
     THEME_TOGGLE_HTML,
     csp_for,
@@ -64,12 +64,32 @@ def test_freshness_stamps_with_none() -> None:
     )
 
 
+def test_footer_freshness_line_joins_with_a_semicolon_and_nav_has_no_separator() -> None:
+    footer = footer_html(
+        Freshness(season=2026, crews_through_week="8", viewership_through_week="7")
+    )
+    assert (
+        '<p class="freshness">Crews and scores through Week 8; viewership through Week 7</p>'
+        in footer
+    )
+    empty = footer_html(Freshness(season=2026))
+    assert (
+        "Crews and scores: not yet available this season; "
+        "viewership: not yet available this season" in empty
+    )
+    assert "</a> <a" in footer
+    assert "·" not in footer
+
+
 def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     freshness = Freshness(season=2026, crews_through_week="5", viewership_through_week="4")
     footer = footer_html(freshness)
 
     plain = _strip_tags(footer)
-    assert plain.count(CREDIT_LINE_TEXT) == 1
+    for item in CREDIT_ITEMS:
+        assert plain.count(item) == 1
+    assert footer.count('class="credit-item"') == 3
+    assert " · " not in plain
 
     for _label, href in NAV:
         assert f'href="{href}"' in footer
@@ -392,7 +412,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 17.1 review: dot-size prose follows D-20, D-23 and D-24 (scale set by the
 # busiest venue shown, rescaling with filters and picks; paler dots sized without the pick).
 # Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
-_METHODOLOGY_FLAG_OFF_SHA256 = "08dd6b845beff0c51166313e86c02cc61f803c6d2fe35361b255b332b7008d16"
+# Re-pinned at Phase 26 Plan 05: title takes a hyphen; footer credit blocks, spaced nav, semicolon
+# freshness.
+_METHODOLOGY_FLAG_OFF_SHA256 = "b09450bb7bd1bbfa1ba96a040e0cb640f741a434e2457f22131c010ab8762f9b"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

@@ -14,10 +14,11 @@ pytestmark = pytest.mark.e2e
 
 _PAGES = ("index.html", "methodology.html", "coverage.html")
 
-_CREDIT_LINE = (
+_CREDIT_ITEMS = (
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and "
-    "joined with crew and game data · Crews: 506 Sports · "
-    "Data provided by CollegeFootballData.com"
+    "joined with crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
 )
 
 _TRADEMARK_LINE = (
@@ -40,9 +41,9 @@ _OFL_HREFS = (
 )
 
 _TITLES = {
-    "index.html": "The Broadcast Ledger · college football broadcast crews and viewership",
-    "methodology.html": "Methodology · The Broadcast Ledger",
-    "coverage.html": "Coverage · The Broadcast Ledger",
+    "index.html": "The Broadcast Ledger: college football broadcast crews and viewership",
+    "methodology.html": "Methodology - The Broadcast Ledger",
+    "coverage.html": "Coverage - The Broadcast Ledger",
 }
 
 _CREDIT_LINKS = (
@@ -62,9 +63,10 @@ def test_footer_credits_freshness_and_nav(
     guarded_page.goto(f"{site_url}/{page_name}")
 
     footer_text = re.sub(r"\s+", " ", guarded_page.inner_text("footer")).strip()
-    assert _CREDIT_LINE in footer_text
-    assert "Crews and scores through Week 5" in footer_text
-    assert "Viewership through Week 4" in footer_text
+    items = guarded_page.locator("footer .credit-line .credit-item").all_inner_texts()
+    assert tuple(re.sub(r"\s+", " ", i).strip() for i in items) == _CREDIT_ITEMS
+    assert "Crews and scores through Week 5; viewership through Week 4" in footer_text
+    assert "·" not in footer_text
 
     for label, href in _CREDIT_LINKS:
         link = guarded_page.locator(f"footer a:text-is('{label}')")

@@ -43,10 +43,14 @@ MLB_FIXTURE = CONTRACT / "mlb-data.fixture.json"
 
 PAGES = ("index.html", "methodology.html", "coverage.html")
 
-RT01_TEXT = (
+# The credit line holds exactly three span.credit-item blocks, separated in the source by a
+# single "\n" and no <br> (checker gap 1); CSS puts each on its own line.
+RT01_ITEMS = [
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with "
-    "crew and game data · Crews: 506 Sports · Data provided by CollegeFootballData.com"
-)
+    "crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
+]
 RT01_HREFS = [
     "https://ratingsreference.com",
     "https://creativecommons.org/licenses/by/4.0/",
@@ -183,7 +187,10 @@ def _footer(built: Path, page: str) -> Node:
 def test_rt01_credit_line_and_links(built: Path, page: str) -> None:
     credit = _footer(built, page).find("p", "credit-line")
     assert len(credit) == 1
-    assert credit[0].text == RT01_TEXT
+    items = credit[0].find("span", "credit-item")
+    assert [i.text for i in items] == RT01_ITEMS
+    assert credit[0].find("br") == []
+    assert credit[0].text == " ".join(RT01_ITEMS)
     anchors = credit[0].links()
     assert [a.attrs.get("href") for a in anchors] == RT01_HREFS
     assert all(a.attrs.get("rel") == "noopener noreferrer" for a in anchors)

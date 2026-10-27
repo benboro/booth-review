@@ -29,10 +29,11 @@ from booth_review.transport.cache import atomic_write_bytes
 if TYPE_CHECKING:
     from booth_review.contract.models import Freshness, SiteData
 
-CREDIT_LINE_TEXT = (
+CREDIT_ITEMS: tuple[str, str, str] = (
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and "
-    "joined with crew and game data · Crews: 506 Sports · "
-    "Data provided by CollegeFootballData.com"
+    "joined with crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
 )
 
 NAV: tuple[tuple[str, str], ...] = (
@@ -110,17 +111,20 @@ def footer_html(freshness: Freshness) -> str:
     nav, both freshness stamps, and the verbatim D-16 credit line.
     """
     crews_stamp, viewership_stamp = freshness_stamps(freshness)
-    nav_html = " · ".join(f'<a href="{href}">{html.escape(label)}</a>' for label, href in NAV)
-    credit_html = (
-        'Viewership: <a href="https://ratingsreference.com" '
-        'rel="noopener noreferrer">RatingsReference.com</a> '
-        '(<a href="https://creativecommons.org/licenses/by/4.0/" '
-        'rel="noopener noreferrer">CC BY 4.0</a>), modified: filtered and '
-        "joined with crew and game data · Crews: "
-        '<a href="https://506sports.com" rel="noopener noreferrer">506 Sports</a> '
-        "· Data provided by "
-        '<a href="https://collegefootballdata.com" '
-        'rel="noopener noreferrer">CollegeFootballData.com</a>'
+    nav_html = " ".join(f'<a href="{href}">{html.escape(label)}</a>' for label, href in NAV)
+    credit_html = "\n".join(
+        (
+            '<span class="credit-item">Viewership: <a href="https://ratingsreference.com" '
+            'rel="noopener noreferrer">RatingsReference.com</a> '
+            '(<a href="https://creativecommons.org/licenses/by/4.0/" '
+            'rel="noopener noreferrer">CC BY 4.0</a>), modified: filtered and '
+            "joined with crew and game data</span>",
+            '<span class="credit-item">Crews: '
+            '<a href="https://506sports.com" rel="noopener noreferrer">506 Sports</a></span>',
+            '<span class="credit-item">Data provided by '
+            '<a href="https://collegefootballdata.com" '
+            'rel="noopener noreferrer">CollegeFootballData.com</a></span>',
+        )
     )
     type_html = (
         'Type: <a href="fonts/GUST-FONT-LICENSE.txt">Latin Modern</a> '
@@ -131,7 +135,10 @@ def footer_html(freshness: Freshness) -> str:
         '<a href="fonts/OFL-roboto-condensed.txt">Roboto Condensed</a> '
         "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
     )
-    freshness_line = f"{html.escape(crews_stamp)} · {html.escape(viewership_stamp)}"
+    freshness_line = (
+        f"{html.escape(crews_stamp)}; "
+        f"{html.escape(viewership_stamp[0].lower() + viewership_stamp[1:])}"
+    )
     return (
         f'<nav aria-label="Site">{nav_html}</nav>'
         f'<p class="freshness">{freshness_line}</p>'
@@ -314,7 +321,7 @@ def render_methodology(
     renderer = markdown.Markdown(extensions=["tables", "toc"])
     body_html = _rewrite_relative_md_links(renderer.convert(combined))
     return page_html(
-        "Methodology · The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
+        "Methodology - The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
     )
 
 
@@ -417,7 +424,7 @@ def render_coverage(site: SiteData, *, theme_script: str | None = None) -> str:
         f"{quality_table}"
     )
     return page_html(
-        "Coverage · The Broadcast Ledger", body, site.freshness, theme_script=theme_script
+        "Coverage - The Broadcast Ledger", body, site.freshness, theme_script=theme_script
     )
 
 
