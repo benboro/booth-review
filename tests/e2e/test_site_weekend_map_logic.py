@@ -350,21 +350,47 @@ def test_a_row_wraps_after_four_sixteen_px_down(map_page: Page) -> None:
     assert rows["g4"]["x"] == pytest.approx(vx)  # a lone second row is centred
 
 
-def test_nudge_threshold_is_six_rendered_px(map_page: Page) -> None:
+def test_nudge_groups_dots_that_would_touch(map_page: Page) -> None:
     out = _run(
         map_page,
         """const at = (dx, ppu) => M.nudgeRows(
           [{ key: 'a', x: 100, y: 100, size: 12, kickoffMin: 700 },
            { key: 'b', x: 100 + dx, y: 100, size: 12, kickoffMin: 800 }], ppu)
           .map((p) => [p.x, p.y]);
-        return { four: at(4, 1), eight: at(8, 1), scaled: at(4 / 0.4, 0.4), alone: at(8, 1) };""",
+        const tiny = (dx) => M.nudgeRows(
+          [{ key: 'a', x: 100, y: 100, size: 2, kickoffMin: 700 },
+           { key: 'b', x: 100 + dx, y: 100, size: 2, kickoffMin: 800 }], 1)
+          .map((p) => [p.x, p.y]);
+        return { four: at(4, 1), eight: at(8, 1), twelve: at(12, 1), sixteen: at(16, 1),
+                 scaled: at(8 / 0.4, 0.4), tinySix: tiny(6) };""",
     )
     assert out["four"][0][0] != 100 and out["four"][1][0] != 104  # grouped, so moved
-    assert out["eight"] == [[100, 100], [108, 100]]  # apart, so left alone
-    assert out["scaled"][0][0] != 100  # 4 px at 0.4 px per unit is still 4 px
+    # Two 12 px dots touch below 12 + 2 px: 8 px apart (the NC case) is grouped, 16 is not.
+    assert out["eight"][0][0] != 100
+    assert out["twelve"][0][0] != 100
+    assert out["sixteen"] == [[100, 100], [116, 100]]
+    assert out["scaled"][0][0] != 100  # 8 px at 0.4 px per unit is still 8 px
+    assert out["tinySix"][0][0] != 100  # never less than NUDGE_GROUP_PX
 
 
-def test_two_venues_four_px_apart_share_a_row_at_390(map_page: Page) -> None:
+def test_a_row_that_reaches_a_lone_dot_takes_it_in(map_page: Page) -> None:
+    # The NC case at the Phase 24 sign-off: two venues 8 px apart become a row whose end dot
+    # lands on a square 16 px from the nearer venue; the square joins, and no two dots touch.
+    out = _run(
+        map_page,
+        """const pts = [{ key: 'a', x: 0, y: 0, size: 12, kickoffMin: 700 },
+                     { key: 'b', x: 8, y: 0, size: 12, kickoffMin: 800 },
+                     { key: 'c', x: 24, y: 0, size: 10, kickoffMin: 900 }];
+        return M.nudgeRows(pts, 1).map((p) => [p.x, p.y, p.size, p.venueX]);""",
+    )
+    assert len({round(v[3], 6) for v in out}) == 1  # one group, one row centre
+    for i, a in enumerate(out):
+        for b in out[i + 1 :]:
+            gap = ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5
+            assert gap > (a[2] + b[2]) / 2 + 2 - 1e-9 or gap >= 14 - 1e-9
+
+
+def test_two_venues_four_px_apart_share_a_row_at_390_and_thirty_do_not(map_page: Page) -> None:
     # One degree of longitude east of Athens, in map units, from the projection itself.
     unit = map_page.evaluate(
         """async (v) => {
@@ -375,14 +401,14 @@ def test_two_venues_four_px_apart_share_a_row_at_390(map_page: Page) -> None:
     )
     per_px = 1 / (0.4 * unit)  # degrees of longitude per rendered px at 390
     near = {**ATHENS, "name": "Near Field", "lon": ATHENS["lon"] + 4 * per_px}
-    far = {**ATHENS, "name": "Far Field", "lon": ATHENS["lon"] + 8 * per_px}
+    far = {**ATHENS, "name": "Far Field", "lon": ATHENS["lon"] + 30 * per_px}
     four = {d["key"]: d for d in _model(map_page, [_game("a", ATHENS), _game("b", near)],
                                         plot=_PLOT_390)["dots"]}  # fmt: skip
     assert four["a"]["vx"] == pytest.approx(four["b"]["vx"])  # grouped: one row centre
     assert four["a"]["x"] != four["a"]["vx"]
-    eight = {d["key"]: d for d in _model(map_page, [_game("a", ATHENS), _game("c", far)],
+    apart = {d["key"]: d for d in _model(map_page, [_game("a", ATHENS), _game("c", far)],
                                          plot=_PLOT_390)["dots"]}  # fmt: skip
-    assert eight["a"]["x"] == eight["a"]["vx"] and eight["c"]["x"] == eight["c"]["vx"]
+    assert apart["a"]["x"] == apart["a"]["vx"] and apart["c"]["x"] == apart["c"]["vx"]
 
 
 def test_fade_ring_and_layer_order(map_page: Page) -> None:

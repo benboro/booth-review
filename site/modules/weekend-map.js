@@ -102,7 +102,7 @@ export function symbolOf(game) {
 
 // ---------------------------------------------------------------- nudge rows (D-01)
 
-/** Games closer than this many rendered px after projection share one row. */
+/** Games closer than this many rendered px after projection always share one row. */
 export const NUDGE_GROUP_PX = 6;
 /** Games per nudge row before wrapping to the next. */
 export const NUDGE_ROW_MAX = 4;
@@ -123,7 +123,9 @@ function byKickoff(a, b) {
 
 /**
  * Lays same-place points in short horizontal rows centred on their venue. Points whose venue
- * points lie within `NUDGE_GROUP_PX` rendered px of each other (single linkage) form a group;
+ * points would touch (closer than half their two sizes plus the 2 px pad, and never less than
+ * `NUDGE_GROUP_PX`) form a group by single linkage, so nearby separate venues no longer overlap,
+ * and a group whose laid-out row touches another dot absorbs it;
  * a group is ordered by kickoff (earliest left, no time last), spaced at the largest member
  * size plus 2 px, wrapped after 4 into rows 16 px lower, each row centred on the group's centre.
  * The offset is computed in px and converted to map units with `ppu`, so it holds at every
@@ -142,22 +144,54 @@ export function nudgeRows(points, ppu) {
     while (parent[r] !== r) r = parent[r];
     return r;
   };
+  const touches = (a, b, ax, ay, bx, by) => {
+    const d = Math.hypot((ax - bx) * ppu, (ay - by) * ppu);
+    return d <= Math.max(NUDGE_GROUP_PX, (a.size + b.size) / 2 + NUDGE_PITCH_PAD_PX);
+  };
+  const origin = out.map((p) => ({ x: p.x, y: p.y }));
   for (let i = 0; i < out.length; i += 1) {
     for (let j = i + 1; j < out.length; j += 1) {
-      const d = Math.hypot((out[i].x - out[j].x) * ppu, (out[i].y - out[j].y) * ppu);
-      if (d <= NUDGE_GROUP_PX) parent[find(j)] = find(i);
+      if (touches(out[i], out[j], origin[i].x, origin[i].y, origin[j].x, origin[j].y)) {
+        parent[find(j)] = find(i);
+      }
     }
   }
+  // Laying a group out as a row can push its end dots onto a neighbour, so merge any groups
+  // whose laid-out dots touch and lay out again, until nothing new merges (each pass merges at
+  // least two groups, so this ends within out.length passes).
+  for (let pass = 0; pass < out.length; pass += 1) {
+    layOut(out, origin, find, ppu);
+    let merged = false;
+    for (let i = 0; i < out.length; i += 1) {
+      for (let j = i + 1; j < out.length; j += 1) {
+        if (find(i) === find(j)) continue;
+        if (touches(out[i], out[j], out[i].x, out[i].y, out[j].x, out[j].y)) {
+          parent[find(j)] = find(i);
+          merged = true;
+        }
+      }
+    }
+    if (!merged) break;
+  }
+  return out;
+}
+
+/** Places every group of `out` (by `find`) as rows around its members' venue centre. */
+function layOut(out, origin, find, ppu) {
   const groups = new Map();
   out.forEach((p, i) => {
+    p.x = origin[i].x;
+    p.y = origin[i].y;
+    p.venueX = origin[i].x;
+    p.venueY = origin[i].y;
     const r = find(i);
     if (!groups.has(r)) groups.set(r, []);
     groups.get(r).push({ p, i, kickoffMin: p.kickoffMin, key: p.key });
   });
   for (const members of groups.values()) {
     if (members.length < 2) continue;
-    const cx = members.reduce((sum, m) => sum + m.p.venueX, 0) / members.length;
-    const cy = members.reduce((sum, m) => sum + m.p.venueY, 0) / members.length;
+    const cx = members.reduce((sum, m) => sum + origin[m.i].x, 0) / members.length;
+    const cy = members.reduce((sum, m) => sum + origin[m.i].y, 0) / members.length;
     const pitch = Math.max(...members.map((m) => m.p.size)) + NUDGE_PITCH_PAD_PX;
     members.sort(byKickoff);
     members.forEach((m, k) => {
@@ -170,7 +204,6 @@ export function nudgeRows(points, ppu) {
       m.p.venueY = cy;
     });
   }
-  return out;
 }
 
 // ---------------------------------------------------------------- model
