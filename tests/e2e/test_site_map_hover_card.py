@@ -522,16 +522,18 @@ def test_phone_stale_plotly_point_is_judged_by_the_touch(
     assert ("venue=" in search) is on_dot
 
 
-def test_phone_stale_point_next_to_the_tapped_venue_does_not_filter(
-    mobile_page: Page, open_app: OpenApp
+@pytest.mark.parametrize("offset", [7, 24], ids=["overlapping", "beside"])
+def test_phone_stale_point_next_to_the_tapped_venue_goes_to_the_venue_touched(
+    mobile_page: Page, open_app: OpenApp, offset: float
 ) -> None:
-    """A quick tap on venue B right beside venue A can come back as Plotly's stale A point
-    while still inside A's reach; B is nearer the finger, so it must not filter A."""
+    """A quick tap on venue B beside venue A can come back as Plotly's stale A point. The
+    tap belongs to B, the venue under the finger: it opens B's card, and the next tap on B
+    lists B's games, never A's. Covers hit targets that overlap (7 px) and that touch (24 px)."""
     mobile_page.set_viewport_size({"width": 360, "height": 800})
     _open_map(mobile_page, open_app)
     dots = _model(mobile_page)["venueDots"]
     a, b = dots[0], dots[1]
-    moved = _shrink(mobile_page, b["key"], mobile=True, near=a["key"], offset=24)
+    moved = _shrink(mobile_page, b["key"], mobile=True, near=a["key"], offset=offset)
     mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
     ax, ay = _pixel(mobile_page, a["x"], a["y"])
     bx, by = _pixel(mobile_page, moved["x"], moved["y"])
@@ -544,6 +546,12 @@ def test_phone_stale_point_next_to_the_tapped_venue_does_not_filter(
     assert mobile_page.evaluate("() => window.__firstClick.points[0].customdata") == a["key"]
     mobile_page.evaluate(_REPLAY_CLICK, [bx, by])
     assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+    mobile_page.evaluate(_REPLAY_CLICK, [bx, by])
+    search = mobile_page.evaluate("() => location.search")
+    assert f"venue={b['key']}" in search, search
 
 
 def test_phone_tap_inside_the_background_wait_rearms_first(
