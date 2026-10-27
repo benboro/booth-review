@@ -297,7 +297,7 @@ export function buildStampLine(ctx) {
   p.setAttribute('aria-live', 'off');
   if (ctx.anyPick && ctx.inDay.length > 0 && !ctx.inDay.some((g) => ctx.passes(g) === true)) {
     p.classList.add('wk-stamp--picks');
-    p.textContent = `No games match your picks on ${dayLabel(ctx.day)}. `
+    p.textContent = `No games match your picks${ctx.day != null ? ` on ${dayLabel(ctx.day)}` : ''}. `
       + 'Try another day or clear a filter.';
     return p;
   }
@@ -626,6 +626,8 @@ function buildDesktopBody(ctx, api) {
 // ---- Mount lifecycle (shared with the phone list) ----
 
 const MOUNTED = new WeakMap();
+/** Focus remembered from a view switch whose old instance was destroyed before the new mount. */
+const ORPHAN_FOCUS = new WeakMap();
 
 /**
  * What the clock changes in a render: every game's cell state, and the Now line's minute while
@@ -652,7 +654,8 @@ function clockKey(ctx, kind) {
  */
 export function mountWeekend(host, model, opts, buildBody, kind) {
   const previous = MOUNTED.get(host);
-  const carriedFocus = previous ? previous.activeId() : null;
+  const carriedFocus = previous ? previous.activeId() : (ORPHAN_FOCUS.get(host) ?? null);
+  ORPHAN_FOCUS.delete(host);
   previous?.destroy();
 
   const state = { day: model.day ?? null, width: opts.width ?? (host.clientWidth || FALLBACK_WIDTH),
@@ -756,6 +759,13 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
       stopTheme();
       for (const fn of disposers) fn();
       disposers = [];
+      // A host that destroys one view and mounts the next (Map to Timeline) leaves no previous
+      // instance to carry focus from, so a focused view switch is remembered for this tick.
+      const focused = activeId();
+      if (focused?.startsWith('wview:')) {
+        ORPHAN_FOCUS.set(host, focused);
+        queueMicrotask(() => ORPHAN_FOCUS.delete(host));
+      }
       host.replaceChildren();
       if (MOUNTED.get(host) === instance) MOUNTED.delete(host);
     },

@@ -34,7 +34,7 @@ import {
 import { hideTooltip, isInTooltip, showGameTooltip } from './tooltip.js';
 import { dayLabel, stripCollapsedByDefault } from './weekend.js';
 import { WINDOW_CAPTION, WINDOW_LABELS, WINDOW_SYMBOL, buildWeekendMapModel, windowOf } from './weekend-map.js';
-import { buildWeekendMapFigure } from './weekend-map-chart.js';
+import { WEEKEND_MAP_TRACE_NAMES, buildWeekendMapFigure } from './weekend-map-chart.js';
 import { makeCaretIcon } from './icons.js';
 import {
   applyPick,
@@ -68,7 +68,11 @@ const isPhone = () => window.matchMedia(PHONE_QUERY).matches;
 
 function loadGeometry() {
   if (!geometryPromise) {
-    geometryPromise = import('../vendor/us-states-albers.js').then((m) => m.US_STATES);
+    geometryPromise = import('../vendor/us-states-albers.js').then((m) => m.US_STATES).catch((err) => {
+      // A failed import must not pin the failure: the next draw retries.
+      geometryPromise = null;
+      throw err;
+    });
   }
   return geometryPromise;
 }
@@ -260,14 +264,20 @@ function createMount(host) {
     );
   }
 
-  /** The 1px ring on one mark (the first-tap ring); a plain react of the same node. */
+  /**
+   * The 1px ring on one mark (the tap ring and the desktop hover ring): a restyle of the
+   * wk-hover trace alone, so the land fill, the splat image and the hover state of the other
+   * traces are never re-rendered (a full react on every hover would flicker the unhover).
+   */
   function setRing(key) {
     z.hoverKey = key;
-    if (z.lastFigureArgs) {
-      const { model, geometry, env } = z.lastFigureArgs;
-      renderMap(gd, buildWeekendMapFigure(model, geometry, { ...env, hoverKey: key, images: z.layer.currentSpec ? [z.layer.currentSpec] : [] }))
-        .catch(() => {});
-    }
+    if (!gd.data || !window.Plotly) return;
+    const d = key == null ? null : z.byKey.get(key);
+    const update = d
+      ? { x: [[d.x]], y: [[d.y]], 'marker.size': [[d.size + WEEKEND_MAP_DOT.hoverRing.offset]] }
+      : { x: [[]], y: [[]], 'marker.size': [[]] };
+    Promise.resolve(window.Plotly.restyle(gd, update, [WEEKEND_MAP_TRACE_NAMES.indexOf('wk-hover')]))
+      .catch(() => {});
   }
 
   z.tap = createTapController({
@@ -304,6 +314,7 @@ function createMount(host) {
       onVenueHover: (key, ev) => {
         if (hoverNone()) return;
         showCard(key, ev, false);
+        setRing(key);
       },
       // On touch the tap card must outlive Plotly's synthetic unhover.
       onVenueUnhover: () => {
@@ -360,7 +371,8 @@ async function draw(z, ctx) {
   let geometry;
   try {
     geometry = z.geometry ?? (await loadGeometry());
-  } catch {
+  } catch (err) {
+    console.warn('booth-review: weekend map geometry could not be loaded', err);
     if (live()) z.setOverlay(DRAW_FAILED, true);
     return;
   }
@@ -372,7 +384,8 @@ async function draw(z, ctx) {
   const model = dayModelFor(ctx, z, plot);
   z.byKey = new Map([...model.dots, ...model.markers].map((d) => [d.key, d]));
   const placed = model.dots.length + model.markers.length;
-  gd.setAttribute('aria-label', `Map of ${placed} ${placed === 1 ? 'game' : 'games'} on ${dayLabel(ctx.day)}, `
+  const when = ctx.day != null ? `on ${dayLabel(ctx.day)}` : 'with no listed date';
+  gd.setAttribute('aria-label', `Map of ${placed} ${placed === 1 ? 'game' : 'games'} ${when}, `
     + 'colored by network. Switch to Timeline to read every game with the keyboard.');
   z.setOverlay(placed === 0 && ctx.inDay.length > 0 ? NONE_PLACED : null, false);
 
@@ -394,7 +407,6 @@ async function draw(z, ctx) {
       plot,
       splat: wantSplat && z.layer.currentSpec != null,
     };
-    z.lastFigureArgs = { model, geometry, env };
     const figure = buildWeekendMapFigure(model, geometry, {
       ...env,
       hoverKey: null,
@@ -425,8 +437,9 @@ async function draw(z, ctx) {
     } else {
       await z.layer.clear();
     }
-  } catch {
+  } catch (err) {
     // Plotly can reject (a zero-width container, say): say so and keep the switch usable.
+    console.warn('booth-review: weekend map could not be drawn', err);
     if (live()) z.setOverlay(DRAW_FAILED, true);
   }
 }

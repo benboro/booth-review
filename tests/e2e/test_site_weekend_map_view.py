@@ -331,3 +331,37 @@ def test_phone_tap_model(mobile_page: Page, open_app: Callable[[Page, str], None
     mobile_page.touchscreen.tap(box["x"] + 20, box["y"] + 20)
     mobile_page.wait_for_selector("#chart-tooltip", state="hidden", timeout=5000)
     assert mobile_page.evaluate("() => window.__wm.opened.length") == 1
+
+
+def test_an_all_undated_week_still_draws_and_labels_without_a_date(map_page: Page) -> None:
+    """A non-empty week whose games all have date null is valid; the map must not throw."""
+    errors: list[str] = []
+    map_page.on("pageerror", lambda e: errors.append(str(e)))
+    undated = [_game("a", ATHENS, date=None), _game("d", None, date=None)]
+    _mount(map_page, games=undated, day=None)
+    out = map_page.evaluate(
+        """() => ({
+          label: document.querySelector('.wk-map-box').getAttribute('aria-label'),
+          points: document.querySelector('.wk-map-box').data
+            .find((t) => t.name === 'venue-hits').x.length,
+          notMap: document.querySelector('.wk-notmap .wk-tba-title').textContent,
+        })"""
+    )
+    assert out["label"].startswith("Map of 1 game with no listed date, colored by network.")
+    assert out["points"] == 1
+    assert out["notMap"] == "Not on the map (1)"
+    assert errors == []
+
+
+def test_a_failed_geometry_import_is_reported_and_says_so_on_the_map(map_page: Page) -> None:
+    """The failure shows the overlay and is warned about. (The retry itself, resetting the cached
+    promise, cannot be observed in Chromium: its module map keeps a failed import for the page.)"""
+    warnings: list[str] = []
+    map_page.on("console", lambda m: warnings.append(m.text) if m.type == "warning" else None)
+    map_page.route("**/vendor/us-states-albers.js*", lambda route: route.abort())
+    map_page.evaluate(
+        _MOUNT,
+        {"games": _games(), "day": SAT, "theme": "light", "hostWidth": 960, "now": NOW},
+    )
+    map_page.wait_for_selector(".map-overlay.wk-map-fail:not([hidden])", timeout=10000)
+    assert any("weekend map geometry could not be loaded" in w for w in warnings)

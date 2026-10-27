@@ -441,3 +441,27 @@ def test_theme_flip_repaints_the_same_node(wkmap: Wk) -> None:
     set_theme(page, "light")
     settle(page)
     assert re.fullmatch(r"#[0-9A-Fa-f]{6}", traces(page)["dots"]["color"][0])
+
+
+def test_desktop_hover_draws_the_ink_ring_and_unhover_clears_it(wkmap: Wk) -> None:
+    page = wkmap()
+    rings = "() => document.querySelector('.wk-map-box').data.find((t) => t.name === 'wk-hover')"
+    at = page.evaluate(_POINT, NOON_A)
+    page.mouse.move(at["x"] + 60, at["y"] + 60)
+    page.mouse.move(at["x"], at["y"], steps=4)
+    page.wait_for_function(rings + ".x.length === 1", timeout=5000)
+    ring = page.evaluate(rings + ".marker")
+    assert ring["symbol"] == "circle-open"
+    assert ring["line"]["width"] == 1
+    renders = page.evaluate(_RENDERS)
+    page.mouse.move(at["x"] + 80, at["y"] + 80, steps=4)
+    page.wait_for_function(rings + ".x.length === 0", timeout=5000)
+    assert page.evaluate(_RENDERS) == renders  # a restyle, never a full react
+
+
+def test_map_to_timeline_keeps_focus_on_the_timeline_segment(wkmap: Wk) -> None:
+    page = wkmap()
+    page.locator('[data-wk-id="wview:timeline"]').focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".wk-map-box", state="detached", timeout=5000)
+    assert page.evaluate("document.activeElement?.dataset?.wkId") == "wview:timeline"

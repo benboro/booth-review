@@ -237,3 +237,29 @@ def test_a_mouse_click_at_phone_width_opens_the_panel_at_once(
     expect(page.locator("dialog[open]")).to_be_visible()
     # No tap card (and no Open game button) on a pointer that can hover.
     assert page.locator("#chart-tooltip .tt-open-game").count() == 0
+
+
+_SHADED = """() => {
+  const gd = document.querySelector('.wk-map-box');
+  const outline = gd.data[0];
+  return gd.layout.images.length === 1 && outline.fill === 'none';
+}"""
+
+
+@pytest.mark.parametrize("sport", SPORTS)
+def test_a_tap_keeps_the_shading_and_dismissing_the_card_does_too(
+    request: pytest.FixtureRequest, sport: str
+) -> None:
+    page = _open_sport(request, sport, mobile=True)
+    page.wait_for_function(_SHADED, timeout=15000)
+    at = _point(page, GAME[sport])
+    page.touchscreen.tap(at["x"], at["y"])
+    _card_visible(page)
+    assert page.evaluate(_RINGS) == 1
+    assert page.evaluate(_SHADED) is True
+    box = page.locator(".wk-map-box").bounding_box()
+    assert box is not None
+    page.touchscreen.tap(box["x"] + 6, box["y"] + 6)
+    page.wait_for_selector("#chart-tooltip", state="hidden", timeout=5000)
+    assert page.evaluate(_RINGS) == 0
+    assert page.evaluate(_SHADED) is True
