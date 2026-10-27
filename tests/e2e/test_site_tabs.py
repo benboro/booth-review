@@ -380,7 +380,11 @@ def test_selected_tab_has_a_2px_ink_underline(
             "el => { const s = getComputedStyle(el);"
             " return [s.borderBottomWidth, s.borderBottomStyle, s.borderBottomColor]; }",
         )
-        assert style == ["2px", "solid", "rgb(35, 32, 27)"], tab
+        ink = guarded_page.evaluate(
+            "() => { const s = document.createElement('span'); s.style.color = 'var(--ink)';"
+            " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+        )
+        assert style == ["2px", "solid", ink], tab
     other = guarded_page.eval_on_selector(
         "#tab-scatter", "el => getComputedStyle(el).borderBottomColor"
     )

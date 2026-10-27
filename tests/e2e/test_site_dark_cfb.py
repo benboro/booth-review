@@ -68,7 +68,7 @@ def test_scatter_tooltip_is_dark_ink_on_surface(guarded_page: Page, open_app: Op
         "(() => { const t = document.getElementById('chart-tooltip');"
         " const s = getComputedStyle(t); return [s.backgroundColor, s.color]; })()"
     )
-    assert tip == [rgb(SURFACE), rgb(INK)]
+    assert tip == [rgb(PAGE_BG), rgb(INK)]  # T3: the tooltip sits on the page colour
     assert white_box_offenders(guarded_page) == []
 
 
@@ -87,7 +87,7 @@ def test_strips_and_reset_zoom_in_dark(guarded_page: Page, open_app: OpenApp) ->
         "(() => { const s = getComputedStyle(document.getElementById('reset-zoom'));"
         " const r = getComputedStyle(document.documentElement);"
         " return [s.color, s.borderTopColor,"
-        " r.getPropertyValue('--ink').trim(), r.getPropertyValue('--rule-strong').trim(),"
+        " r.getPropertyValue('--ink').trim(), r.getPropertyValue('--rule').trim(),"
         " r.getPropertyValue('--disabled').trim()]; })()"
     )
     # At the home range Reset zoom is disabled, so its label takes --disabled.
@@ -130,7 +130,7 @@ def test_legend_dots_pills_and_network_dots_repaint_without_reload(
     set_theme(guarded_page, "dark")
     legend = guarded_page.evaluate(
         "Array.from(document.querySelectorAll('#legend-chips .legend-chip')).map(c =>"
-        " [c.dataset.family, getComputedStyle(c.querySelector('.legend-dot')).backgroundColor])"
+        " [c.dataset.family, getComputedStyle(c.querySelector('.legend-dot')).borderTopColor])"
     )
     assert legend
     for family, color in legend:

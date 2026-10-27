@@ -16,6 +16,11 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
+_TOKEN_COLOR_JS = (
+    "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+    " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+)
+
 
 def _parse_rgb(css_color: str) -> tuple[float, float, float]:
     """Parses a `getComputedStyle` `rgb(...)`/`rgba(...)` string into (r, g, b)."""
@@ -405,7 +410,8 @@ def test_clear_all_filters_is_distinct_and_aa(
         "trigBorderTop: trig.borderTopColor, rowRight: row.right, clearRight: box.right }; }"
     )
     assert _contrast_ratio(_parse_rgb(styles["clearColor"]), _parse_rgb(styles["pageBg"])) >= 4.5
-    assert styles["clearBorderTop"] == "rgb(35, 32, 27)"  # --ink
+    ink = guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
+    assert styles["clearBorderTop"] == ink  # --ink
     assert styles["clearBorderTop"] != styles["trigBorderTop"]
     assert styles["clearWeight"] == "600"
     assert styles["clearWeight"] != styles["trigWeight"]
@@ -522,7 +528,7 @@ def test_module_head_carries_title_subtitle_and_right_aligned_tools(
     assert title["right"] <= subtitle["left"] + 0.5
     assert subtitle["right"] <= tools["left"] + 0.5
     assert abs(title["top"] - tools["top"]) < 40  # one head row
-    assert boxes["module"]["right"] - tools["right"] <= 17.5  # 16px padding + 1px border
+    assert boxes["module"]["right"] - tools["right"] <= 25.5  # 24px padding + 1px border (T3)
 
 
 def _assert_phone_boundary(page: Page, button: str, trigger: str) -> None:

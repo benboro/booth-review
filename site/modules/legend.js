@@ -114,9 +114,11 @@ export function initLegend({
 
 /**
  * One legend chip, the shared look for every chart legend (CFB, NFL and MLB; 13-12, U6): an
- * outlined chip with an 8px colour dot beside the label. The chip itself is never filled, so
- * its text is always --ink (or --muted when off) on --bg, whatever the series colour. CSS draws
- * the on/off state from `aria-pressed` (the off dot fades to 32%).
+ * colour mark beside the label, with no outline. The colour travels as the `--mark` custom
+ * property (from the palette value passed in, never read back); CSS draws the mark from it:
+ * on = filled, off = empty ring, no games (`data-offered="false"`) = dotted ring. The label is
+ * --ink, --muted when off and --legend-none with no games, so it never depends on the series
+ * colour.
  * @param {{label: string, color: string, pressed: boolean, hint?: string, data?: Object<string, string>}} opts
  *   `data` becomes the button's data-* attributes (e.g. `{ family: 'fox' }`).
  * @returns {HTMLButtonElement}
@@ -129,7 +131,7 @@ export function makeLegendChip({ label, color, pressed, hint, data = {} }) {
   const dot = document.createElement('span');
   dot.className = 'legend-dot';
   dot.setAttribute('aria-hidden', 'true');
-  dot.style.backgroundColor = color;
+  button.style.setProperty('--mark', color);
   const text = document.createElement('span');
   text.className = 'legend-label';
   text.textContent = label;

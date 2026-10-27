@@ -444,11 +444,13 @@ def test_legend_chip_greyed_when_family_has_no_offered_channel(
         expect(chip).to_have_attribute("data-offered", "false")
         expect(chip).to_have_attribute("aria-pressed", "true")
         style = chip.evaluate(
-            "el => { const s = getComputedStyle(el);"
-            " return [s.backgroundColor, s.borderTopStyle]; }"
+            "el => { const s = getComputedStyle(el); const d = getComputedStyle("
+            "el.querySelector('.legend-dot'));"
+            " return [s.backgroundColor, d.borderTopStyle, d.backgroundColor]; }"
         )
         assert style[0] in ("rgba(0, 0, 0, 0)", "transparent")
-        assert style[1] == "dashed"
+        assert style[1] == "dotted"  # no games: a dotted empty ring
+        assert style[2] == "rgba(0, 0, 0, 0)"
 
     fox = guarded_page.locator('#legend-chips button[data-family="fox"]')
     fox.click()
@@ -533,30 +535,30 @@ _PILL_CONTRAST = {
 }
 
 
-def test_legend_chips_are_outlined_with_a_family_dot(
+def test_legend_chips_are_a_mark_and_a_label_with_no_outline(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """C5 / 13-12: a shown chip is an outlined 28px chip on the page background with
-    --ink text and an 8px dot in the family colour; there is no filled family pill."""
+    """Round 3: a shown chip is a 28px mark-plus-label with no outline or fill of its own,
+    --ink text and a filled 10px mark in the family colour; there is no family pill."""
     open_app(guarded_page, "")
-    bg = _token_rgb(guarded_page, "--bg")
     ink = _token_rgb(guarded_page, "--ink")
     for family, (fill, _text) in _PILL_CONTRAST.items():
         chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
         sel = f'#legend-chips button[data-family="{family}"]'
-        assert _rgb_of(guarded_page, sel, "backgroundColor") == bg, family
+        assert chip.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
         assert _rgb_of(guarded_page, sel, "color") == ink, family
         border = chip.evaluate(
-            "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopStyle]; }"
+            "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderRadius]; }"
         )
-        assert border == ["1px", "solid"], family
+        assert border == ["0px", "0px"], family
         assert float(chip.bounding_box()["height"]) == 28, family  # type: ignore[index]
         dot = chip.locator(".legend-dot").evaluate(
             "el => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();"
-            " return [s.backgroundColor, r.width, r.height]; }"
+            " return [s.backgroundColor, r.width, r.height, s.borderTopColor, s.borderTopStyle]; }"
         )
         assert dot[0] == fill, family
-        assert dot[1:] == [8, 8], family
+        assert dot[1:3] == [10, 10], family
+        assert dot[3] == fill and dot[4] == "solid", family
 
 
 def test_set_state_people_highlights_and_fades_family_traces(
@@ -2258,7 +2260,7 @@ def _token_rgb(page: Page, name: str) -> tuple[float, float, float]:
 def test_dashed_legend_chip_text_follows_its_toggle(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-37: a dashed chip reads --ink when on and --disabled when off."""
+    """Round 3: a no-games chip's label is --legend-none (4.5:1 or better) on or off."""
     open_app(guarded_page, "?people=dale-harlow")
     sel = '#legend-chips button[data-family="fox"]'
     chip = guarded_page.locator(sel)
@@ -2266,12 +2268,13 @@ def test_dashed_legend_chip_text_follows_its_toggle(
     expect(chip).to_have_attribute("aria-pressed", "true")
     bg = _token_rgb(guarded_page, "--bg")
     on = _rgb_of(guarded_page, sel, "color")
-    assert on == _token_rgb(guarded_page, "--ink")
+    assert on == _token_rgb(guarded_page, "--legend-none")
     assert _ratio(on, bg) >= 4.5
     chip.click()
     expect(chip).to_have_attribute("aria-pressed", "false")
     off = _rgb_of(guarded_page, sel, "color")
-    assert off == _token_rgb(guarded_page, "--disabled")
+    assert off == _token_rgb(guarded_page, "--legend-none")
+    assert _ratio(off, bg) >= 4.5
     disney = '#legend-chips button[data-family="disney"]'
     disney_color = _rgb_of(guarded_page, disney, "color")
     assert disney_color == _token_rgb(guarded_page, "--ink")

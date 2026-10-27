@@ -202,8 +202,9 @@ h1, h2, h3 {
   align-items: baseline;
   min-height: 64px;
   padding: var(--space-md) var(--space-lg);
-  background: var(--bg);
-  border-bottom: 1px solid var(--rule);
+  /* T3 "Frame + recede": no band; the 1.5px ink rule marks where the record starts. */
+  background: transparent;
+  border-bottom: 1.5px solid var(--ink);
 }
 
 .site-title {
@@ -859,8 +860,8 @@ body.app {
   gap: var(--space-sm);
   margin-bottom: var(--gap-filters-band);
   min-height: 48px;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--surface);
+  padding: var(--space-sm) var(--space-lg);
+  background: transparent;
   border-bottom: 1px solid var(--rule);
   /* Never sticky or fixed -- scrolls with the page like any other block
      (D-02). */
@@ -1070,7 +1071,7 @@ body.app {
   padding: var(--space-md);
   background: var(--bg);
   color: var(--ink);
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--rule);
   border-radius: 8px;
 }
 
@@ -1708,13 +1709,6 @@ input[type="checkbox"] {
   }
 }
 
-/* Legend chip for a family with no matching games (plan 04.2-09). #chart-area
-   sits on --bg, so --disabled is the right grey. */
-.legend-chip[data-offered="false"] {
-  background: transparent;
-  border-style: dashed;
-}
-
 #person-results .option-count,
 #person-results li.is-zero,
 #person-results li.is-zero .option-name {
@@ -1815,10 +1809,11 @@ input[type="checkbox"] {
   pointer-events: none;
   max-width: 320px;
   padding: var(--space-sm) var(--space-md);
-  background: var(--surface);
+  background: var(--bg);
   color: var(--ink);
   border: 2px solid var(--rule-strong);
-  border-radius: 6px;
+  border-radius: 4px;
+  box-shadow: none;
   font: var(--font-body);
 }
 
@@ -2074,7 +2069,7 @@ input[type="checkbox"] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-xs) 18px;
   min-height: 40px;
   list-style: none;
   margin: 0;
@@ -2122,11 +2117,11 @@ input[type="checkbox"] {
   align-items: center;
   box-sizing: border-box;
   min-height: 28px;
-  padding: 0 var(--space-md);
-  background: var(--bg);
+  padding: 0 2px;
+  background: transparent;
   color: var(--ink);
-  border: 1px solid var(--rule-strong);
-  border-radius: 14px;
+  border: 0;
+  border-radius: 0;
   cursor: pointer;
   font: var(--font-body);
   white-space: nowrap;
@@ -2135,23 +2130,28 @@ input[type="checkbox"] {
   user-select: none;
 }
 
-/* Outlined chips (13-12): shown = --ink text and a full-strength family dot; hidden (the
-   family is toggled off) = --muted text and a dot at 32%, the faded-dot opacity. */
+/* Round 3: a colour mark plus a label, no outline. On = filled mark and --ink label; off =
+   empty ring (truly empty) and --muted label; no games = dotted ring and --legend-none label
+   (4.61:1 light, 5.24:1 dark). The mark colour arrives as --mark from legend.js. */
 .legend-chip[aria-pressed="false"] {
   color: var(--muted);
 }
 
 .legend-chip[aria-pressed="false"] .legend-dot {
-  opacity: 0.32;
+  background: transparent;
 }
 
-/* D-37: a dashed (not offered) chip reads lighter when on, grey when off. */
-.legend-chip[data-offered="false"][aria-pressed="true"] {
-  color: var(--ink);
+.legend-chip[data-offered="false"] {
+  color: var(--legend-none);
 }
 
-.legend-chip[data-offered="false"][aria-pressed="false"] {
-  color: var(--disabled);
+.legend-chip[data-offered="false"] .legend-dot {
+  background: transparent;
+  border-style: dotted;
+}
+
+.legend-chip:hover .legend-label {
+  text-decoration: underline;
 }
 
 .legend-chip:focus-visible {
@@ -2162,7 +2162,7 @@ input[type="checkbox"] {
 .chart-tabs {
   display: flex;
   gap: 4px;
-  border-bottom: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
   min-height: 40px;
   box-sizing: border-box;
   /* The only rule that sets the tab-row-to-module gap (SHELL-04). */
@@ -2515,7 +2515,7 @@ input[type="checkbox"] {
 
 .segmented {
   display: inline-flex;
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--rule);
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: var(--space-md);
@@ -2526,14 +2526,17 @@ input[type="checkbox"] {
   min-height: 28px;
   padding: 0 var(--space-md);
   border: none;
-  background: var(--bg);
+  background: transparent;
   color: var(--ink);
   cursor: pointer;
 }
 
+/* T3: a selected segment is a --surface fill with a 2px ink underline; the weight does not
+   change, so nothing shifts. */
 .segmented button[aria-pressed="true"] {
-  background: var(--ink);
-  color: var(--bg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 #chart {
@@ -2812,13 +2815,17 @@ html:has(#mlb-detail-panel[open]) {
   overflow: hidden;
 }
 
+/* T3: every modal dialog (the CFB #detail-panel, which also hosts This weekend and the weekend
+   map, and the NFL and MLB hosts) sits on the page colour with a 1.5px ink top rule. */
 #detail-panel,
 #nfl-detail-panel,
-#mlb-detail-panel {
+#mlb-detail-panel,
+dialog.detail-panel {
   padding: 0;
-  border: 1px solid var(--rule-strong);
-  border-radius: 8px;
-  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-top: 1.5px solid var(--ink);
+  border-radius: 4px;
+  background: var(--bg);
   color: var(--ink);
   width: min(560px, calc(100vw - 32px));
   max-width: none;
@@ -2907,8 +2914,8 @@ html:has(#mlb-detail-panel[open]) {
     max-width: 100%;
     height: 55vh;
     max-height: 55vh;
-    border-radius: 12px 12px 0 0;
-    border-width: 1px 0 0 0;
+    border-radius: 4px 4px 0 0;
+    border-width: 1.5px 0 0 0;
   }
 }
 
@@ -2982,7 +2989,7 @@ html:has(#mlb-detail-panel[open]) {
 
 .site-footer {
   background: var(--bg);
-  border-top: 1px solid var(--rule);
+  border-top: 1.5px solid var(--ink);
   margin-top: var(--space-2xl);
   padding: var(--space-lg);
   font: var(--font-caption);
@@ -2992,6 +2999,18 @@ html:has(#mlb-detail-panel[open]) {
 .site-footer a {
   color: var(--ink);
   text-decoration: underline;
+}
+
+/* Footer nav: links 16px apart with no separator characters (the markup spaces them);
+   each credit on its own line so none is hidden or run together. */
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.site-footer .credit-item {
+  display: block;
 }
 
 .trademark-line,
@@ -3553,8 +3572,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   gap: var(--space-sm);
   margin-bottom: var(--gap-filters-band);
   min-height: 48px;
-  padding: var(--space-sm) var(--space-md);
-  background: var(--surface);
+  padding: var(--space-sm) var(--space-lg);
+  background: transparent;
   border-bottom: 1px solid var(--rule);
 }
 
@@ -5537,11 +5556,15 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 /* ---------- Phase 13 shared components (modules, marks, chips) ---------- */
 
+/* T3: the lightest rule, no radius, no shadow ([Ben] module-border rule); 20px/24px padding,
+   16px at 480px and under (the phone block below), 32px between modules. */
 .module {
-  border: 1px solid var(--rule-strong);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  box-shadow: none;
   background: var(--bg);
-  padding: var(--space-md);
-  margin: 0 0 var(--space-lg);
+  padding: 20px var(--space-lg);
+  margin: 0 0 var(--space-xl);
 }
 
 .module-head {
@@ -5584,8 +5607,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   padding: 0 var(--space-md);
   font: var(--font-body);
   color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--rule-strong);
+  background: transparent;
+  border: 1px solid var(--rule);
   border-radius: 4px;
   cursor: pointer;
 }
@@ -5599,9 +5622,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .legend-chip .legend-dot {
   flex: none;
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  box-sizing: border-box;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
+  border: 2px solid var(--mark, currentColor);
+  background: var(--mark, currentColor);
   margin-right: var(--space-sm);
 }
 
@@ -5700,6 +5726,16 @@ tr.is-matched > :first-child {
 /* ---------- Phone tables (13-14; 13-UI-SPEC "Phone" items 1-3) ---------- */
 
 @media (max-width: 480px) {
+  /* T3: modules take 16px padding all round on a phone, so the plot keeps its width. */
+  .module {
+    padding: var(--space-md);
+  }
+
+  #toolbar,
+  #nfl-toolbar {
+    padding-inline: var(--space-md);
+  }
+
   /* Header: Methodology and Coverage are in the footer nav, so the title, sport switch
      and theme slot share the row. */
   .header-links {
@@ -6181,7 +6217,7 @@ tr.is-matched > :first-child {
   gap: var(--space-xs);
   min-width: 0;
   overflow-x: auto;
-  border-bottom: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule);
   flex: 1 1 auto;
 }
 
