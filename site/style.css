@@ -6955,7 +6955,7 @@ tr.is-matched > :first-child {
   .wk-view-seg::after {
     content: "";
     position: absolute;
-    inset: -6px 0;
+    inset: -7px 0;
   }
 
   .wk-map-box {
