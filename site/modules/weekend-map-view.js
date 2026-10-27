@@ -260,6 +260,7 @@ function createMount(host) {
         clientY: at.y,
         phone,
         onOpen: () => openGame(hit.d.game),
+        within: phone ? gd.getBoundingClientRect() : null,
       },
     );
   }

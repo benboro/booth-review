@@ -231,7 +231,7 @@ export function ensureTooltipEl() {
  * right of and below, flipping left/above near the right/bottom edge, always
  * clamped EDGE_MARGIN px inside the viewport.
  */
-function placeTooltip(el, clientX, clientY, placement = 'beside') {
+function placeTooltip(el, clientX, clientY, placement = 'beside', within = null) {
   const width = el.offsetWidth;
   const height = el.offsetHeight;
 
@@ -248,6 +248,14 @@ function placeTooltip(el, clientX, clientY, placement = 'beside') {
     if (top < EDGE_MARGIN) top = clientY + OFFSET;
   } else if (top + height > window.innerHeight - EDGE_MARGIN) {
     top = clientY - OFFSET - height;
+  }
+  if (within) {
+    // Kept inside a box (the weekend map on a phone, sign-off 2026-10-27): above the point
+    // when the box has room, else below, then clamped into the box, so the card never
+    // covers the controls above the map.
+    top = clientY - OFFSET - height;
+    if (top < within.top) top = clientY + OFFSET;
+    top = Math.max(within.top, Math.min(top, within.bottom - height));
   }
   top = Math.max(EDGE_MARGIN, Math.min(top, window.innerHeight - EDGE_MARGIN - height));
 
@@ -489,13 +497,17 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
 /**
  * Shows the weekend map's game card (Phase 24 D-04): matchup, booth, kickoff and network, venue.
  * On a phone it also carries the one 44px "Open game" button and takes pointer events; it opens
- * above the tapped mark so it never covers it.
+ * above the tapped mark so it never covers it, kept inside `within` (the map box's client
+ * rect) when given, so it never covers the controls above the map.
  * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
  *   kickoff: string, venue: string, family: string}} card
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
- *   onOpen?: () => void}} opts
+ *   onOpen?: () => void, within?: {top: number, bottom: number}}} opts
  */
-export function showGameTooltip(card, { theme, clientX, clientY, phone = false, onOpen }) {
+export function showGameTooltip(
+  card,
+  { theme, clientX, clientY, phone = false, onOpen, within = null },
+) {
   const el = ensureTooltipEl();
   const text = (tag, className, content) => {
     const node = document.createElement(tag);
@@ -535,7 +547,7 @@ export function showGameTooltip(card, { theme, clientX, clientY, phone = false, 
   if (phone) el.dataset.phone = '';
   else delete el.dataset.phone;
   el.hidden = false;
-  placeTooltip(el, clientX, clientY, phone ? 'above' : 'beside');
+  placeTooltip(el, clientX, clientY, phone ? 'above' : 'beside', phone ? within : null);
 }
 
 /** True when `node` is inside the shared card (the weekend map's tap controller ignores it). */

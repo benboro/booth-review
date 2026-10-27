@@ -189,6 +189,23 @@ def test_first_tap_shows_the_card_with_open_game_and_the_ring_second_tap_opens(
 
 
 @pytest.mark.parametrize("sport", SPORTS)
+def test_the_tap_card_stays_inside_the_map_box_below_the_controls(
+    request: pytest.FixtureRequest, sport: str
+) -> None:
+    # Phase 24 sign-off: the card never covers the day tabs, view switch or stepper.
+    page = _open_sport(request, sport, mobile=True)
+    at = _point(page, GAME[sport])
+    page.touchscreen.tap(at["x"], at["y"])
+    _card_visible(page)
+    card = page.evaluate(_BOX, "#chart-tooltip")
+    box = page.evaluate(_BOX, ".wk-map-box")
+    controls = page.evaluate(_BOX, ".wk-controls")
+    assert card["y"] >= box["y"] - 0.5
+    assert card["y"] + card["h"] <= box["y"] + box["h"] + 0.5
+    assert card["y"] >= controls["y"] + controls["h"]
+
+
+@pytest.mark.parametrize("sport", SPORTS)
 def test_the_open_game_button_opens_the_panel_and_escape_returns_focus(
     request: pytest.FixtureRequest, sport: str
 ) -> None:
