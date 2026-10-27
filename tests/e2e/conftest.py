@@ -71,7 +71,8 @@ def _chromium_available(playwright: Playwright) -> None:
         if "doesn't exist" in message or "does not exist" in message:
             if os.environ.get("CI"):
                 pytest.fail(
-                    "Chromium missing in CI: run `uv run playwright install --with-deps chromium`"
+                    "Chromium missing in CI: the e2e container image's Playwright tag "
+                    "must match uv.lock"
                 )
             pytest.skip("Chromium not installed; run `uv run playwright install chromium`")
         raise

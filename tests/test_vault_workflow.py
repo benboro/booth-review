@@ -207,6 +207,19 @@ def test_workflow_checkout_pin_matches_ci_yml() -> None:
     assert workflow_pins == ci_pins
 
 
+def test_ci_playwright_image_matches_locked_playwright() -> None:
+    """The e2e container's browsers are built for one Playwright release; a
+    mismatched uv.lock would look for browsers the image doesn't have."""
+    image = yaml.safe_load(CI_TEXT)["jobs"]["e2e"]["container"]["image"]
+    match = re.fullmatch(
+        r"mcr\.microsoft\.com/playwright/python:v(\d+\.\d+\.\d+)-noble@sha256:[0-9a-f]{64}", image
+    )
+    assert match is not None, f"e2e image not a digest-pinned Playwright tag: {image}"
+    lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
+    locked = {pkg["version"] for pkg in lock["package"] if pkg["name"] == "playwright"}
+    assert locked == {match.group(1)}
+
+
 def test_workflow_job_ref_reaches_the_shell_only_through_env() -> None:
     for line in WORKFLOW_TEXT.splitlines():
         if "${{ vars.JOB_REF }}" in line:
