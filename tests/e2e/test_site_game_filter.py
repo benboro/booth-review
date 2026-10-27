@@ -85,7 +85,7 @@ def test_default_popover_lists_sections_counts_and_hides_empty_rows(
 ) -> None:
     open_app(guarded_page, "")
     trigger = guarded_page.locator("#trigger-game")
-    assert trigger.inner_text() == "Game"
+    assert trigger.locator(".filter-value").inner_text() == "Any"
     assert trigger.get_attribute("title") == "Game"
     _open_game(guarded_page)
     assert _headers(guarded_page) == ["PLAYOFF", "BOWLS", "RIVALRIES"]
@@ -106,7 +106,7 @@ def test_pick_replaces_the_earlier_pick_and_narrows_the_chart(
     _row(guarded_page, "harbor-bowl").click()
     _wait_url(guarded_page, "location.search.includes('game=harbor-bowl')")
     trigger = guarded_page.locator("#trigger-game")
-    assert trigger.inner_text().startswith("Game: Harbor Bowl")
+    assert trigger.locator(".filter-value").inner_text().startswith("Harbor Bowl")
     assert trigger.get_attribute("title") == "Game: Harbor Bowl"
     # Harbor Bowl franchise = 1 rated + unrated 16 (Bayside) = 2 games, all listed
     assert _passing(guarded_page) == 2
@@ -132,7 +132,7 @@ def test_picked_game_emptied_by_another_filter_stays_checked_and_greyed(
     assert "is-zero" in (row.get_attribute("class") or "")
     assert "(0)" in row.inner_text()
     assert "postseason=exclude" in guarded_page.url
-    assert guarded_page.locator("#trigger-postseason").inner_text() == "Bowls/Playoffs: Exclude"
+    assert guarded_page.locator("#trigger-postseason .filter-value").inner_text() == "Exclude"
 
 
 def test_search_filters_rows_headers_and_empty_line(

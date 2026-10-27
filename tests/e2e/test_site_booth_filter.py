@@ -80,11 +80,11 @@ def test_popover_lists_three_tiers_with_facet_counts(
     open_app: Callable[[Page, str], None],
 ) -> None:
     _open(guarded_page, serve_booths, open_app)
-    expect(guarded_page.locator("#trigger-booth")).to_have_text("Booth")
-    ids = guarded_page.evaluate(
-        "() => [...document.querySelectorAll('#toolbar > button')].map((b) => b.id).slice(-2)"
+    expect(guarded_page.locator("#trigger-booth .filter-value")).to_have_text("Any")
+    in_group = guarded_page.evaluate(
+        "() => document.getElementById('trigger-booth').closest('.fgroup').dataset.g"
     )
-    assert ids == ["trigger-game", "trigger-booth"]
+    assert in_group == "broadcast"  # Round 3b: Booth sits with Announcers, Networks and Role
     _open_popover(guarded_page)
     expect(guarded_page.locator("#pop-booth .helper")).to_have_text(HELPER)
     rows = guarded_page.locator("#booth-list .check-item")
@@ -111,7 +111,8 @@ def test_lead_pick_fades_the_rest_and_labels_the_trigger(
     guarded_page.wait_for_function("location.search.includes('booth=a')")
     assert _passes(guarded_page) == A  # 17 of 20 fail the filter and are faded
     trigger = guarded_page.locator("#trigger-booth")
-    expect(trigger).to_have_text("Booth: Lead (A)")
+    expect(trigger.locator(".filter-value")).to_have_text("Lead (A)")
+    assert trigger.get_attribute("title") == "Booth: Lead (A)"
     assert trigger.get_attribute("data-active") == "true"
     assert _visible_dots(guarded_page) == 19
     # Counts keep describing the other tiers while one is picked (own-excluded facets).
@@ -145,7 +146,7 @@ def test_url_decodes_to_checked_boxes_and_multi_label(
         "#booth-list input:checked", "(els) => els.map((e) => e.value)"
     )
     assert checked == ["b", "other"]
-    expect(guarded_page.locator("#trigger-booth")).to_have_text("Booth · 2")
+    expect(guarded_page.locator("#trigger-booth .filter-value")).to_have_text("No. 2 (B) +1")
     assert _passes(guarded_page) == [4, 9, 13, 15]
 
 
@@ -168,7 +169,7 @@ def test_section_reset_and_clear_all_clear_the_pick(
     guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
     guarded_page.click("#clear-filters")
     guarded_page.wait_for_function("location.search === ''")
-    expect(guarded_page.locator("#trigger-booth")).to_have_text("Booth")
+    expect(guarded_page.locator("#trigger-booth .filter-value")).to_have_text("Any")
 
 
 def test_bars_by_network_follows_the_booth_filter(
@@ -225,7 +226,7 @@ def test_toolbar_does_not_overflow_and_keeps_order(
         """() => {
           const bar = document.getElementById('toolbar');
           const box = bar.getBoundingClientRect();
-          const cells = [...bar.querySelectorAll(':scope > button')]
+          const cells = [...bar.querySelectorAll('.fgroup-row .filter-trigger')]
             .filter((b) => b.offsetParent !== null);
           return {
             scroll: bar.scrollWidth <= bar.clientWidth,
@@ -241,13 +242,13 @@ def test_toolbar_does_not_overflow_and_keeps_order(
     assert result["inside"]
     assert result["ids"] == [
         "trigger-announcers",
-        "trigger-seasons",
         "trigger-networks",
-        "trigger-kickoff",
+        "trigger-booth",
         "trigger-role",
         "trigger-conference",
         "trigger-school",
-        "trigger-postseason",
         "trigger-game",
-        "trigger-booth",
+        "trigger-seasons",
+        "trigger-kickoff",
+        "trigger-postseason",
     ]

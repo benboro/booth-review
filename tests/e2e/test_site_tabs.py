@@ -768,7 +768,7 @@ def test_hidden_role_control_keeps_the_role(
     assert _is_concealed(page, "#bar-role-toggle")
     assert "role=pbp" in page.evaluate("() => location.search")
     assert _state(page)["role"] == "pbp"
-    assert "Role:" in page.locator("#trigger-role").inner_text()
+    assert page.locator("#trigger-role .filter-value").inner_text() == "Play-by-play"
     page.click("#trigger-role")
     page.locator('#filter-role input[value="analyst"]').check()
     assert _state(page)["role"] == "analyst"

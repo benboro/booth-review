@@ -17,6 +17,11 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
+_TOKEN_COLOR_JS = (
+    "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+    " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+)
+
 
 def _parse_rgb(css_color: str) -> tuple[float, float, float]:
     """Parses a `getComputedStyle` `rgb(...)`/`rgba(...)` string into (r, g, b)."""
@@ -342,11 +347,11 @@ def test_prime_and_late_together_encode_canonically(
 
     guarded_page.check("input[name='slot'][value='late']")
     guarded_page.wait_for_function("location.search.includes('slot=late')")
-    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff: After dark"
+    assert guarded_page.inner_text("#trigger-kickoff .filter-value") == "After dark"
 
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime,late')")
-    assert guarded_page.inner_text("#trigger-kickoff") == "Kickoff · 2"
+    assert guarded_page.inner_text("#trigger-kickoff .filter-value") == "Prime time +1"
 
 
 def test_role_filter_limits_taylor_vance_to_her_main_feed_role(
@@ -544,20 +549,20 @@ def test_toolbar_order_and_clear_all_contrast(
     open_app(guarded_page, "?role=pbp")
 
     ids = guarded_page.evaluate(
-        "() => Array.from(document.querySelectorAll('#toolbar > *'))"
+        "() => Array.from(document.querySelectorAll('#toolbar .fgroup-row .filter-trigger'))"
         ".filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.id)"
     )
     assert ids == [
         "trigger-announcers",
-        "trigger-seasons",
         "trigger-networks",
-        "trigger-kickoff",
+        "trigger-booth",
         "trigger-role",
         "trigger-conference",
         "trigger-school",
-        "trigger-postseason",
         "trigger-game",
-        "trigger-booth",
+        "trigger-seasons",
+        "trigger-kickoff",
+        "trigger-postseason",
     ]
 
     # Clear all filters sits inside the selection row, after the chips and toggles.
@@ -571,14 +576,14 @@ def test_toolbar_order_and_clear_all_contrast(
         "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
         "return { toolbarBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
         "clearWeight: clear.fontWeight, "
-        "trigColor: trig.color, trigBorderTop: trig.borderTopColor }; }"
+        "trigColor: trig.color, trigBorderTopWidth: trig.borderTopWidth }; }"
     )
     fg = _parse_rgb(styles["clearColor"])
     bg = _parse_rgb(styles["toolbarBg"])
     assert _contrast_ratio(fg, bg) >= 4.5
     # Same ink text as a trigger, told apart by its ink border and 600 weight.
-    assert styles["clearBorderTop"] == "rgb(35, 32, 27)"
-    assert styles["clearBorderTop"] != styles["trigBorderTop"]
+    assert styles["clearBorderTop"] == guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
+    assert styles["trigBorderTopWidth"] == "0px"  # an entry has no box, Clear all does
     assert styles["clearWeight"] == "600"
 
 
@@ -608,12 +613,12 @@ def test_chrome_buttons_use_the_theme_text_color(
 @pytest.mark.parametrize(
     ("query", "trigger_id", "expected_text"),
     [
-        ("?seasons=2019-2025", "trigger-seasons", "Seasons 2019–2025"),  # noqa: RUF001
-        ("?networks=net-a", "trigger-networks", "Networks · 1"),
-        ("?conferences=SEC", "trigger-conference", "Conference: SEC"),
-        ("?conferences=SEC,Big+Ten", "trigger-conference", "Conference · 2"),
-        ("?school=northfield", "trigger-school", "School: Northfield"),
-        ("?postseason=only", "trigger-postseason", "Bowls/Playoffs: Only"),
+        ("?seasons=2019-2025", "trigger-seasons", "2019–2025"),  # noqa: RUF001
+        ("?networks=net-a", "trigger-networks", "Alpha Sports"),
+        ("?conferences=SEC", "trigger-conference", "SEC"),
+        ("?conferences=SEC,Big+Ten", "trigger-conference", "Big Ten +1"),
+        ("?school=northfield", "trigger-school", "Northfield"),
+        ("?postseason=only", "trigger-postseason", "Only"),
     ],
 )
 def test_active_trigger_shows_a_summary_and_is_marked_active(
@@ -627,7 +632,7 @@ def test_active_trigger_shows_a_summary_and_is_marked_active(
     short summary."""
     open_app(guarded_page, query)
     trigger = guarded_page.locator(f"#{trigger_id}")
-    expect(trigger).to_have_text(expected_text)
+    expect(trigger.locator(".filter-value")).to_have_text(expected_text)
     assert trigger.get_attribute("data-active") == "true"
 
 
@@ -757,7 +762,7 @@ def test_legacy_team_link_migrates_into_school_as_a_fade_filter(
         )
         is True
     )
-    expect(guarded_page.locator("#trigger-school")).to_have_text("School: Northfield")
+    expect(guarded_page.locator("#trigger-school .filter-value")).to_have_text("Northfield")
     assert _highlighted(guarded_page) == []
 
 
@@ -1922,7 +1927,7 @@ def test_facet_seasons_one_sided_edit_to_the_data_bound_sets_no_filter(
     guarded_page.select_option("#season-to", "2026")
     assert guarded_page.evaluate("window.__testHooks.getState().seasons") is None
     assert "seasons=" not in guarded_page.evaluate("location.search")
-    expect(guarded_page.locator("#trigger-seasons")).to_have_text("Seasons")
+    expect(guarded_page.locator("#trigger-seasons .filter-value")).to_have_text("2019–2026")  # noqa: RUF001
 
 
 def test_facet_view_exposes_plain_json_facets(
@@ -2042,7 +2047,7 @@ def test_only_channel_selects_it_and_all_restores(
     assert "networks=net-e" in guarded_page.evaluate("location.search")
     expect(btn).to_have_text("All")
     expect(btn).to_have_attribute("aria-label", "Show all networks")
-    expect(guarded_page.locator("#trigger-networks")).to_have_text("Networks · 1")
+    expect(guarded_page.locator("#trigger-networks .filter-value")).to_have_text("Stream Plus")
     expect(guarded_page.locator(".legend-chip[data-family='disney']")).to_have_attribute(
         "aria-pressed", "true"
     )
@@ -2091,7 +2096,7 @@ def test_only_kickoff_selects_slot_and_all_draws_unchecked(
     expect(btn).to_have_attribute("aria-label", "Show only Prime time")
     btn.click()
     assert _state(guarded_page)["slots"] == ["prime"]
-    expect(guarded_page.locator("#trigger-kickoff")).to_have_text("Kickoff: Prime time")
+    expect(guarded_page.locator("#trigger-kickoff .filter-value")).to_have_text("Prime time")
     expect(btn).to_have_attribute("aria-label", "Show all kickoff times")
     btn.click()
     assert _state(guarded_page)["slots"] is None
@@ -2272,13 +2277,15 @@ def test_changed_predicate_matches_a_clean_load(
     assert "is-changed" in (trigger.get_attribute("class") or "")
     style = trigger.evaluate(
         "el => { const s = getComputedStyle(el);"
-        " return [s.borderTopColor, s.backgroundColor,"
+        " return [getComputedStyle(el.querySelector('.filter-value')).color, s.backgroundColor,"
         " getComputedStyle(el.querySelector('.filter-label')).fontWeight,"
         " getComputedStyle(el.querySelector('.filter-value')).fontWeight]; }"
     )
-    assert style == ["rgb(27, 79, 92)", "rgb(227, 237, 239)", "600", "400"]
+    accent = guarded_page.evaluate(_TOKEN_COLOR_JS, "--accent")
+    # Round 3b: no fill and no top border; the label stays 400 and the pick takes 600.
+    assert style == [accent, "rgba(0, 0, 0, 0)", "400", "600"]
     assert trigger.locator(".filter-label").inner_text() == "School"
-    assert trigger.locator(".filter-value").inner_text() == ": Northfield"
+    assert trigger.locator(".filter-value").inner_text() == "Northfield"
     assert trigger.get_attribute("title") == "School: Northfield"
     assert trigger.get_attribute("aria-label") == "School: Northfield"
 
@@ -2288,7 +2295,7 @@ def test_changed_predicate_matches_a_clean_load(
     guarded_page.wait_for_function("!location.search.includes('school=')")
     guarded_page.keyboard.press("Escape")
     assert guarded_page.locator("#toolbar .is-changed").count() == 0
-    assert guarded_page.locator("#trigger-school .filter-value").inner_text() == ""
+    assert guarded_page.locator("#trigger-school .filter-value").inner_text() == "Any"
     assert guarded_page.evaluate("window.__testHooks.getState()") == clean
 
 
@@ -2332,11 +2339,11 @@ def test_clear_all_filters_is_disabled_until_a_filter_changes(
     open_app(guarded_page, "")
     idle = _clear_state(guarded_page, "#clear-filters")
     assert idle["aria"] == "true"
-    assert idle["border"] != "rgb(35, 32, 27)"  # not --ink
+    assert idle["border"] != guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")  # not --ink
     open_app(guarded_page, "?role=pbp")
     live = _clear_state(guarded_page, "#clear-filters")
     assert live["aria"] == "false"
-    assert live["border"] == "rgb(35, 32, 27)"
+    assert live["border"] == guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
     guarded_page.click("#clear-filters")
     guarded_page.wait_for_function(
         "document.getElementById('clear-filters').getAttribute('aria-disabled') === 'true'"
@@ -2361,8 +2368,8 @@ def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(
     open_app(mobile_page, "")
     idle = _clear_state(mobile_page, "#clear-filters")
     assert idle["aria"] == "true"
-    assert idle["border"] != "rgb(35, 32, 27)"
+    assert idle["border"] != mobile_page.evaluate(_TOKEN_COLOR_JS, "--ink")
     open_app(mobile_page, "?role=pbp")
     live = _clear_state(mobile_page, "#clear-filters")
     assert live["aria"] == "false"
-    assert live["border"] == "rgb(35, 32, 27)"
+    assert live["border"] == mobile_page.evaluate(_TOKEN_COLOR_JS, "--ink")

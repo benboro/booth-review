@@ -282,17 +282,17 @@ def test_chip_row_wraps_without_overflow_on_phone(
 def test_trigger_counts_selected_announcers(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-21/D-02: the Announcers trigger reads its own selection count,
-    like every other filter trigger."""
+    """D-21/D-02 (Round 3b): the Announcers entry reads Any, then the first pick and how
+    many more."""
     open_app(guarded_page, "")
     trigger = guarded_page.locator("#trigger-announcers")
-    expect(trigger).to_have_text("Announcers")
+    expect(trigger.locator(".filter-value")).to_have_text("Any")
     assert trigger.get_attribute("data-active") == "false"
 
     _add_person_by_query(guarded_page, "Dale Harlow")
     _add_person_by_query(guarded_page, "Kris Venn")
 
-    expect(trigger).to_have_text("Announcers · 2")
+    expect(trigger.locator(".filter-value")).to_have_text("Dale Harlow +1")
     assert trigger.get_attribute("data-active") == "true"
 
 
@@ -407,12 +407,12 @@ def test_clear_all_filters_is_distinct_and_aa(
         "const box = document.getElementById('clear-filters').getBoundingClientRect(); "
         "return { pageBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
         "clearWeight: clear.fontWeight, trigWeight: trig.fontWeight, "
-        "trigBorderTop: trig.borderTopColor, rowRight: row.right, clearRight: box.right }; }"
+        "trigBorderTopWidth: trig.borderTopWidth, rowRight: row.right, clearRight: box.right }; }"
     )
     assert _contrast_ratio(_parse_rgb(styles["clearColor"]), _parse_rgb(styles["pageBg"])) >= 4.5
     ink = guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
     assert styles["clearBorderTop"] == ink  # --ink
-    assert styles["clearBorderTop"] != styles["trigBorderTop"]
+    assert styles["trigBorderTopWidth"] == "0px"  # an entry has no box, Clear all does
     assert styles["clearWeight"] == "600"
     assert styles["clearWeight"] != styles["trigWeight"]
     assert styles["rowRight"] - styles["clearRight"] <= 1

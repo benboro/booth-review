@@ -223,7 +223,7 @@ function networkRowHidden(count, checked, narrowed) {
 }
 
 /**
- * D-36: how many Networks rows are shown, and how many of those are checked.
+ * D-36: how many Networks rows are shown, how many of those are checked, and the checked names.
  * Iterates `data.primaryNetworks` only; missing facets count every row as shown.
  */
 function shownNetworkCounts(data, state, view) {
@@ -231,15 +231,19 @@ function shownNetworkCounts(data, state, view) {
   const narrowed = networksPickNarrowed(data, state);
   let shown = 0;
   let checkedShown = 0;
+  const names = [];
   for (const idx of data.primaryNetworks) {
     const net = data.lookups.networks[idx];
     const checked = currentIds.includes(net.id);
     const count = view?.facets?.networks?.[idx] ?? 1;
     if (networkRowHidden(count, checked, narrowed)) continue;
     shown += 1;
-    if (checked) checkedShown += 1;
+    if (checked) {
+      checkedShown += 1;
+      names.push(net.name);
+    }
   }
-  return { shown, checked: checkedShown };
+  return { shown, checked: checkedShown, names };
 }
 
 /**
@@ -1380,77 +1384,102 @@ function renderGame(data, state, view) {
   syncGameChrome(els.gameSearch.value);
 }
 
-/** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
- * D-36: the Networks count is the checked rows among the rows shown in the list. */
-function triggerInfo(name, data, state, view) {
-  if (name === 'crew') {
-    // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
-    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null };
-  }
-  if (name === 'announcers') {
-    if (state.people.length === 0) return { label: 'Announcers', active: false };
-    return { label: `Announcers · ${state.people.length}`, active: true };
-  }
-  if (name === 'seasons') {
-    if (state.seasons == null) return { label: 'Seasons', active: false };
-    const [a, b] = state.seasons;
-    return { label: `Seasons ${a}–${b}`, active: true };
-  }
-  if (name === 'networks') {
-    if (state.networks == null) return { label: 'Networks', active: false };
-    const { shown, checked } = shownNetworkCounts(data, state, view);
-    if (checked === shown) return { label: 'Networks', active: false };
-    return { label: `Networks · ${checked}`, active: true };
-  }
-  if (name === 'kickoff') {
-    if (state.slots == null) return { label: 'Kickoff', active: false };
-    const label =
-      state.slots.length === 1 ? `Kickoff: ${SLOT_SHORT_LABELS[state.slots[0]]}` : `Kickoff · ${state.slots.length}`;
-    return { label, active: true };
-  }
-  if (name === 'role') {
-    if (state.role == null) return { label: 'Role', active: false };
-    return { label: `Role: ${ROLE_LABELS[state.role]}`, active: true };
-  }
-  if (name === 'conference') {
-    if (state.conferences.length === 0) return { label: 'Conference', active: false };
-    const label =
-      state.conferences.length === 1 ? `Conference: ${state.conferences[0]}` : `Conference · ${state.conferences.length}`;
-    return { label, active: true };
-  }
-  if (name === 'school') {
-    if (state.school.length === 0) return { label: 'School', active: false };
-    if (state.h2h === true && state.school.length === 2) {
-      const [a, b] = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
-      return { label: `School: ${a} vs ${b}`, active: true };
-    }
-    if (state.school.length === 1) {
-      const idx = data.teamIndexBySlug.get(state.school[0]);
-      return { label: `School: ${data.lookups.teams[idx].name}`, active: true };
-    }
-    return { label: `School · ${state.school.length}`, active: true };
-  }
-  if (name === 'postseason') {
-    if (state.postseason === 'all') return { label: 'Bowls/Playoffs', active: false };
-    const label = state.postseason === 'exclude' ? 'Bowls/Playoffs: Exclude' : 'Bowls/Playoffs: Only';
-    return { label, active: true };
-  }
-  if (name === 'booth') {
-    if (state.booth.length === 0) return { label: 'Booth', active: false };
-    const label =
-      state.booth.length === 1 ? `Booth: ${BOOTH_LABELS[state.booth[0]]}` : `Booth · ${state.booth.length}`;
-    return { label, active: true };
-  }
-  if (name === 'game') {
-    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
-    if (idx === undefined) return { label: 'Game', active: false };
-    return { label: `Game: ${data.games[idx].label}`, active: true };
-  }
-  return { label: name, active: false };
-}
+/** What an untouched entry reads in its value line (Round 3b): the default, in words. */
+const ENTRY_DEFAULTS = {
+  announcers: 'Any',
+  networks: 'All',
+  booth: 'Any',
+  role: 'Both',
+  conference: 'Any',
+  school: 'Any',
+  game: 'Any',
+  kickoff: 'Any',
+  postseason: 'All games',
+};
 
 /** Resting label per trigger name, captured from index.html before the first render replaces any of them. */
 const restingLabels = new Map();
+
+/**
+ * A toolbar trigger's active state and its picks in full, from `state` (D-02 copywriting).
+ * `items` lists each pick as the visitor reads it ([] at default); `label` is the full summary
+ * ("Announcers: Kirk Herbstreit, Chris Fowler"), the title and accessible name. The short text an
+ * entry shows is `entryValue`'s. D-36: the Networks picks are the checked rows among the rows shown.
+ */
+function triggerInfo(name, data, state, view) {
+  const resting = restingLabels.get(name) ?? name;
+  const info = (items) => ({
+    label: items.length > 0 ? `${resting}: ${items.join(', ')}` : resting,
+    active: items.length > 0,
+    items,
+  });
+  if (name === 'crew') {
+    // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
+    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null, items: [] };
+  }
+  if (name === 'announcers') {
+    return info(
+      state.people.map((id) => {
+        const idx = data.personIndexById.get(id);
+        return idx === undefined ? id : data.lookups.people[idx].name;
+      }),
+    );
+  }
+  if (name === 'seasons') {
+    if (state.seasons == null) return info([]);
+    const [a, b] = state.seasons;
+    return info([`${a}–${b}`]);
+  }
+  if (name === 'networks') {
+    if (state.networks == null) return info([]);
+    const { shown, checked, names } = shownNetworkCounts(data, state, view);
+    if (checked === shown) return info([]);
+    return info(names.length > 0 ? names : ['None']);
+  }
+  if (name === 'kickoff') {
+    return info(state.slots == null ? [] : state.slots.map((slot) => SLOT_SHORT_LABELS[slot]));
+  }
+  if (name === 'role') {
+    return info(state.role == null ? [] : [ROLE_LABELS[state.role]]);
+  }
+  if (name === 'conference') {
+    return info([...state.conferences]);
+  }
+  if (name === 'school') {
+    const names = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
+    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs ${names[1]}`]);
+    return info(names);
+  }
+  if (name === 'postseason') {
+    if (state.postseason === 'all') return info([]);
+    return info([state.postseason === 'exclude' ? 'Exclude' : 'Only']);
+  }
+  if (name === 'booth') {
+    return info(state.booth.map((tier) => BOOTH_LABELS[tier]));
+  }
+  if (name === 'game') {
+    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
+    return info(idx === undefined ? [] : [data.games[idx].label]);
+  }
+  return { label: name, active: false, items: [] };
+}
+
+/**
+ * The text an entry shows on its value line: the default word at rest, otherwise the pick itself
+ * (one pick in full, several "{first} +{n-1}"; compare mode counts people because the count line
+ * names them). Seasons shows its range, read from the data. Long text truncates in the entry.
+ */
+function entryValue(name, data, state, view) {
+  const { items, active } = triggerInfo(name, data, state, view);
+  if (!active) {
+    if (name === 'seasons') return `${Math.min(...data.seasons)}–${Math.max(...data.seasons)}`;
+    return ENTRY_DEFAULTS[name] ?? '';
+  }
+  if (name === 'announcers' && state.compare) {
+    return items.length === 1 ? '1 person' : `${items.length} people`;
+  }
+  return items.length === 1 ? items[0] : `${items[0]} +${items.length - 1}`;
+}
 
 /** The trigger's changed value text ("" at default): the part of the summary after the resting label. */
 function triggerValue(name, label, active) {
@@ -1501,14 +1530,14 @@ function renderTriggers(data, state, view) {
     labelSpan.textContent = resting;
     const valueSpan = document.createElement('span');
     valueSpan.className = 'filter-value';
-    valueSpan.textContent = triggerValue(name, label, active);
+    valueSpan.textContent = entryValue(name, data, state, view);
     const text = document.createElement('span');
     text.className = 'filter-text';
     text.append(labelSpan, valueSpan);
     btn.replaceChildren(text);
     btn.dataset.active = active ? 'true' : 'false';
     btn.classList.toggle('is-changed', changed.has(name));
-    // The full summary is always available; long values truncate in their grid cell (C3).
+    // The full summary is always available; a long pick truncates inside its entry.
     btn.setAttribute('title', label);
     btn.setAttribute('aria-label', label);
   }

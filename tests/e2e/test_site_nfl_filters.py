@@ -12,6 +12,11 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
+_TOKEN_COLOR_JS = (
+    "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+    " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+)
+
 TRIGGERS = ["Announcers", "Seasons", "Category", "Team"]
 BAR = [*TRIGGERS, "Booths"]  # the fixed filter set (D-10): Booths on every view
 CFB_ONLY = ["Networks", "Role", "Conference", "Bowls/Playoffs", "Kickoff", "School", "Game"]
@@ -622,11 +627,11 @@ def _clear_state(page: Page, selector: str) -> dict[str, str | None]:
 def test_clear_all_filters_is_disabled_until_a_filter_changes(app: Page) -> None:
     idle = _clear_state(app, "#nfl-clear-filters")
     assert idle["aria"] == "true"
-    assert idle["border"] != "rgb(35, 32, 27)"  # not --ink
+    assert idle["border"] != app.evaluate(_TOKEN_COLOR_JS, "--ink")  # not --ink
     app.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
     live = _clear_state(app, "#nfl-clear-filters")
     assert live["aria"] == "false"
-    assert live["border"] == "rgb(35, 32, 27)"
+    assert live["border"] == app.evaluate(_TOKEN_COLOR_JS, "--ink")
     app.click("#nfl-clear-filters")
     app.wait_for_function(
         "document.getElementById('nfl-clear-filters').getAttribute('aria-disabled') === 'true'"
@@ -647,8 +652,8 @@ def test_phone_clear_all_filters_is_disabled_until_a_filter_changes(mobile: Page
     sheet_clear = ".nfl-filters-sheet .nfl-sheet-clear"
     idle = _clear_state(mobile, sheet_clear)
     assert idle["aria"] == "true"
-    assert idle["border"] != "rgb(35, 32, 27)"
+    assert idle["border"] != mobile.evaluate(_TOKEN_COLOR_JS, "--ink")
     mobile.evaluate("window.__nflTestHooks.setState({ cats: ['agotw'] })")
     live = _clear_state(mobile, sheet_clear)
     assert live["aria"] == "false"
-    assert live["border"] == "rgb(35, 32, 27)"
+    assert live["border"] == mobile.evaluate(_TOKEN_COLOR_JS, "--ink")

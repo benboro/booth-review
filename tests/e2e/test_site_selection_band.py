@@ -416,10 +416,10 @@ def test_announcers_trigger_is_a_plain_filter_that_takes_the_accent_when_changed
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "")
     accent = _token(guarded_page, "--accent")
-    accent_soft = _token(guarded_page, "--accent-soft")
     style_js = (
         "el => { const s = getComputedStyle(el);"
-        "return [s.borderTopColor, s.color, s.backgroundColor]; }"
+        "return [s.borderBottomColor, s.color, s.backgroundColor,"
+        " getComputedStyle(el.querySelector('.filter-value')).color]; }"
     )
     rest: list[str] = guarded_page.eval_on_selector("#trigger-announcers", style_js)
     seasons: list[str] = guarded_page.eval_on_selector("#trigger-seasons", style_js)
@@ -429,6 +429,8 @@ def test_announcers_trigger_is_a_plain_filter_that_takes_the_accent_when_changed
 
     open_app(guarded_page, "?people=dale-harlow")
     active: list[str] = guarded_page.eval_on_selector("#trigger-announcers", style_js)
+    # Round 3b: the accent is the pick's text and a 2px bottom line; there is no fill.
     assert active[0] == accent
-    assert active[2] == accent_soft
-    assert _contrast_ratio(_parse_rgb(active[1]), _parse_rgb(active[2])) >= 4.5
+    assert active[3] == accent
+    assert active[2] == "rgba(0, 0, 0, 0)"
+    assert _contrast_ratio(_parse_rgb(active[3]), _parse_rgb(bg)) >= 4.5
