@@ -16,11 +16,11 @@ pytestmark = pytest.mark.e2e
 
 OpenNfl = Callable[..., None]
 
-PAGE_BG = "#1D1B18"
-GRID = "#3A3632"
-MUTED = "#A59E94"
-SURFACE = "#26231F"
-INK = "#ECE7DF"
+PAGE_BG = "#191D1C"
+GRID = "#333A38"
+MUTED = "#9EA8A4"
+SURFACE = "#212625"
+INK = "#E5EAE8"
 
 _READY = {
     "special": "window.__nflTestHooks.getViewModel('special') !== null",

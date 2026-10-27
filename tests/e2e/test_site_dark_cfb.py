@@ -18,11 +18,11 @@ pytestmark = pytest.mark.e2e
 
 OpenApp = Callable[[Page, str], None]
 
-PAGE_BG = "#1D1B18"
-GRID = "#3A3632"
-MUTED = "#A59E94"
-SURFACE = "#26231F"
-INK = "#ECE7DF"
+PAGE_BG = "#191D1C"
+GRID = "#333A38"
+MUTED = "#9EA8A4"
+SURFACE = "#212625"
+INK = "#E5EAE8"
 
 _PALETTE_JS = """
 async () => {
@@ -193,8 +193,8 @@ _MAP_TRACES = """() => document.getElementById('map-chart').data.map(
 _MAP_IMAGES = (
     "() => (document.getElementById('map-chart').layout.images || []).map((i) => i.source)"
 )
-MAP_LAND = "#2A2722"
-MAP_OUTLINE = "#4A453E"
+MAP_LAND = "#242A28"
+MAP_OUTLINE = "#46504D"
 MAP_NEUTRAL = "#8B8377"
 
 

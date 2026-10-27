@@ -14,8 +14,8 @@ OpenApp = Callable[[Page, str], None]
 
 # Light branch of palette.js captured in-page from the unmodified module before 17-03 edits.
 LIGHT_SNAPSHOT: dict[str, Any] = {
-    "ACCENT": "#23201B",
-    "DIVIDER": "#E4DDD1",
+    "ACCENT": "#1E2321",
+    "DIVIDER": "#DAE0DD",
     "FAMILY_COLORS": {
         "disney": "#0072B2",
         "fox": "#009E73",
@@ -26,29 +26,29 @@ LIGHT_SNAPSHOT: dict[str, Any] = {
         "conference": "#000000",
         "other": "#8B8B8B",
     },
-    "INK": "#23201B",
+    "INK": "#1E2321",
     "MAP_DOT_NEUTRAL": "#B3AA9C",
     "MAP_FAMILY_COLORS": {
         "disney": "#0072B2",
         # Phase 24: families under 3:1 on the land are deepened toward black (hue kept).
-        "fox": "#009B71",
-        "cbs": "#B57E00",
-        "nbc": "#C16D9C",
-        "cw": "#1C90D2",
+        "fox": "#009970",
+        "cbs": "#B37C00",
+        "nbc": "#BF6C9A",
+        "cw": "#1C8FD0",
         "wbd": "#D55E00",
         "conference": "#6A5BA0",
-        "other": "#888888",
+        "other": "#878787",
     },
-    "MAP_LAND": "#F1EDE4",
-    "MAP_MARKER_LABEL": "#6A6358",
-    "MAP_OUTLINE": "#C4C9D1",
-    "MUTED": "#6A6358",
-    "PAGE_BG": "#FBF9F5",
+    "MAP_LAND": "#E8EDEA",
+    "MAP_MARKER_LABEL": "#5A6460",
+    "MAP_OUTLINE": "#BCC6C2",
+    "MUTED": "#5A6460",
+    "PAGE_BG": "#F5F7F6",
     "POSTSEASON_BAND": "rgba(166, 120, 40, 0.07)",
     "POSTSEASON_LABEL": "#6E4A10",
     "SPECIAL": "#1B4F5C",
-    "SURFACE": "#F4F0E8",
-    "ZERO_LINE": "#CFC6B6",
+    "SURFACE": "#EBEFED",
+    "ZERO_LINE": "#C0C9C5",
     "PILL_TEXT_COLOR_light": {
         "disney": "#FFFFFF",
         "fox": "#000000",
@@ -145,9 +145,9 @@ LIGHT_SNAPSHOT: dict[str, Any] = {
 }
 
 _FAMILIES = ["disney", "fox", "cbs", "nbc", "cw", "wbd", "conference", "other"]
-_PAGE = "#1D1B18"
-_SURFACE = "#26231F"
-_LAND = "#2A2722"
+_PAGE = "#191D1C"
+_SURFACE = "#212625"
+_LAND = "#242A28"
 
 _DARK_FAMILY = {
     "disney": "#0A7BC0",
@@ -172,16 +172,16 @@ _DARK_TONE_B = {
 _DARK_SCALARS = {
     "PAGE_BG": _PAGE,
     "SURFACE": _SURFACE,
-    "INK": "#ECE7DF",
-    "ACCENT": "#ECE7DF",
-    "MUTED": "#A59E94",
-    "DIVIDER": "#3A3632",
-    "ZERO_LINE": "#5A554D",
+    "INK": "#E5EAE8",
+    "ACCENT": "#E5EAE8",
+    "MUTED": "#9EA8A4",
+    "DIVIDER": "#333A38",
+    "ZERO_LINE": "#56605C",
     "SPECIAL": "#68BACB",
     "POSTSEASON_BAND": "rgba(212, 160, 60, 0.07)",
     "POSTSEASON_LABEL": "#E8BE6E",
     "MAP_LAND": _LAND,
-    "MAP_OUTLINE": "#4A453E",
+    "MAP_OUTLINE": "#46504D",
     "MAP_DOT_NEUTRAL": "#8B8377",
 }
 
@@ -251,7 +251,7 @@ def test_dark_scalars(app: Page) -> None:
         ),
         list(_DARK_SCALARS),
     )
-    assert got.pop("DOT_OUTLINE") == "#ECE7DF"
+    assert got.pop("DOT_OUTLINE") == "#E5EAE8"
     assert got == _DARK_SCALARS
 
 
@@ -325,10 +325,10 @@ def test_frame_layout_dark(app: Page) -> None:
     assert dark["paper_bgcolor"] == _PAGE
     assert dark["plot_bgcolor"] == _PAGE
     assert dark["hoverlabel"]["bgcolor"] == _SURFACE
-    assert dark["hoverlabel"]["font"]["color"] == "#ECE7DF"
-    assert dark["hoverlabel"]["bordercolor"] == "#3A3632"
+    assert dark["hoverlabel"]["font"]["color"] == "#E5EAE8"
+    assert dark["hoverlabel"]["bordercolor"] == "#333A38"
     light = _ev(app, "chart-frame.js", "return M.frameLayout({}, { theme: 'light' });")
-    assert light["hoverlabel"]["font"]["color"] == "#23201B"
+    assert light["hoverlabel"]["font"]["color"] == "#1E2321"
 
 
 def test_makepill_dark(app: Page) -> None:

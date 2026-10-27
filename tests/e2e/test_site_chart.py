@@ -1684,8 +1684,8 @@ def test_tooltip_mode_trace_config(
 # `test_compare_shapes_have_no_edge_speckles` both exercising the real
 # built page (never a hand-rendered swatch).
 # The site is light-only until Phase 17, so only the light values are kept.
-_ACCENT = {"light": "#23201B"}
-_PAGE_BG = {"light": "#FBF9F5"}
+_ACCENT = {"light": "#1E2321"}
+_PAGE_BG = {"light": "#F5F7F6"}
 
 # The fixture compare selection that assigns every COMPARE_SYMBOLS shape
 # plus the shared-game star (04.1-CONTEXT.md interfaces, confirmed against

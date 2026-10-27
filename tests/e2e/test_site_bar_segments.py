@@ -246,7 +246,7 @@ def test_segment_overlays_carry_separators_and_customdata(
     assert [t["x"][0] for t in overlays] == counts
     for k, t in enumerate(overlays):
         assert t["marker"]["color"] == _TRANSPARENT
-        assert t["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28: the --bg gap
+        assert t["marker"]["line"] == {"width": 3, "color": "#F5F7F6"}  # D-28: the --bg gap
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
         assert t["hoverinfo"] == "none"
         assert not any(t.get("text", []))

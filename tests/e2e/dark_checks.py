@@ -11,8 +11,8 @@ from typing import Any
 
 from playwright.sync_api import Page
 
-# Relative luminance of #4A453E: anything brighter that paints a box is a white-box offender.
-_THRESHOLD_HEX = "#4A453E"
+# Relative luminance of #434B48: anything brighter that paints a box is a white-box offender.
+_THRESHOLD_HEX = "#434B48"
 
 
 def rgb(hex_color: str) -> str:
@@ -89,7 +89,7 @@ _OFFENDERS_JS = """
 
 
 def white_box_offenders(page: Page) -> list[str]:
-    """Every painted chart-area box lighter than #4A453E (empty in a correct dark page)."""
+    """Every painted chart-area box lighter than #434B48 (empty in a correct dark page)."""
     result: list[str] = page.evaluate(_OFFENDERS_JS, _THRESHOLD_HEX)
     return result
 

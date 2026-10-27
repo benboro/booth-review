@@ -1138,7 +1138,7 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     assert figure["layout"]["uniformtext"] == {"mode": "hide", "minsize": 14}
     assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2", "x3", "x4", "x5", "x6"}
     for overlay in _on(figure, "x3") + _on(figure, "x4"):
-        assert overlay["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28 (--bg gap)
+        assert overlay["marker"]["line"] == {"width": 3, "color": "#F5F7F6"}  # D-28 (--bg gap)
     for text in _on(figure, "x5") + _on(figure, "x6"):
         assert text["textposition"] == "inside"
     for piece in _on(figure, "x") + _on(figure, "x2"):
@@ -1641,7 +1641,7 @@ def test_family_stack_figure_shape(
     )
     for k, t in enumerate(overlays):
         assert t["marker"]["color"] == _TRANSPARENT
-        assert t["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28
+        assert t["marker"]["line"] == {"width": 3, "color": "#F5F7F6"}  # D-28
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
         assert t["x"][0] == (segs[k]["count"] if k < len(segs) else 0)
         assert not any(t.get("text", []))
@@ -1738,7 +1738,7 @@ def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: 
     assert all(t["hoverinfo"] in ("none", "skip") for t in traces)
     assert {c for t in _on(out["figure"], "x") for c in t["marker"]["line"]["color"]} <= {
         "#1B4F5C",
-        "#809CA1",
+        "#7D9BA1",
     }  # the accent pair: a pick is active
 
 
@@ -1804,7 +1804,7 @@ def test_rendered_family_segments_align_with_channel_pieces(
     # 7 + 4 (Bars) and 13 + 6 (Butterfly) pieces; one overlay per announcer segment.
     segment_count = sum(len(segs) for segs in expected.values())
     assert (n_pieces, n_over) == ((11, segment_count) if fn == "barsModel" else (19, segment_count))
-    bg = {"light": "#FBF9F5"}[theme]
+    bg = {"light": "#F5F7F6"}[theme]
     for key, segs in expected.items():
         if not segs:
             assert key not in groups

@@ -29,7 +29,7 @@ from test_site_mlb_scatter import (
 
 pytestmark = pytest.mark.e2e
 
-INK_LIGHT = "#23201B"
+INK_LIGHT = "#1E2321"
 FADED = 0.32
 LEGEND = "#mlb-view-scatter .legend-chips"
 
