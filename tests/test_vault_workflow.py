@@ -1168,3 +1168,99 @@ def test_reminder_only_run_comments_once_per_week(
     created = [c for c in calls if c.startswith("issue create ")]
     assert len(commented) == (1 if action == "comment" else 0)
     assert len(created) == (1 if action == "create" else 0)
+
+
+# -- collect.yml: Phase 24 reminder comments (separate from the attention body) -------------------
+
+_RLINE = "- reminder 2026 cfb week 7: save the aa college football schedule post https://x/"
+
+
+def _reminder_env(tmp_path: Path, *, code: str, stale_only: str) -> tuple[dict[str, str], Path]:
+    env, log = _fake_gh(tmp_path)
+    env.update(
+        {
+            "JOB_CODE": code,
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": stale_only,
+            "FAKE_BODY": str(tmp_path / "fake-body"),
+            "FAKE_COMMENT": str(tmp_path / "fake-comment"),
+        }
+    )
+    (tmp_path / "reminders.md").write_text(f"Counts only. Updated now\n{_RLINE}", encoding="utf-8")
+    return env, log
+
+
+def _calls(log: Path) -> list[str]:
+    return log.read_text(encoding="utf-8").splitlines()
+
+
+def test_job_step_writes_reminders_to_their_own_file() -> None:
+    run = str(_step("job")["run"])
+    assert '--reminders-out "$RUNNER_TEMP/reminders.md"' in run
+    assert "reminders.md" in run.split("--reminders-out")[0]  # cleared before the run
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_clean_full_run_comments_the_reminder_and_leaves_the_issue_open(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="0", stale_only="false")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
+    assert not any(c.startswith(("issue close", "issue edit")) for c in calls)
+    assert not any("clean run" in c for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_problem_run_edits_the_body_and_still_comments_the_reminder(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="false")
+    (tmp_path / "attention.md").write_text("Counts only.\n- some real item", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    assert any(c.startswith("issue edit 7 ") for c in calls)
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_only_comment_run_posts_one_comment_and_no_fallback_body(
+    tmp_path: Path,
+) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    comments = [c for c in calls if c.startswith("issue comment")]
+    assert len(comments) == 1
+    assert "reminders.md" in comments[0]
+    assert not any(c.startswith("issue edit") for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_already_in_a_recent_comment_is_not_posted_again(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    (tmp_path / "fake-comment").write_text(f"Counts only.\n{_RLINE}\n", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert not any(c.startswith("issue comment") for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_in_the_issue_body_does_not_swallow_the_comment(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    (tmp_path / "fake-body").write_text(f"Counts only.\n{_RLINE}\n", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert any(c.startswith("issue comment 7 ") for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_opens_the_issue_when_none_exists(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="0", stale_only="false")
+    env["FAKE_ISSUE"] = ""
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    assert any(c.startswith("issue create") and "reminders.md" in c for c in calls)
+    assert not any(c.startswith("issue close") for c in calls)
