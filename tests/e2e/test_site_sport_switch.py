@@ -151,7 +151,7 @@ def _assert_layout_stable(page: Page, open_cfb: Callable[..., None]) -> None:
     count is each sport's own (D-11 dropped the equal-height spacer rule)."""
     open_cfb(page)
     bar = _bar_height(page)
-    cfb_rows = page.evaluate(_ROWS, "#toolbar > button")
+    cfb_rows = page.evaluate(_ROWS, "#toolbar > button, #toolbar .fgroup-row .filter-trigger")
     assert measure_gap(page, "#toolbar", "#selection-row") == 8
     assert measure_gap(page, "#chart-tabs", "#chart-module") == 16
     _click(page, "nfl")

@@ -93,7 +93,8 @@ _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58
 # site-data cache-bust hash. Re-pinned again for F7's scheduled crew columns, the same way.
 # Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces the old serif (1 changed line).
 # Re-pinned at Phase 26 Plan 05: the page title takes a colon (1 changed line).
-_INDEX_PRE_PHASE_SHA256 = "cb6687d4aefeb3cee6be8be7c3a61ab2d9a083c59836f0123e6ad0d29f8474e6"
+# Re-pinned at Phase 26 Plan 06: the ten CFB filter triggers move into three .fgroup wrappers.
+_INDEX_PRE_PHASE_SHA256 = "65a365b2d3d160bee7b5382960ce21e1b94e96cf0a95d0b43d8a8bd643b533bb"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

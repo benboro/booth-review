@@ -33,16 +33,31 @@
 <nav id="toolbar" aria-label="Filters">
   <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
   <ul id="filter-chips" class="filter-chips mobile-only" aria-label="Changed filters" hidden></ul>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-announcers" popovertarget="pop-announcers" aria-haspopup="dialog" aria-expanded="false">Announcers</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-kickoff" popovertarget="pop-kickoff" aria-haspopup="dialog" aria-expanded="false">Kickoff</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-role" popovertarget="pop-role" aria-haspopup="dialog" aria-expanded="false">Role</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-conference" popovertarget="pop-conference" aria-haspopup="dialog" aria-expanded="false">Conference</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-game" popovertarget="pop-game" aria-haspopup="dialog" aria-expanded="false">Game</button>
-  <button type="button" class="filter-trigger desktop-only" id="trigger-booth" popovertarget="pop-booth" aria-haspopup="dialog" aria-expanded="false">Booth</button>
+  <div class="fgroup" data-g="broadcast" role="group" aria-labelledby="fgroup-broadcast">
+    <span class="fgroup-label" id="fgroup-broadcast">Broadcast</span>
+    <div class="fgroup-row">
+      <button type="button" class="filter-trigger desktop-only" id="trigger-announcers" popovertarget="pop-announcers" aria-haspopup="dialog" aria-expanded="false">Announcers</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-networks" popovertarget="pop-networks" aria-haspopup="dialog" aria-expanded="false">Networks</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-booth" popovertarget="pop-booth" aria-haspopup="dialog" aria-expanded="false">Booth</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-role" popovertarget="pop-role" aria-haspopup="dialog" aria-expanded="false">Role</button>
+    </div>
+  </div>
+  <div class="fgroup" data-g="matchup" role="group" aria-labelledby="fgroup-matchup">
+    <span class="fgroup-label" id="fgroup-matchup">Matchup</span>
+    <div class="fgroup-row">
+      <button type="button" class="filter-trigger desktop-only" id="trigger-conference" popovertarget="pop-conference" aria-haspopup="dialog" aria-expanded="false">Conference</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-school" popovertarget="pop-school" aria-haspopup="dialog" aria-expanded="false">School</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-game" popovertarget="pop-game" aria-haspopup="dialog" aria-expanded="false">Game</button>
+    </div>
+  </div>
+  <div class="fgroup" data-g="calendar" role="group" aria-labelledby="fgroup-calendar">
+    <span class="fgroup-label" id="fgroup-calendar">Calendar</span>
+    <div class="fgroup-row">
+      <button type="button" class="filter-trigger desktop-only" id="trigger-seasons" popovertarget="pop-seasons" aria-haspopup="dialog" aria-expanded="false">Seasons</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-kickoff" popovertarget="pop-kickoff" aria-haspopup="dialog" aria-expanded="false">Kickoff</button>
+      <button type="button" class="filter-trigger desktop-only" id="trigger-postseason" popovertarget="pop-postseason" aria-haspopup="dialog" aria-expanded="false">Bowls/Playoffs</button>
+    </div>
+  </div>
 </nav>
 <script src="toolbar-fit.js"></script>
 

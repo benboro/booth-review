@@ -18,7 +18,7 @@
  * becoming visible), never on a filter change, so the row count stays fixed
  * while filters toggle (T-13-23).
  *
- * `#toolbar` (CFB) registers itself here; the NFL bar, built by JS, calls
+ * The CFB `#toolbar` is no longer fitted (it is the fixed-width ledger); the NFL bar, built by JS, calls
  * `window.boothToolbarFit.register(bar)`.
  *
  * A classic script loaded right after the toolbar markup, not a module:
@@ -130,7 +130,6 @@
   }
 
   window.boothToolbarFit = { register };
-  register(document.getElementById('toolbar'));
 
   if (document.fonts) {
     const refit = () => {

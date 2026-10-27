@@ -403,18 +403,18 @@ def test_cfb_filter_bar_row_count_is_recorded(
     both_guarded_page: Page, both_site_url: str, width: int, record_property: Any
 ) -> None:
     """UI-SPEC asks for the CFB filter bar's row count at five widths; recorded, and
-    bounded (the ten triggers wrap onto at most three rows)."""
+    exact: one row from 1280px, two below (Round 3b, layout depends only on width)."""
     page = both_guarded_page
     page.set_viewport_size({"width": width, "height": 900})
     _open(page, both_site_url, CFB)
     rows = page.evaluate(
-        """new Set([...document.querySelectorAll('#toolbar > .filter-trigger')]
+        """new Set([...document.querySelectorAll('#toolbar .fgroup-row .filter-trigger')]
           .filter((e) => e.getClientRects().length > 0)
           .map((e) => Math.round(e.getBoundingClientRect().top))).size"""
     )
     record_property("cfb_filter_bar_rows", rows)
     print(f"CFB_ROWS width={width} rows={rows}")
-    assert 1 <= rows <= 3
+    assert rows == (1 if width >= 1280 else 2)
 
 
 # ---------------------------------------------------------------------------

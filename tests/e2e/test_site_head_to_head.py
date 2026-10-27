@@ -112,13 +112,14 @@ def test_toolbar_names_the_matchup(
     open_app(guarded_page, H2H)
     trigger = guarded_page.locator("#trigger-school")
     label = "School: Northfield vs Lakeview"
-    assert trigger.inner_text().startswith(label)
+    assert trigger.locator(".filter-value").inner_text() == "Northfield vs Lakeview"
     assert trigger.get_attribute("title") == label
     assert trigger.get_attribute("aria-label") == label
 
     open_app(guarded_page, PAIR)
-    assert guarded_page.locator("#trigger-school").inner_text().startswith("School · 2")
-    assert guarded_page.locator("#trigger-school").get_attribute("title") == "School · 2"
+    pair = guarded_page.locator("#trigger-school")
+    assert pair.locator(".filter-value").inner_text() == "Northfield +1"
+    assert pair.get_attribute("title") == "School: Northfield, Lakeview"
 
 
 def test_long_matchup_label_truncates_without_overlap(
@@ -140,13 +141,13 @@ def test_long_matchup_label_truncates_without_overlap(
         guarded_page.set_viewport_size({"width": width, "height": 900})
         open_app(guarded_page, url)
         trigger = guarded_page.locator("#trigger-school")
-        # Equal grid cells (04.9 D-21): the long label does not widen its button.
+        # Entries in one group share its width (Round 3b): the long pick does not widen its entry.
         assert _box(guarded_page, "#trigger-school")["width"] == pytest.approx(
-            _box(guarded_page, "#trigger-role")["width"], abs=1
+            _box(guarded_page, "#trigger-conference")["width"], abs=1
         )
-        # The ellipsis lives on the inner `.filter-text` span (C3); the full label
-        # stays in the title and aria-label.
-        text = trigger.locator(".filter-text")
+        # The ellipsis lives on the entry's value line; the full label stays in the title
+        # and aria-label.
+        text = trigger.locator(".filter-value")
         assert text.evaluate("e => e.scrollWidth > e.clientWidth")
         assert text.evaluate("e => getComputedStyle(e).textOverflow") == "ellipsis"
         assert (trigger.get_attribute("title") or "").endswith("Mississippi State Bulldogs Extra")
