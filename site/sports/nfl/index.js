@@ -393,7 +393,7 @@ function setState(patch) {
   }
   // Leaving This weekend forgets its week and day, so the tab reopens on the current weekend
   // (18-UI-SPEC; 18-13 F16).
-  if (patch && 'view' in patch && patch.view !== 'weekend') patch = { ...patch, week: null, day: null };
+  if (patch && 'view' in patch && patch.view !== 'weekend') patch = { ...patch, week: null, day: null, wview: null };
   state = canonicalNflState({ ...state, ...(patch || {}) }, model);
   // A selection (team bar, booth, AGOTW season, scatter picks) belongs to the
   // view that made it and only that view keeps it current, so a tab change

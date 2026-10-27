@@ -107,6 +107,7 @@ export function defaultNflState(model) {
     hiddenCategories: [],
     week: null,
     day: null,
+    wview: null,
   };
 }
 
@@ -225,6 +226,7 @@ export function canonicalNflState(state, model) {
     hiddenCategories: [...new Set(asList(s.hiddenCategories).filter((k) => catIds.has(k)))],
     week: wk.week,
     day: wk.day,
+    wview: s.view === 'weekend' && s.wview === 'map' ? 'map' : null,
   };
 }
 
