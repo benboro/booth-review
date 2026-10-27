@@ -36,6 +36,7 @@ from booth_review.build.named_games import (
     resolve_rivalry_games,
 )
 from booth_review.build.rivalries import load_rivalries
+from booth_review.build.serif_glyphs import check_serif_text, lookup_names
 from booth_review.build.shipped import (
     left_out_unrated_expr,
     network_rated_counts,
@@ -975,6 +976,17 @@ def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:
     """Write `processed/site-data.json`: compact JSON (",", ":" separators,
     sorted keys), atomically. Returns its vault-relative path.
     """
+    lookups = site.lookups
+    for lookup, rows in (
+        ("teams", lookups.teams),
+        ("conferences", lookups.conferences),
+        ("bowls", lookups.bowls),
+        ("bowl_franchises", lookups.bowl_franchises),
+        ("rivalries", lookups.rivalries),
+        ("venues", lookups.venues),
+        ("people", lookups.people),
+    ):
+        check_serif_text(lookup_names(rows, "name"), where=f"site-data.json lookups.{lookup}")
     payload = site.model_dump(mode="json")
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     atomic_write_bytes(paths.processed / "site-data.json", body)
