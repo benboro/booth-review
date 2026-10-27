@@ -485,3 +485,60 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   el.hidden = false;
   placeTooltip(el, clientX, clientY);
 }
+
+/**
+ * Shows the weekend map's game card (Phase 24 D-04): matchup, booth, kickoff and network, venue.
+ * On a phone it also carries the one 44px "Open game" button and takes pointer events; it opens
+ * above the tapped mark so it never covers it.
+ * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
+ *   kickoff: string, venue: string, family: string}} card
+ * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
+ *   onOpen?: () => void}} opts
+ */
+export function showGameTooltip(card, { theme, clientX, clientY, phone = false, onOpen }) {
+  const el = ensureTooltipEl();
+  const text = (tag, className, content) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    node.textContent = content;
+    return node;
+  };
+
+  const boothLine = text('div', 'tooltip-game-booth', '');
+  if (card.booth.star) {
+    const star = text('span', 'tooltip-game-star', '★');
+    star.setAttribute('aria-hidden', 'true');
+    boothLine.append(star);
+  }
+  const boothText = text('span', null, card.booth.text);
+  boothText.style.fontWeight = String(card.booth.weight ?? 600);
+  boothLine.append(boothText);
+
+  const children = [
+    text('strong', 'tooltip-title tooltip-game-matchup', card.matchup),
+    boothLine,
+    text('div', 'tooltip-game-kickoff', card.kickoff),
+    text('div', 'tooltip-game-venue', card.venue),
+  ];
+  if (phone) {
+    const open = text('button', 'tt-open-game', 'Open game');
+    open.type = 'button';
+    open.addEventListener('click', () => onOpen?.());
+    children.push(open);
+  }
+
+  el.replaceChildren(...children);
+  el.style.borderColor = MAP_FAMILY_COLORS[theme][card.family] ?? MAP_FAMILY_COLORS[theme].other;
+  delete el.dataset.family;
+  delete el.dataset.hoverable;
+  el.dataset.kind = 'game';
+  if (phone) el.dataset.phone = '';
+  else delete el.dataset.phone;
+  el.hidden = false;
+  placeTooltip(el, clientX, clientY, phone ? 'above' : 'beside');
+}
+
+/** True when `node` is inside the shared card (the weekend map's tap controller ignores it). */
+export function isInTooltip(node) {
+  return Boolean(tooltipEl && node instanceof Node && tooltipEl.contains(node));
+}
