@@ -296,3 +296,51 @@ def test_a_reminder_run_writes_nothing_to_the_vault(vault_paths: DataPaths) -> N
     before = sorted(p for p in vault_paths.vault.rglob("*") if p.is_file())
     due_reminders(vault_paths, MON_EST)
     assert sorted(p for p in vault_paths.vault.rglob("*") if p.is_file()) == before
+
+
+# -- guarded slots, season bounds, aware clock ------------------------------------------
+
+
+def test_a_corrupt_506_manifest_skips_the_slot_instead_of_raising(vault_paths: DataPaths) -> None:
+    _write_nfl_schedule(vault_paths)
+    manifest = vault_paths.manifest
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text('{"truncated": \n', encoding="utf-8")
+    items = due_reminders(vault_paths, THU_1200)  # must not raise
+    assert "reminder_506_nfl_played" not in _kinds(items)
+
+
+def test_a_failing_slot_does_not_take_the_other_slots_down(
+    vault_paths: DataPaths, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_nfl_schedule(vault_paths)
+
+    def boom(*_args: object) -> NflGaps:
+        raise OSError("disk")
+
+    monkeypatch.setattr(reminders, "find_nfl_506_gaps", boom)
+    assert _kinds(due_reminders(vault_paths, THU_1200)) == ["reminder_506_nfl"]
+
+
+def test_nfl_reminders_are_quiet_in_july_before_week_one(vault_paths: DataPaths) -> None:
+    _write_nfl_schedule(vault_paths)
+    assert due_reminders(vault_paths, datetime(2026, 7, 15, 12, 0, tzinfo=ET)) == []  # Wed
+    assert due_reminders(vault_paths, datetime(2026, 7, 16, 12, 0, tzinfo=ET)) == []  # Thu
+
+
+def test_nfl_reminders_start_in_week_ones_monday_week(vault_paths: DataPaths) -> None:
+    _write_nfl_schedule(vault_paths)  # week 1 is Sunday Sep 6, so its Monday is Aug 31
+    assert due_reminders(vault_paths, datetime(2026, 8, 26, 12, 0, tzinfo=ET)) == []
+    items = due_reminders(vault_paths, datetime(2026, 9, 2, 12, 0, tzinfo=ET))
+    assert _kinds(items) == ["reminder_aa_nfl"]
+
+
+def test_nfl_reminders_stop_once_the_last_week_is_played(vault_paths: DataPaths) -> None:
+    _write_nfl_schedule(vault_paths)  # the schedule ends at week 9 (Sunday Nov 1)
+    assert due_reminders(vault_paths, datetime(2027, 1, 6, 12, 0, tzinfo=ET)) == []  # Wed
+    assert due_reminders(vault_paths, datetime(2027, 1, 7, 12, 0, tzinfo=ET)) == []  # Thu
+
+
+def test_a_naive_now_is_rejected(vault_paths: DataPaths) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        due_reminders(vault_paths, datetime(2026, 10, 29, 12, 0))  # noqa: DTZ001
