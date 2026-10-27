@@ -375,6 +375,63 @@ export function renderMap(gd, figure) {
   return window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
 }
 
+/** Plotly's own default reach when the layout sets no hoverdistance. */
+const DEFAULT_HOVER_DISTANCE = 20;
+
+/** Plotly's scatter 'closest' distance from a pointer to a marker of `size` px. */
+function markerDistance(dx, dy, size) {
+  const rad = Math.max(3, size / 2);
+  return Math.max(Math.hypot(dx, dy) - rad, 1 - 3 / rad);
+}
+
+/** The traces Plotly hovers on the map (every other trace is hoverinfo 'skip'). */
+const HOVER_TRACES = new Set(['venue-hits', 'markers']);
+
+/**
+ * The venue under a touch, found the way Plotly's 'closest' hover finds it: the nearest
+ * point within hoverdistance, a later point winning a tie inside a trace and an earlier
+ * trace winning a tie across traces. Plotly skips its hover pass for a touch within 50 ms
+ * of the last one and then reports the previous point, so a touch click is resolved from
+ * where the finger landed instead of from Plotly's point. Returns undefined when the
+ * click is not a touch with coordinates (Plotly's point stands), else the key or null.
+ */
+function touchedKey(gd, ev) {
+  const src = ev?.event;
+  if (!src?.type?.startsWith('touch')) return undefined;
+  const at = src.changedTouches?.[0] ?? src.touches?.[0];
+  const xa = gd._fullLayout?.xaxis;
+  const ya = gd._fullLayout?.yaxis;
+  if (at?.clientX == null || !xa || !ya) return undefined;
+  const box = gd.getBoundingClientRect();
+  const cx = at.clientX - box.left;
+  const cy = at.clientY - box.top;
+  const reach = gd._fullLayout.hoverdistance ?? DEFAULT_HOVER_DISTANCE;
+  let best = Infinity;
+  let key = null;
+  for (const trace of gd._fullData ?? []) {
+    if (!HOVER_TRACES.has(trace.name) || trace.visible === false) continue;
+    const size = trace.marker?.size;
+    let traceBest = reach;
+    let index = -1;
+    for (let i = 0; i < trace.x.length; i += 1) {
+      const d = markerDistance(
+        cx - (xa._offset + xa.c2p(trace.x[i])),
+        cy - (ya._offset + ya.c2p(trace.y[i])),
+        Array.isArray(size) ? size[i] : (size ?? 0),
+      );
+      if (d <= traceBest) {
+        traceBest = d;
+        index = i;
+      }
+    }
+    if (index >= 0 && traceBest < best) {
+      best = traceBest;
+      key = trace.customdata?.[index] ?? null;
+    }
+  }
+  return key;
+}
+
 function venueOf(ev) {
   const p = ev.points && ev.points[0];
   if (!p || p.customdata == null) return null;
@@ -392,8 +449,9 @@ function venueOf(ev) {
 export function bindMapEvents(gd, handlers = {}) {
   const { onVenueClick, onVenueHover, onVenueUnhover } = handlers;
   gd.on('plotly_click', (ev) => {
-    const hit = venueOf(ev);
-    if (hit) onVenueClick?.(hit.key, ev);
+    const touched = touchedKey(gd, ev);
+    const key = touched === undefined ? venueOf(ev)?.key : touched;
+    if (key != null) onVenueClick?.(key, ev);
   });
   gd.on('plotly_hover', (ev) => {
     const hit = venueOf(ev);

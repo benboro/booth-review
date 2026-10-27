@@ -166,11 +166,18 @@ def build_reference(monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def isolated_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Blocks the operator's global/system git config from leaking into tests."""
-    empty_config = tmp_path / "empty-gitconfig"
-    empty_config.write_text("", encoding="utf-8")
+    """Blocks the operator's global/system git config from leaking into tests.
+
+    The test config also stops background gc and maintenance, so a synthetic vault or bare
+    remote is never repacked while a test copies its live `.git`.
+    """
+    config = tmp_path / "test-gitconfig"
+    config.write_text(
+        "[gc]\n\tauto = 0\n\tautoDetach = false\n[maintenance]\n\tauto = false\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(empty_config))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
 
 
 @pytest.fixture

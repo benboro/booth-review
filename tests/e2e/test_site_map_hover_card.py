@@ -435,6 +435,170 @@ def test_phone_background_tap_clears_the_card_and_rearms_the_first_tap(
     assert "venue=" not in mobile_page.evaluate("() => location.search")
 
 
+def test_phone_late_compatibility_click_does_not_filter(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """One tap reaches Plotly twice (touchstart, then the compatibility mousedown). On a slow
+    runner the second is handled more than the old 350 ms debounce later; it must still not
+    count as a second tap. A real main-thread stall after the first click reproduces that."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    mobile_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          let armed = true;
+          gd.on('plotly_click', () => {
+            if (!armed) return;
+            armed = false;
+            const t = performance.now();
+            while (performance.now() - t < 450) { /* stall the renderer */ }
+          });
+        }"""
+    )
+    mobile_page.touchscreen.tap(px, py)
+    # No wait for the card first: the stalled renderer would hide a late filter's effect from it.
+    mobile_page.wait_for_timeout(900)
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+
+
+def _phone_dot(page: Page, open_app: OpenApp) -> tuple[float, float]:
+    page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(page, open_app)
+    page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(page)["venueDots"][0]
+    return _pixel(page, dot["x"], dot["y"])
+
+
+_COUNT_CLICKS = """() => { window.__mapClicks = [];
+  document.getElementById('map-chart').on('plotly_click',
+    (e) => window.__mapClicks.push(e.event && e.event.type)); }"""
+
+
+def test_phone_tap_reaches_plotly_once(mobile_page: Page, open_app: OpenApp) -> None:
+    """The touch pointerdown is cancelled, so the browser sends no compatibility mouse click:
+    one tap is one plotly_click, and no queue order or delay can make it count twice."""
+    px, py = _phone_dot(mobile_page, open_app)
+    mobile_page.evaluate(_COUNT_CLICKS)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => window.__mapClicks.length > 0")
+    mobile_page.wait_for_timeout(600)
+    assert mobile_page.evaluate("() => window.__mapClicks") == ["touchstart"]
+
+
+_REPLAY_CLICK = """([x, y]) => {
+  const gd = document.getElementById('map-chart');
+  const first = window.__firstClick;
+  gd.emit('plotly_click', { points: first.points,
+    event: { type: 'touchstart', changedTouches: [{ clientX: x, clientY: y }] } });
+}"""
+
+
+@pytest.mark.parametrize("on_dot", [False, True], ids=["background", "dot"])
+def test_phone_stale_plotly_point_is_judged_by_the_touch(
+    mobile_page: Page, open_app: OpenApp, on_dot: bool
+) -> None:
+    """Plotly skips its hover pass for a touch within 50 ms of the last and then clicks the
+    previous point, so a quick background tap reported the dot tapped before it and filtered
+    (the CI flake on PR #84). Replaying that click deterministically: with the touch on the
+    background it must not filter; with the touch on the dot it is the second tap and does."""
+    px, py = _phone_dot(mobile_page, open_app)
+    box = mobile_page.locator("#map-chart").bounding_box()
+    assert box is not None
+    mobile_page.evaluate(
+        """() => document.getElementById('map-chart').on('plotly_click', (e) => {
+             window.__firstClick ??= e; })"""
+    )
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => window.__firstClick != null")
+    at = [px, py] if on_dot else [box["x"] + 8, box["y"] + 8]
+    mobile_page.evaluate(_REPLAY_CLICK, at)
+    search = mobile_page.evaluate("() => location.search")
+    assert ("venue=" in search) is on_dot
+
+
+@pytest.mark.parametrize("offset", [7, 24], ids=["overlapping", "beside"])
+def test_phone_stale_point_next_to_the_tapped_venue_goes_to_the_venue_touched(
+    mobile_page: Page, open_app: OpenApp, offset: float
+) -> None:
+    """A quick tap on venue B beside venue A can come back as Plotly's stale A point. The
+    tap belongs to B, the venue under the finger: it opens B's card, and the next tap on B
+    lists B's games, never A's. Covers hit targets that overlap (7 px) and that touch (24 px)."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    dots = _model(mobile_page)["venueDots"]
+    a, b = dots[0], dots[1]
+    moved = _shrink(mobile_page, b["key"], mobile=True, near=a["key"], offset=offset)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    ax, ay = _pixel(mobile_page, a["x"], a["y"])
+    bx, by = _pixel(mobile_page, moved["x"], moved["y"])
+    mobile_page.evaluate(
+        """() => document.getElementById('map-chart').on('plotly_click', (e) => {
+             window.__firstClick ??= e; })"""
+    )
+    mobile_page.touchscreen.tap(ax, ay)
+    mobile_page.wait_for_function("() => window.__firstClick != null")
+    assert mobile_page.evaluate("() => window.__firstClick.points[0].customdata") == a["key"]
+    mobile_page.evaluate(_REPLAY_CLICK, [bx, by])
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+    mobile_page.evaluate(_REPLAY_CLICK, [bx, by])
+    search = mobile_page.evaluate("() => location.search")
+    assert f"venue={b['key']}" in search, search
+
+
+def test_phone_tap_inside_the_background_wait_rearms_first(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """Tapping the dot again before the background tap's check has run must find the card
+    cleared and show it again, not filter."""
+    px, py = _phone_dot(mobile_page, open_app)
+    box = mobile_page.locator("#map-chart").bounding_box()
+    assert box is not None
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    mobile_page.touchscreen.tap(box["x"] + 8, box["y"] + 8)
+    mobile_page.wait_for_timeout(70)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_timeout(400)
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+
+
+def test_phone_mouse_click_right_after_a_tap_counts(mobile_page: Page, open_app: OpenApp) -> None:
+    """A mouse paired with a phone is not held back by any time window: a finger tap shows
+    the card, and a mouse click on the same dot straight after lists its games."""
+    px, py = _phone_dot(mobile_page, open_app)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    mobile_page.mouse.click(px, py)
+    mobile_page.wait_for_function("() => location.search.includes('venue=')")
+
+
+def test_phone_two_quick_mouse_clicks_list_the_games(mobile_page: Page, open_app: OpenApp) -> None:
+    """Two real mouse clicks on a phone, back to back, are the card then the list."""
+    px, py = _phone_dot(mobile_page, open_app)
+    mobile_page.evaluate(_COUNT_CLICKS)
+    mobile_page.mouse.click(px, py)
+    mobile_page.mouse.click(px, py)
+    mobile_page.wait_for_function("() => location.search.includes('venue=')")
+    assert mobile_page.evaluate("() => window.__mapClicks") == ["mousedown", "mousedown"]
+
+
 # -- Phase 17.1 D-16: an invisible 12px hit target under every small dot ----------------------
 
 _SHRINK_JS = """async ([key, size, mobile, near, offsetPx]) => {

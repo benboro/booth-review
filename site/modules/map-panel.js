@@ -31,7 +31,6 @@ import {
 import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
 
-const TAP_DEBOUNCE_MS = 350;
 /** A touch that moves farther than this is a drag, not a tap. */
 const TAP_SLOP_PX = 10;
 /** How long after the pointer lifts to wait for Plotly's click on a dot before calling it background. */
@@ -52,7 +51,6 @@ let renderCount = 0;
 let pendingTapKey = null;
 /** The venue-dots ring arrays from the last draw, restored on unhover. */
 let baseRing = null;
-let lastTapActionAt = -Infinity;
 /** Venue dot / marker clicks seen so far; a tap that leaves it unchanged hit the background. */
 let venueClickCount = 0;
 /** app.js handles (Phase 11 D-05): the click filters the table through the same setState. */
@@ -474,11 +472,12 @@ function onVenueClick(key, ev) {
     applyVenue(key);
     return;
   }
-  const now = performance.now();
-  // One physical tap reaches Plotly twice (the touch, then the compatibility mouse
-  // click); the second must not undo the first, whether that showed the card or filtered.
-  if (now - lastTapActionAt < TAP_DEBOUNCE_MS) return;
-  lastTapActionAt = now;
+  // The touch pointerdown is cancelled (initMapPanel), so a tap reaches Plotly once, from
+  // its touch events. A compatibility mouse click that still arrives says it came from
+  // touch; dropping it by its source, not by time, means no queue order or delay lets it
+  // count as a second tap, and a real mouse's clicks are never held back.
+  const src = ev?.event;
+  if (src?.type?.startsWith('mouse') && src.sourceCapabilities?.firesTouchEvents) return;
   if (key !== pendingTapKey) {
     pendingTapKey = key;
     cardAt(key, ev, TAP_HINT);
@@ -492,7 +491,13 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
   handles = { setState, getState, getMatchedCount };
   /** The touch in progress inside the map: where it began and how many venue clicks preceded it. */
   let down = null;
+  /** Settles the last tap's background check now; null when none is waiting. */
+  let settleBackground = null;
   document.addEventListener('pointerdown', (ev) => {
+    // Input arrives in order, so the last tap's Plotly click (if any) is in by now: settle
+    // its background check before this tap, or a tap inside the wait would find the old
+    // venue still armed and filter it.
+    settleBackground?.();
     if (!ev.target.closest('#map-chart')) {
       down = null;
       if (pendingTapKey != null) {
@@ -501,6 +506,9 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
       }
       return;
     }
+    // Cancelling a touch pointerdown stops the browser's compatibility mouse events (Pointer
+    // Events), so Plotly sees each tap once. Scrolling and pinch follow touch-action instead.
+    if (ev.pointerType === 'touch') ev.preventDefault();
     down = hoverNone() ? { x: ev.clientX, y: ev.clientY, clicks: venueClickCount } : null;
   });
   document.addEventListener('pointercancel', () => {
@@ -512,11 +520,15 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
     if (!start || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) return;
     // UI-SPEC: a tap on the map that lands on no dot or marker clears only the card. Plotly
     // reports a hit through plotly_click a moment after the pointer lifts, so look afterwards.
-    setTimeout(() => {
+    const settle = () => {
+      clearTimeout(timer);
+      if (settleBackground === settle) settleBackground = null;
       if (venueClickCount !== start.clicks) return;
       resetMapTap();
       hideTooltip();
-    }, BACKGROUND_TAP_DELAY_MS);
+    };
+    const timer = setTimeout(settle, BACKGROUND_TAP_DELAY_MS);
+    settleBackground = settle;
   });
 }
 
