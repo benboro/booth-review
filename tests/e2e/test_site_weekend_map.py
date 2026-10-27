@@ -152,8 +152,9 @@ def point(page: Page, key: str) -> dict[str, float]:
 def hover(page: Page, key: str) -> None:
     at = point(page, key)
     page.mouse.move(at["x"] + 40, at["y"] + 40)
-    page.mouse.move(at["x"], at["y"], steps=4)
+    page.mouse.move(at["x"], at["y"], steps=6)
     page.wait_for_selector("#chart-tooltip[data-kind='game']:not([hidden])", timeout=5000)
+    page.wait_for_timeout(250)  # the card follows the closest mark; let it settle on the last
 
 
 def pick_person(page: Page, person_id: str = "pat-rowan") -> None:
@@ -246,7 +247,7 @@ def test_each_window_renders_its_symbol(wkmap: Wk, theme: str) -> None:
 def test_time_tba_game_draws_the_open_ring_and_stays_in_the_strip(wkmap: Wk, theme: str) -> None:
     page = wkmap(theme=theme)
     assert dot_symbols(page)[TBA] == "circle-open"
-    strip = page.locator(".wk-tba")
+    strip = page.locator(".wk-tba:not(.wk-notmap)")
     assert strip.locator('[data-wk-id="g:cfb:scheduled:3"]').count() == 1
     assert page.locator(".wk-notmap").locator('[data-wk-id="g:cfb:scheduled:3"]').count() == 0
 
@@ -340,7 +341,10 @@ def test_click_opens_the_panel_with_the_crew_credit_and_escape_returns_focus(
     assert "Not played yet." in text
     page.keyboard.press("Escape")
     expect(dialog).to_have_count(0)
-    assert page.evaluate("document.activeElement.dataset.wkId") == "wview:map"
+    page.wait_for_function(
+        "document.activeElement && document.activeElement.dataset.wkId === 'wview:map'",
+        timeout=5000,
+    )
 
 
 def test_not_on_the_map_lists_the_venueless_games_and_the_count_matches(wkmap: Wk) -> None:
