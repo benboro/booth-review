@@ -307,17 +307,35 @@ def test_scatter_and_map_share_toolbar_and_chart_panel_geometry(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     """04.18 D-09: switching Scatter <-> Map moves neither the controls row nor the
-    chart panel's top, and the panel stays 520px tall (the Map's fixed height)."""
+    chart panel's top, and the panel stays 520px tall (the Map's fixed height).
+
+    Phone width (v2.1 todo 2026-10-25-phone-map-blank-bands): the Map drops the chart
+    tools row, whose concealed scatter controls and dead Reset zoom made a blank band
+    above the map, and the map box follows the map's own aspect ratio with the key in
+    flow under it. So on a phone the panel top moves up by exactly that row's height,
+    the panel is shorter than 520px, and the filter row still never moves; switching
+    back restores the Scatter geometry at every width."""
     guarded_page.set_viewport_size({"width": width, "height": 900})
     open_app(guarded_page)
     scatter = _panel_geometry(guarded_page)
+    tools_height: float = guarded_page.evaluate(
+        "() => document.getElementById('chart-tools').getBoundingClientRect().height"
+    )
     before: int = guarded_page.evaluate("() => window.__testHooks.mapRenders")
     _set(guarded_page, {"view": "map"})
     guarded_page.wait_for_function("(n) => window.__testHooks.mapRenders > n", arg=before)
     on_map = _panel_geometry(guarded_page)
     assert on_map["toolbar"] == scatter["toolbar"]
-    assert on_map["top"] == scatter["top"]
-    assert on_map["height"] == scatter["height"] == 520
+    assert scatter["height"] == 520
+    if width >= 1280:
+        assert on_map["top"] == scatter["top"]
+        assert on_map["height"] == 520
+    else:
+        # The panel moves up by the dropped row plus the module's row gap under it.
+        shift = scatter["top"] - on_map["top"]
+        assert tools_height > 0
+        assert tools_height <= shift <= tools_height + 16, (shift, tools_height)
+        assert 0 < on_map["height"] < 520
     _set(guarded_page, {"view": "scatter"})
     assert _panel_geometry(guarded_page) == scatter
 

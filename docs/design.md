@@ -89,6 +89,12 @@ records only where the site settles or applies them.
   so the count a pick adds never widens the tab or moves the next one. The legend chip row
   and the Matched games section hide under This weekend, as on Crews and the NFL page, and
   on the phone the empty chart-tools row goes too (v2.1 polish, 18-UI-REVIEW 4, 5, 7, 10).
+- On a phone the Map also drops the chart-tools row (its concealed scatter controls and
+  dead Reset zoom made a blank band above the map), the map box follows the map's own
+  975:610 aspect ratio instead of the desktop's 520px, and the dot-size key sits in flow
+  under the map. So the 04.18 D-09 "nothing moves between Scatter and Map" rule holds in
+  full on desktop only; on a phone the panel top moves up by that row and the filter row
+  still never moves (v2.1 todo 2026-10-25-phone-map-blank-bands).
 - A panel opened from a This weekend cell writes its kickoff as the view does (`Sat. Oct.
   31, 12:00 pm ET`, AP style) and credits the crew as `Crew from 506 Sports ↗` in both
   sports; the same game opened from the Matched games table keeps the site's long date

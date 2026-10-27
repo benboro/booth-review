@@ -7,6 +7,7 @@ Synthetic nfl-data fixture only; no vault rows.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 import pytest
 from dark_checks import set_theme
@@ -334,3 +335,78 @@ def test_colgroups_match_the_spanners(app: Page) -> None:
         f"{TABLE} th.nfl-spanner", "els => els.map(e => [e.scope, e.colSpan])"
     )
     assert spanners == [["colgroup", 5], ["colgroup", 3]]
+
+
+# ---- v2.1 todos: phone table reach and scroll cue; header tips above the header ----
+
+
+def test_phone_table_sits_under_its_heading_and_cues_its_scroll(mobile: Page) -> None:
+    # todo 2026-10-25-nfl-phone-season-table-reach: the stacked breakdown lines no longer sit
+    # between the heading and the table, and the scroller carries the site's edge-fade cue.
+    page = mobile
+    got = page.evaluate(
+        """() => { const b = document.querySelector('#nfl-view-special .nfl-breakdown');
+          const h = b.querySelector('h3').getBoundingClientRect();
+          const scroll = b.querySelector('.table-scroll');
+          const s = scroll.getBoundingClientRect();
+          const lines = b.querySelector('.nfl-breakdown-lines');
+          return { gap: s.top - h.bottom,
+                   linesAfterTable: !!lines && !!(scroll.compareDocumentPosition(lines) & 4),
+                   overflow: scroll.scrollWidth > scroll.clientWidth + 1,
+                   cue: scroll.classList.contains('has-more-right') }; }"""
+    )
+    assert got["gap"] <= 24, got
+    assert got["linesAfterTable"] is True, got
+    assert got["overflow"] is True and got["cue"] is True, got
+
+
+def _tip_button(page: Page, label: str) -> Any:
+    return page.locator(f"{TABLE} th button.nfl-tip", has_text=label).first
+
+
+def test_header_tips_open_above_the_header_with_the_formula_on_one_line(app: Page) -> None:
+    # todo 2026-10-25-nfl-special-games-tooltip-covers-data: a header tip opened below its
+    # header covered the data cells under it, and the Special games formula wrapped mid-sum.
+    for label in TIPS:
+        button = _tip_button(app, label)
+        button.hover()
+        app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+        tip = app.locator("#chart-tooltip").bounding_box()
+        head = button.bounding_box()
+        assert tip is not None and head is not None
+        assert tip["y"] + tip["height"] <= head["y"], (label, tip, head)
+        assert _tip_text(app) == TIPS[label]
+        app.mouse.move(5, 5)
+        app.wait_for_function("document.getElementById('chart-tooltip').hidden")
+    _tip_button(app, "Special games").hover()
+    app.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    formula = app.evaluate(
+        """() => { const f = document.querySelector('#chart-tooltip .tooltip-formula');
+          if (!f) return null;
+          const cs = getComputedStyle(f);
+          return { text: f.textContent, lines: f.getBoundingClientRect().height / parseFloat(cs.lineHeight),
+                   nowrap: cs.whiteSpace }; }"""
+    )
+    assert formula is not None
+    assert formula["text"] == "Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl."
+    assert formula["nowrap"] == "nowrap" and formula["lines"] < 1.5, formula
+
+
+def test_phone_special_games_tip_keeps_the_formula_on_one_line_in_the_viewport(
+    mobile: Page,
+) -> None:
+    page = mobile
+    button = _tip_button(page, "Special games")
+    button.evaluate("e => e.scrollIntoView({ block: 'center' })")
+    button.tap()
+    page.wait_for_function("!document.getElementById('chart-tooltip').hidden")
+    got = page.evaluate(
+        """() => { const t = document.getElementById('chart-tooltip').getBoundingClientRect();
+          const f = document.querySelector('#chart-tooltip .tooltip-formula');
+          const cs = getComputedStyle(f);
+          return { left: t.left, right: t.right, vw: window.innerWidth,
+                   lines: f.getBoundingClientRect().height / parseFloat(cs.lineHeight),
+                   fits: f.scrollWidth <= f.clientWidth + 1 }; }"""
+    )
+    assert got["left"] >= 0 and got["right"] <= got["vw"], got
+    assert got["lines"] < 1.5 and got["fits"] is True, got

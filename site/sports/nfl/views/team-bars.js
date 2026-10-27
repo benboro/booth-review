@@ -33,6 +33,7 @@ import {
   textWidth,
 } from '../../../modules/bar-chart.js';
 import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
+import { attachScrollCue } from '../../../modules/scroll-cue.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -371,7 +372,15 @@ function cell(tag, text, className) {
 }
 
 const RULE_KEYS = new Set(['solo_thursday', 'agotw']);
-const SPECIAL_TIP = 'Solo slots plus Sunday-window games: Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
+const SPECIAL_TIP_LEAD = 'Solo slots plus Sunday-window games:';
+const SPECIAL_TIP_FORMULA = 'Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
+const SPECIAL_TIP = `${SPECIAL_TIP_LEAD} ${SPECIAL_TIP_FORMULA}`;
+
+/** A header tip's lines: the Special games formula gets its own unbreakable line (v2.1). */
+function tipLines(text) {
+  if (text !== SPECIAL_TIP) return [{ kind: 'body', text }];
+  return [{ kind: 'body', text: `${SPECIAL_TIP_LEAD} ` }, { kind: 'formula', text: SPECIAL_TIP_FORMULA }];
+}
 const SEGMENT_TIPS = Object.freeze({
   solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.',
   agotw: "Fox's America's Game of the Week, its top Sunday-afternoon game.",
@@ -473,11 +482,13 @@ function tipHead(th, label, text, env) {
   const show = (hoverable = false) => {
     const rect = button.getBoundingClientRect();
     const e = drawn ? drawn.env : env;
-    showTextTooltip([{ kind: 'body', text }], {
+    // Above the header, so the tip never covers the data cells under it (v2.1).
+    showTextTooltip(tipLines(text), {
       theme: theme(e),
       borderColor: DIVIDER[theme(e)],
       clientX: rect.left,
-      clientY: rect.bottom,
+      clientY: rect.top,
+      placement: 'above',
       hoverable,
     });
   };
@@ -546,10 +557,13 @@ function renderBreakdown(model, state, env, rows) {
   const bar = (rows.find((r) => r.bar.franchise === fIdx) || {}).bar
     || teamBars(model, state).find((b) => b.franchise === fIdx);
   const pending = pendingNetworkSeasons(model, state);
+  let lines = null;
   if ((env.mobile || env.hoverNone) && bar) {
-    // The hover content on a phone, with the same colour dots as the tooltip.
+    // The hover content on a phone, with the same colour dots as the tooltip. It is appended
+    // after the table (v2.1, todo 2026-10-25-nfl-phone-season-table-reach), so the table sits
+    // right under its heading instead of below ten stacked lines.
     const m = hoverModel(state, label, bar, theme(env), pending);
-    const lines = el('div', 'nfl-breakdown-lines');
+    lines = el('div', 'nfl-breakdown-lines');
     const texts = hoverTextLines(m).slice(1);
     texts.forEach((text, k) => {
       const p = el('p');
@@ -563,7 +577,6 @@ function renderBreakdown(model, state, env, rows) {
       p.appendChild(document.createTextNode(text));
       lines.appendChild(p);
     });
-    breakdown.appendChild(lines);
   }
   const pendingSeasons = new Set(pending.seasons);
   const PENDING_KEYS = new Set(['agotw', 'cbs_national']);
@@ -627,10 +640,14 @@ function renderBreakdown(model, state, env, rows) {
     return g;
   });
   table.append(...groups, thead, tbody);
-  // Eleven columns do not fit a phone; the table scrolls inside its own wrapper.
+  // Eleven columns do not fit a phone; the table scrolls inside its own wrapper, with the
+  // site's edge-fade scroll cue (v2.1). The breakdown lines follow the table.
   const scroll = el('div', 'table-scroll');
   scroll.appendChild(table);
   breakdown.appendChild(scroll);
+  refs.cueOff?.();
+  refs.cueOff = attachScrollCue(scroll, null);
+  if (lines) breakdown.appendChild(lines);
 
   breakdown.appendChild(el(
     'p',
