@@ -327,9 +327,14 @@ jobs:
               if [ -n "$number" ]; then
                 gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$reminders_file"
               else
+                # The reminder must live in a comment, never the body: the dedupe above
+                # reads comments only, so a body copy would be posted again by the +1h backup.
+                intro_file="$RUNNER_TEMP/reminders-intro.md"
+                printf '%s\n' "Hand-save reminders follow in the comments." > "$intro_file"
                 created=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
-                  --label booth-review-job --body-file "$reminders_file")
+                  --label booth-review-job --body-file "$intro_file")
                 number="${created##*/}"
+                gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$reminders_file"
               fi
             else
               echo "reminders unchanged since the last comments; no new reminder comment"
@@ -353,7 +358,8 @@ jobs:
             # stale_only is any comment-only run (staleness and/or Phase 24 reminders).
             # WR-07: D-14 checks staleness at every backup slot, but its items
             # rarely change between main runs. Comment only when some item line
-            # is missing from the issue's current body or from its last comment,
+            # is missing from the issue's current body or from its last three comments
+            # (a reminder comment posted just before this check must not hide an earlier one),
             # so an unchanged report never re-notifies at every backup slot.
             already_posted=false
             if [ -n "$number" ]; then
@@ -363,7 +369,7 @@ jobs:
               gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json body \
                 --jq '.body' | tr -d '\r' > "$seen/body.md"
               gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json comments \
-                --jq '.comments | last | .body // ""' | tr -d '\r' > "$seen/comment.md"
+                --jq '[.comments[-3:][].body] | join("\n")' | tr -d '\r' > "$seen/comment.md"
               if [ -s "$seen/items.md" ]; then
                 for posted in "$seen/body.md" "$seen/comment.md"; do
                   if ! grep -Fxv -f "$posted" "$seen/items.md" > /dev/null; then

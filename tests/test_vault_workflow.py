@@ -515,9 +515,11 @@ def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
         'echo "$*" >> "$GH_LOG"\n'
         'case "$1 $2" in\n'
         '  "issue list") echo "${FAKE_ISSUE-7}" ;;\n'
+        '  "issue create") echo "https://example.invalid/owner/vault/issues/7" ;;\n'
         '  "issue view")\n'
         '    case "$*" in\n'
         '      *"--json body"*) cat "$FAKE_BODY" 2>/dev/null || true ;;\n'
+        '      *"--json comments"*"| last"*) cat "${FAKE_COMMENT_LAST:-$FAKE_COMMENT}" 2>/dev/null || true ;;\n'
         '      *"--json comments"*) cat "$FAKE_COMMENT" 2>/dev/null || true ;;\n'
         "    esac ;;\n"
         "esac\n",
@@ -1262,5 +1264,57 @@ def test_a_reminder_opens_the_issue_when_none_exists(tmp_path: Path) -> None:
     code, _ = _run_step(_attention_step(), env, tmp_path)
     assert code == 0
     calls = _calls(log)
-    assert any(c.startswith("issue create") and "reminders.md" in c for c in calls)
+    created = [c for c in calls if c.startswith("issue create")]
+    assert len(created) == 1
+    assert "reminders.md" not in created[0]  # the body is neutral, never the reminder
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
     assert not any(c.startswith("issue close") for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_the_backup_slot_after_an_issue_creating_reminder_posts_nothing(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    env["FAKE_ISSUE"] = ""
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    first = _calls(log)
+    assert len([c for c in first if c.startswith("issue create")]) == 1
+    assert len([c for c in first if c.startswith("issue comment 7 ")]) == 1
+    posted = (tmp_path / "reminders.md").read_text(encoding="utf-8")
+
+    # An hour later: the issue now exists, holding a neutral body and the posted comment.
+    log.write_text("", encoding="utf-8")
+    (tmp_path / "fake-body").write_text("Hand-save reminders follow in the comments.\n")
+    (tmp_path / "fake-comment").write_text(posted, encoding="utf-8")
+    (tmp_path / "reminders.md").write_text(f"Counts only. Updated now\n{_RLINE}", encoding="utf-8")
+    env["FAKE_ISSUE"] = "7"
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert not any(c.startswith(("issue comment", "issue create")) for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_comment_does_not_make_the_stale_only_check_repost_staleness(
+    tmp_path: Path,
+) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    stale = "- build is stale: last build 2026-10-01"
+    (tmp_path / "attention.md").write_text(f"Counts only.\n{stale}\n", encoding="utf-8")
+    # The staleness line sits in an earlier comment; the newest comment is another reminder.
+    (tmp_path / "fake-comment").write_text(f"Counts only.\n{stale}\n", encoding="utf-8")
+    (tmp_path / "last-comment").write_text("some other reminder comment\n", encoding="utf-8")
+    env["FAKE_COMMENT_LAST"] = str(tmp_path / "last-comment")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    comments = [c for c in _calls(log) if c.startswith("issue comment")]
+    assert len(comments) == 1  # the new reminder only
+    assert "reminders.md" in comments[0]
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_failed_push_run_still_comments_the_reminder(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="3", stale_only="false")
+    (tmp_path / "attention.md").write_text("Counts only.\n- vault push failed", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in _calls(log))
