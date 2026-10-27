@@ -667,8 +667,8 @@ def test_stamp_line_variants(wk_page: Page) -> None:
     }
     _mount(wk_page, games, model={"freshness": fresh})
     assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
-        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET · ESPN Press Room week 9 saved "
-        "Mon. Oct. 26 · Schedule updated Fri. Oct. 30, 6:00 pm ET"
+        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET; ESPN Press Room week 9 saved "
+        "Mon. Oct. 26; schedule updated Fri. Oct. 30, 6:00 pm ET"
     )
     assert wk_page.locator("#wk-host .wk-stamp").get_attribute("aria-live") == "off"
     only_506 = {"crews_506_saved_at": fresh["crews_506_saved_at"]}
@@ -704,8 +704,8 @@ def test_source_line_cfb_credits_and_links(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a")])
     line = wk_page.locator("#wk-host .wk-source")
     assert line.inner_text() == (
-        "Schedule: CollegeFootballData.com · Crews: 506 Sports and ESPN Press Room · "
-        "Networks: CollegeFootballData.com and 506 Sports"
+        "Schedule: CollegeFootballData.com; crews: 506 Sports and ESPN Press Room; "
+        "networks: CollegeFootballData.com and 506 Sports"
     )
     anchors = wk_page.locator("#wk-host .wk-source a")
     assert anchors.count() == 5
@@ -720,7 +720,7 @@ def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
     games = [_known(key="a", sport="nfl", networkId="cbs", networkName="CBS", family="cbs")]
     _mount(wk_page, games, model={"sport": "nfl"})
     text = wk_page.locator("#wk-host .wk-source").inner_text()
-    assert text == "Schedule: nflverse · Crews: 506 Sports"
+    assert text == "Schedule: nflverse; crews: 506 Sports"
     assert "CollegeFootballData" not in text and "Wikipedia" not in text
     _mount(
         wk_page,
@@ -728,7 +728,7 @@ def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
         model={"sport": "nfl", "links": {"wikipedia": "https://en.wikipedia.org/wiki/Foo"}},
     )
     text = wk_page.locator("#wk-host .wk-source").inner_text()
-    assert text.endswith("Networks: Wikipedia (CC BY-SA 4.0)")
+    assert text.endswith("networks: Wikipedia (CC BY-SA 4.0)")
     href = wk_page.locator("#wk-host .wk-source a", has_text="Wikipedia").get_attribute("href")
     assert href == "https://en.wikipedia.org/wiki/Foo"
     # An unsafe href never becomes a link.

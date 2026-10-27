@@ -153,7 +153,7 @@ def test_tab_is_the_sixth_and_selected_by_the_url(wk: Callable[..., Page]) -> No
 
 def test_subtitle_and_summary_line(wk: Callable[..., Page]) -> None:
     page = wk()
-    assert page.locator("#chart-subtitle").inner_text() == "Week 5 · Sat. Oct. 3 · All times ET"
+    assert page.locator("#chart-subtitle").inner_text() == "Week 5, Sat. Oct. 3, all times ET"
     # Saturday: 2 played rows (11, 19) + 10 scheduled on that day (index 9 is Friday).
     count = page.locator("#summary-count").inner_text()
     assert count.endswith(" of 12 games match")
@@ -187,7 +187,7 @@ def test_day_tabs_and_default_day(wk: Callable[..., Page]) -> None:
     assert _state(page)["day"] == "fri"
     assert _url(page) == "?view=weekend&day=fri"
     assert page.locator(FRIDAY_ROW).is_visible()
-    assert page.locator("#chart-subtitle").inner_text() == "Week 5 · Fri. Oct. 2 · All times ET"
+    assert page.locator("#chart-subtitle").inner_text() == "Week 5, Fri. Oct. 2, all times ET"
 
 
 def test_cell_shows_two_lines_the_lead_star_and_crew_tba(wk: Callable[..., Page]) -> None:
@@ -394,7 +394,7 @@ def test_week_stepper_writes_week_and_stops_at_the_latest(wk: Callable[..., Page
     prev.click()
     assert _url(page) == "?view=weekend&week=4"
     assert page.locator(".wk-week").inner_text() == "Week 4"
-    assert page.locator("#chart-subtitle").inner_text().startswith("Week 4 · Sat. Sept. 26")
+    assert page.locator("#chart-subtitle").inner_text().startswith("Week 4, Sat. Sept. 26")
     assert page.evaluate("document.activeElement.dataset.wkId") == "step:prev"
     assert page.locator(".wk-step--next").get_attribute("aria-disabled") is None
     page.locator(".wk-step--next").click()

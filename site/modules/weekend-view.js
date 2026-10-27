@@ -312,7 +312,7 @@ export function buildStampLine(ctx) {
     return p;
   }
   const f = model.freshness ?? {};
-  const schedule = f.schedule_updated_at ? `Schedule updated ${etStamp(f.schedule_updated_at)}` : null;
+  const schedule = f.schedule_updated_at ? `schedule updated ${etStamp(f.schedule_updated_at)}` : null;
   const segments = [];
   if (f.crews_506_saved_at) segments.push(`506 Sports saved ${etStamp(f.crews_506_saved_at)}`);
   if (f.crews_espnpr_saved_at) {
@@ -320,10 +320,10 @@ export function buildStampLine(ctx) {
     segments.push(`ESPN Press Room${week} saved ${etStamp(f.crews_espnpr_saved_at, { withTime: false })}`);
   }
   if (segments.length) {
-    p.textContent = `Crews: ${[...segments, ...(schedule ? [schedule] : [])].join(' · ')}`;
+    p.textContent = `Crews: ${[...segments, ...(schedule ? [schedule] : [])].join('; ')}`;
   } else {
     p.textContent = 'Crews for this week are not posted yet. Games show Crew TBA until they are.'
-      + `${schedule ? ` ${schedule}` : ''}`;
+      + `${schedule ? ` ${schedule[0].toUpperCase()}${schedule.slice(1)}` : ''}`;
   }
   return p;
 }
@@ -439,24 +439,24 @@ export function buildSourceLine(ctx) {
   const text = (t) => document.createTextNode(t);
   if (model.sport === 'nfl') {
     p.append(text('Schedule: '), sourceLink('nflverse', 'https://www.nflverse.com/'),
-      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'));
+      text('; crews: '), sourceLink('506 Sports', 'https://506sports.com'));
     const mapMode = ctx.opts.wview === 'map';
     if (links.wikipedia && mapMode) {
       // Both Wikipedia uses keep a link: the networks article and the table of venue articles.
-      p.append(text(' · Networks and '), sourceLink('stadium locations', NFL_STADIUM_LIST_URL),
+      p.append(text('; networks and '), sourceLink('stadium locations', NFL_STADIUM_LIST_URL),
         text(': '), sourceLink('Wikipedia', links.wikipedia), text(' (CC BY-SA 4.0)'));
     } else if (links.wikipedia) {
-      p.append(text(' · Networks: '), sourceLink('Wikipedia', links.wikipedia),
+      p.append(text('; networks: '), sourceLink('Wikipedia', links.wikipedia),
         text(' (CC BY-SA 4.0)'));
     } else if (mapMode) {
-      p.append(text(' · Stadium locations: '), sourceLink('Wikipedia', NFL_STADIUM_LIST_URL),
+      p.append(text('; stadium locations: '), sourceLink('Wikipedia', NFL_STADIUM_LIST_URL),
         text(' (CC BY-SA 4.0)'));
     }
   } else {
     const cfbd = 'https://collegefootballdata.com';
     p.append(text('Schedule: '), sourceLink('CollegeFootballData.com', cfbd),
-      text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'), text(' and '),
-      sourceLink('ESPN Press Room', press), text(' · Networks: '),
+      text('; crews: '), sourceLink('506 Sports', 'https://506sports.com'), text(' and '),
+      sourceLink('ESPN Press Room', press), text('; networks: '),
       sourceLink('CollegeFootballData.com', cfbd), text(' and '),
       sourceLink('506 Sports', 'https://506sports.com'));
   }

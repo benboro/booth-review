@@ -59,7 +59,7 @@ def test_rr_table_cell_keeps_separator_and_rr_link(
         .first.locator("td")
         .last
     )
-    assert "·" in cell.inner_text()
+    assert "; " in cell.inner_text()
     expect(cell.locator("a:text-is('Ratings Reference')")).to_have_count(1)
 
 

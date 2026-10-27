@@ -296,7 +296,7 @@ def test_desktop_hover_card_and_click(map_page: Page) -> None:
     )
     assert "Away a @ Home a" in card["text"]
     assert "Crew TBA" in card["text"]
-    assert "12:00 pm ET · FOX" in card["text"]
+    assert "12:00 pm ET, FOX" in card["text"]
     assert "Sanford Stadium" in card["text"]
     assert card["button"] is False
     map_page.mouse.click(at["x"], at["y"])

@@ -229,7 +229,7 @@ function hoverLines(game, nowWall, venueLine) {
   const lines = {
     matchup: matchupText(game),
     booth: { star: booth.star, text: booth.text, weight: booth.weight },
-    kickoff: `${time} \u00b7 ${game.networkName ?? 'Network TBA'}`,
+    kickoff: `${time}, ${game.networkName ?? 'Network TBA'}`,
     venue: venueLine,
   };
   return { ...lines, text: [lines.matchup, `${booth.star ? '\u2605 ' : ''}${booth.text}`, lines.kickoff, venueLine].join('\n') };
