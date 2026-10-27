@@ -196,3 +196,264 @@ def test_cfb_weekend_game_carries_place_and_venue(map_page: Page) -> None:
         if index != 0:
             assert place_idx is None
             assert venue_name is None
+
+
+# -- day model -----------------------------------------------------------------------------
+
+ATHENS = {"name": "Sanford Stadium", "city": "Athens", "state": "GA", "country": "US",
+          "lat": 33.9498, "lon": -83.3733}  # fmt: skip
+TUSCALOOSA = {"name": "Bryant-Denny Stadium", "city": "Tuscaloosa", "state": "AL",
+              "country": "US", "lat": 33.2084, "lon": -87.5504}  # fmt: skip
+HONOLULU = {"name": "Clarence T.C. Ching Complex", "city": "Honolulu", "state": "HI",
+            "country": "US", "lat": 21.2926, "lon": -157.8167}  # fmt: skip
+LONDON = {"name": "Wembley Stadium", "city": "London", "state": None, "country": "GB",
+          "lat": 51.556, "lon": -0.2796}  # fmt: skip
+DUBLIN = {"name": "Aviva Stadium", "city": "Dublin", "state": None, "country": "IE",
+          "lat": 53.3352, "lon": -6.2285}  # fmt: skip
+MADRID = {"name": "Santiago Bernabeu", "city": "Madrid", "state": None, "country": "ES",
+          "lat": 40.4531, "lon": -3.6883}  # fmt: skip
+NAMELESS = {"name": None, "city": None, "state": None, "country": "BR",
+            "lat": -23.5, "lon": -46.6}  # fmt: skip
+NO_POINT = {"name": "Mystery Field", "city": "Nowhere", "state": "ZZ", "country": "US",
+            "lat": None, "lon": None}  # fmt: skip
+
+_PLOT_975 = {"w": 975, "h": 610}  # one rendered px per map unit
+_PLOT_390 = {"w": 390, "h": 244}  # 0.4 px per unit
+
+
+def _place_idx(venue: dict[str, Any]) -> int:
+    """A stable stand-in place index per venue, as the data file's lookup gives one."""
+    return sum(ord(c) for c in f"{venue['name']}|{venue['lat']}|{venue['lon']}")
+
+
+def _game(key: str, venue: dict[str, Any] | None, **kw: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "key": key,
+        "sport": "cfb",
+        "block": "scheduled",
+        "index": 0,
+        "date": "2026-10-31",
+        "kickoffMin": 720,
+        "networkId": "fox",
+        "networkName": "FOX",
+        "family": "fox",
+        "away": "Away",
+        "home": f"Home {key}",
+        "awayRank": None,
+        "homeRank": None,
+        "neutral": False,
+        "pbp": None,
+        "analyst": None,
+        "lead": False,
+        "crewKnown": False,
+        "past": False,
+        "placeIdx": None if venue is None else _place_idx(venue),
+        "venue": venue,
+    }
+    base.update(kw)
+    return base
+
+
+def _model(page: Page, games: list[dict[str, Any]], **env: Any) -> Any:
+    arg = {"games": games, "env": env}
+    return _run(
+        page,
+        """const picked = new Set(arg.env.failKeys ?? []);
+        const matched = new Set(arg.env.matchKeys ?? []);
+        const badNet = new Set(arg.env.badNetworks ?? []);
+        const passes = (g) => (picked.has(g.key) ? false : matched.has(g.key) ? true : null);
+        const networksPicked = (id) => (badNet.has(id) ? false : null);
+        const m = M.buildWeekendMapModel({
+          games: arg.games, day: '2026-10-31', passes, networksPicked, theme: 'light',
+          mobile: arg.env.mobile ?? false, plot: arg.env.plot ?? { w: 975, h: 610 },
+        });
+        const slim = (d) => ({
+          key: d.key, x: d.x, y: d.y, vx: d.venueX, vy: d.venueY, symbol: d.symbol,
+          size: d.size, family: d.family, faded: d.faded, ringed: d.ringed,
+          label: d.label ?? null, text: d.text ?? null, side: d.side ?? null,
+        });
+        return {
+          dots: m.dots.map(slim), markers: m.markers.map(slim),
+          notOnMap: m.notOnMap.map((g) => g.key), counts: m.counts,
+          splat: m.splatModel,
+        };""",
+        arg,
+    )
+
+
+def test_every_game_lands_in_exactly_one_place(map_page: Page) -> None:
+    games = [
+        _game("a", ATHENS),
+        _game("b", HONOLULU),
+        _game("c", LONDON),
+        _game("d", None),
+        _game("e", NAMELESS),
+        _game("f", NO_POINT),
+        _game("g", MADRID, kickoffMin=None),
+    ]
+    out = _model(map_page, games)
+    placed = [d["key"] for d in out["dots"]] + [m["key"] for m in out["markers"]]
+    everything = placed + out["notOnMap"]
+    assert sorted(everything) == sorted(g["key"] for g in games)
+    assert {d["key"] for d in out["dots"]} == {"a", "b"}
+    assert {m["key"] for m in out["markers"]} == {"c", "g"}
+    assert sorted(out["notOnMap"]) == ["d", "e", "f"]  # never at a home city
+    assert out["counts"]["total"] == 7
+    hawaii = next(d for d in out["dots"] if d["key"] == "b")
+    assert 216 <= hawaii["x"] <= 332 and 528 <= hawaii["y"] <= 603  # the inset
+    labels = {m["key"]: m["label"] for m in out["markers"]}
+    assert labels == {"c": "London", "g": "Madrid"}
+    assert next(m for m in out["markers"] if m["key"] == "g")["symbol"] == "circle-open"
+
+
+def test_not_on_map_order_known_time_then_network_then_home(map_page: Page) -> None:
+    games = [
+        _game("tba", None, kickoffMin=None, home="Aardvark"),
+        _game("late", None, kickoffMin=1200, home="Zed", networkId="fox"),
+        _game("early-b", None, kickoffMin=720, home="Bravo", networkId="fox"),
+        _game("early-a", None, kickoffMin=720, home="Alpha", networkId="fox"),
+        _game("early-abc", None, kickoffMin=720, home="Charlie", networkId="abc"),
+    ]
+    out = _model(map_page, games)
+    assert out["notOnMap"] == ["early-a", "early-b", "early-abc", "late", "tba"]
+
+
+def test_shared_venue_row_is_centred_ordered_and_pitched(map_page: Page) -> None:
+    games = [
+        _game("late", ATHENS, kickoffMin=900),  # square 10
+        _game("tba", ATHENS, kickoffMin=None),  # circle-open 12
+        _game("noon", ATHENS, kickoffMin=720),  # circle 12
+    ]
+    out = _model(map_page, games, plot=_PLOT_975)
+    rows = {d["key"]: d for d in out["dots"]}
+    vx, vy = rows["noon"]["vx"], rows["noon"]["vy"]
+    pitch = 14  # largest member 12 + 2 px, at one px per unit
+    assert rows["noon"]["x"] == pytest.approx(vx - pitch)
+    assert rows["late"]["x"] == pytest.approx(vx)
+    assert rows["tba"]["x"] == pytest.approx(vx + pitch)  # no time last
+    assert all(d["y"] == pytest.approx(vy) for d in rows.values())
+
+
+def test_a_row_wraps_after_four_sixteen_px_down(map_page: Page) -> None:
+    games = [_game(f"g{i}", ATHENS, kickoffMin=720 + 10 * i) for i in range(5)]
+    out = _model(map_page, games, plot=_PLOT_975)
+    rows = {d["key"]: d for d in out["dots"]}
+    vx, vy = rows["g0"]["vx"], rows["g0"]["vy"]
+    first = [rows[f"g{i}"] for i in range(4)]
+    assert [d["x"] for d in first] == pytest.approx([vx - 21, vx - 7, vx + 7, vx + 21])
+    assert all(d["y"] == pytest.approx(vy) for d in first)
+    assert rows["g4"]["y"] == pytest.approx(vy + 16)
+    assert rows["g4"]["x"] == pytest.approx(vx)  # a lone second row is centred
+
+
+def test_nudge_threshold_is_six_rendered_px(map_page: Page) -> None:
+    out = _run(
+        map_page,
+        """const at = (dx, ppu) => M.nudgeRows(
+          [{ key: 'a', x: 100, y: 100, size: 12, kickoffMin: 700 },
+           { key: 'b', x: 100 + dx, y: 100, size: 12, kickoffMin: 800 }], ppu)
+          .map((p) => [p.x, p.y]);
+        return { four: at(4, 1), eight: at(8, 1), scaled: at(4 / 0.4, 0.4), alone: at(8, 1) };""",
+    )
+    assert out["four"][0][0] != 100 and out["four"][1][0] != 104  # grouped, so moved
+    assert out["eight"] == [[100, 100], [108, 100]]  # apart, so left alone
+    assert out["scaled"][0][0] != 100  # 4 px at 0.4 px per unit is still 4 px
+
+
+def test_two_venues_four_px_apart_share_a_row_at_390(map_page: Page) -> None:
+    # One degree of longitude east of Athens, in map units, from the projection itself.
+    unit = map_page.evaluate(
+        """async (v) => {
+          const G = await import('./modules/map-geo.js');
+          return G.placeVenue({ ...v, lon: v.lon + 1 }).x - G.placeVenue(v).x;
+        }""",
+        ATHENS,
+    )
+    per_px = 1 / (0.4 * unit)  # degrees of longitude per rendered px at 390
+    near = {**ATHENS, "name": "Near Field", "lon": ATHENS["lon"] + 4 * per_px}
+    far = {**ATHENS, "name": "Far Field", "lon": ATHENS["lon"] + 8 * per_px}
+    four = {d["key"]: d for d in _model(map_page, [_game("a", ATHENS), _game("b", near)],
+                                        plot=_PLOT_390)["dots"]}  # fmt: skip
+    assert four["a"]["vx"] == pytest.approx(four["b"]["vx"])  # grouped: one row centre
+    assert four["a"]["x"] != four["a"]["vx"]
+    eight = {d["key"]: d for d in _model(map_page, [_game("a", ATHENS), _game("c", far)],
+                                         plot=_PLOT_390)["dots"]}  # fmt: skip
+    assert eight["a"]["x"] == eight["a"]["vx"] and eight["c"]["x"] == eight["c"]["vx"]
+
+
+def test_fade_ring_and_layer_order(map_page: Page) -> None:
+    games = [
+        _game("m1", ATHENS, kickoffMin=900),
+        _game("f1", TUSCALOOSA, kickoffMin=720),
+        _game("n1", HONOLULU, kickoffMin=1000),
+        _game("net", ATHENS, kickoffMin=720, networkId="cbs"),
+        _game("m0", TUSCALOOSA, kickoffMin=600),
+    ]
+    out = _model(
+        map_page,
+        games,
+        failKeys=["f1"],
+        matchKeys=["m1", "m0"],
+        badNetworks=["cbs"],
+    )
+    by_key = {d["key"]: d for d in out["dots"]}
+    assert by_key["f1"]["faded"] and not by_key["f1"]["ringed"]
+    assert by_key["net"]["faded"]  # a Networks pick fades without a person pick
+    assert by_key["m1"]["ringed"] and not by_key["m1"]["faded"]
+    assert not by_key["n1"]["faded"] and not by_key["n1"]["ringed"]
+    order = [d["key"] for d in out["dots"]]
+    layers = [(0 if by_key[k]["faded"] else 2 if by_key[k]["ringed"] else 1) for k in order]
+    assert layers == sorted(layers)  # faded, normal, matched
+    assert order[-2:] == ["m0", "m1"]  # within a layer, earlier kickoff first
+    plain = _model(map_page, games)
+    assert not any(d["faded"] or d["ringed"] for d in plain["dots"])
+
+
+def test_splat_counts_only_unfaded_games(map_page: Page) -> None:
+    games = [
+        _game("a1", ATHENS),
+        _game("a2", ATHENS, networkId="cbs", family="cbs"),
+        _game("a3", ATHENS),
+        _game("h", HONOLULU),
+        _game("l", LONDON),
+    ]
+    out = _model(map_page, games, failKeys=["a3"])
+    venues = {round(v["x"]): v for v in out["splat"]["venues"]}
+    assert len(venues) == 2  # Athens and Honolulu; London is an edge marker
+    athens = max(out["splat"]["venues"], key=lambda v: v["games"])
+    assert athens["games"] == 2 and athens["score"] == 2  # a3 is faded, weight 1 each
+    assert sum(athens["counts"]) == 2
+    hawaii = min(out["splat"]["venues"], key=lambda v: v["games"])
+    assert hawaii["region"] == 2 and athens["region"] == 1
+    assert out["splat"]["medianScore"] >= 1
+    none = _model(map_page, games, failKeys=["a1", "a2", "a3", "h", "l"])
+    assert none["splat"]["venues"] == []
+
+
+def test_edge_marker_boxes_never_intersect_at_390(map_page: Page) -> None:
+    games = [
+        _game("l1", LONDON, kickoffMin=720),
+        _game("l2", LONDON, kickoffMin=900),
+        _game("d1", DUBLIN, kickoffMin=720),
+        _game("m1", MADRID, kickoffMin=1000),
+        _game("m2", MADRID, kickoffMin=1100),
+        _game("m3", MADRID, kickoffMin=None),
+    ]
+    out = _model(map_page, games, plot=_PLOT_390, mobile=True)
+    ppu = 0.4
+    boxes: list[tuple[str, str, float, float, float, float]] = []
+    for m in out["markers"]:
+        cx, cy, half = m["x"] * ppu, m["y"] * ppu, m["size"] / 2
+        boxes.append((m["key"], "mark", cx - half, cy - half, cx + half, cy + half))
+        if m["text"]:
+            width = 6.5 * len(m["text"])
+            if m["side"] == "left":
+                x0, x1 = cx - half - 4 - width, cx - half - 4
+            else:
+                x0, x1 = cx + half + 4, cx + half + 4 + width
+            boxes.append((m["key"], "label", x0, cy - 6, x1, cy + 6))
+    assert sum(1 for b in boxes if b[1] == "label") == 3  # one label per site
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1 :]:
+            apart = a[4] <= b[2] or b[4] <= a[2] or a[5] <= b[3] or b[5] <= a[3]
+            assert apart, (a, b)
