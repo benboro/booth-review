@@ -62,6 +62,6 @@ export function setEraCaption(host, labels, show) {
   if (!show || !labels.length) return;
   const p = document.createElement('p');
   p.className = 'nfl-era-caption';
-  p.textContent = `Measurement eras: ${labels.join(' · ')}`;
+  p.textContent = `Measurement eras: ${labels.join('; ')}`;
   host.appendChild(p);
 }

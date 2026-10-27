@@ -15,15 +15,13 @@ import { currentTheme } from '../../modules/pill.js';
 import { apKickoff } from '../../modules/weekend.js';
 import {
   causeCopy,
-  dateLongText,
   flagLabels,
-  kickoffText,
   scoreText,
   slotLabel,
   viewersText,
 } from './game-format.js';
 
-const WINDOW_NOTE = ' · Window-level figure (all Sunday afternoon games).';
+const WINDOW_NOTE = '; window-level figure (all Sunday afternoon games).';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -156,7 +154,7 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
     // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
     const dateP = el('p', null, row.weekend
       ? apKickoff(row.date, row.kickoff, noTime)
-      : `${dateLongText(row)} · ${kickoffText(row) ?? noTime}`);
+      : apKickoff(row.date, row.kickoff, noTime.toLowerCase(), { year: true }));
     const noNetwork = row.unplayed ? 'Network TBA' : 'Network not recorded.';
     const network = row.network == null
       ? el('p', null, noNetwork)

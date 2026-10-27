@@ -192,10 +192,10 @@ function hoverLines(model, i, state) {
   const lines = [{ text: `${row.away} at ${row.home}`, kind: 'title' }];
   const kick = kickoffText(row);
   lines.push({
-    text: `${dateShortText(row)}${kick ? `, ${kick}` : ''} · Week ${row.week}`,
+    text: `${dateShortText(row)}${kick ? `, ${kick}` : ''}, Week ${row.week}`,
     kind: 'body',
   });
-  lines.push({ text: [slotLabel(row.slot), ...flagLabels(row)].join(' · '), kind: 'body' });
+  lines.push({ text: [slotLabel(row.slot), ...flagLabels(row)].join(', '), kind: 'body' });
   if (row.network) {
     lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
   }
@@ -210,7 +210,7 @@ function hoverLines(model, i, state) {
   if (entries.length > 0) lines.push({ kind: 'crew', entries });
   if (row.viewers != null) {
     lines.push({
-      text: `Viewers: ${viewersText(row)}${row.scope === 'window' ? ' · window-level' : ''}`,
+      text: `Viewers: ${viewersText(row)}${row.scope === 'window' ? ', window-level' : ''}`,
       kind: 'body',
     });
   } else {

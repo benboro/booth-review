@@ -267,7 +267,7 @@ def test_low_n_hollow_and_hover_says_low_n(
     assert any(not sym.endswith("-open") for sym in tr["symbol"])
     _emit(page, "plotly_hover", _k_of(vm, "agotw", low["season"]))
     lines = _tooltip(page)
-    assert "Fox AGOTW · window-level" in lines[0]
+    assert "Fox AGOTW, window-level" in lines[0]
     assert any("low n: Few games, so treat with care." in t for t in lines)
 
 

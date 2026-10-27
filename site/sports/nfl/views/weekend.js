@@ -73,8 +73,8 @@ function buildModel(ctx, r) {
 function setSubtitle(ctx, r) {
   const parts = [r.week == null ? 'No week' : `Week ${r.week}`];
   if (r.day) parts.push(dayLabel(r.day));
-  parts.push('All times ET');
-  ctx.setSubtitle([document.createTextNode(parts.join(' · '))]);
+  parts.push('all times ET');
+  ctx.setSubtitle([document.createTextNode(parts.join(', '))]);
 }
 
 export function mount(container, ctx) {

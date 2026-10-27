@@ -296,7 +296,7 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
   // axis title carries it once; mixed seasons keep a season on each label, pooled rows have none.
   const shared = sharedSeason(items);
   const baseTitle = useAdj ? f.adjTitle : f.rawTitle;
-  const titleText = shared != null ? `${baseTitle} \u00B7 ${shared}` : baseTitle;
+  const titleText = shared != null ? `${baseTitle}, ${shared}` : baseTitle;
   // Full names on desktop, "Last / Last, YYYY" on a phone; the margin is sized from the
   // measured text so no label is ever cut.
   const labels = items.map((it) => {

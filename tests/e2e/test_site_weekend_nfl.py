@@ -60,7 +60,7 @@ def test_sunday_is_default_day_and_subtitle(nfl_guarded_page: Page, open_nfl_app
     day = nfl_guarded_page.locator(".wk-day[aria-selected=true]")
     assert day.inner_text().startswith("Sun. Oct. 11")
     assert nfl_guarded_page.locator("#nfl-chart-subtitle").inner_text() == (
-        "Week 5 · Sun. Oct. 11 · All times ET"
+        "Week 5, Sun. Oct. 11, all times ET"
     )
     assert nfl_guarded_page.locator("#nfl-matched-games").is_hidden()
 
@@ -97,7 +97,7 @@ def test_snf_cell_on_nbc_and_wikipedia_credit(
     text = source.inner_text()
     assert "nflverse" in text
     assert "506 Sports" in text
-    assert "Networks: Wikipedia (CC BY-SA 4.0)" in text
+    assert "networks: Wikipedia (CC BY-SA 4.0)" in text
     href = source.locator("a", has_text="Wikipedia").get_attribute("href")
     assert href == "https://en.wikipedia.org/wiki/2026_NFL_season"
 

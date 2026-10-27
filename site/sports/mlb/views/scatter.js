@@ -470,12 +470,13 @@ function hoverLines(model, i, hint) {
   if (row.network) {
     lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
   }
-  lines.push({ text: `${row.away} at ${row.home} · ${dateShortText(row)}`, kind: 'title' });
+  lines.push({ text: `${row.away} at ${row.home}, ${dateShortText(row)}`, kind: 'title' });
   let viewers = 'No public rating';
   if (row.viewers != null) {
     viewers = `${formatAudienceShort(row.viewers)} viewers${row.scope === 'window' ? ', whole window' : ''}`;
   }
-  lines.push({ text: `${viewers} · ${excitementText(row)}`, kind: 'body' });
+  const excitement = excitementText(row);
+  lines.push({ text: `${viewers}; ${excitement.charAt(0).toLowerCase()}${excitement.slice(1)}`, kind: 'body' });
   if (hint) lines.push({ text: hint, kind: 'hint' });
   return lines;
 }

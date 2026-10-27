@@ -108,7 +108,7 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
       };
     """)
     assert got["heading"] == "Matched games"
-    assert got["summary"] == "2 games · 2025–2025 · 1 rated"
+    assert got["summary"] == "2 games, 2025–2025, 1 rated"
     assert got["heads"] == ["Date", "Matchup", "Score", "Network", "Crew", "Viewers", "Source"]
     # Default sort is date newest first, so the Sep 14 row (unrated) is first.
     second = got["second"]
@@ -125,8 +125,8 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
     assert second[5] == "No rating"
     assert second[6] == "No record"
     assert got["badLink"] is False
-    # Re-styled at Phase 15 Plan 12 r6: the category line is muted text joined by " · ", not pills.
-    assert got["categoryText"] == "SNF · Fox AGOTW"
+    # Re-styled at Phase 15 Plan 12 r6: the category line is muted text joined by ", ", not pills.
+    assert got["categoryText"] == "SNF, Fox AGOTW"
     assert got["pills"] == 0
     assert "spread" not in got["text"]
 
@@ -260,7 +260,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     assert got["closeLabel"] == "Close details"
     assert got["headings"] == ["Crew", "Links"]
     paras = got["paras"]
-    assert paras[0] == "Sunday, Sep 7, 2025 · 1:00 PM ET"
+    assert paras[0] == "Sun. Sept. 7, 2025, 1:00 pm ET"
     assert paras[1] == "Network: "  # the logo carries the name as alt/title
     # SHELL-05: the espn id shows its logo (alt/title = name, no text), no pill.
     assert got["mark"] == {"alt": "ESPN", "title": "ESPN", "text": "", "pills": 0}
@@ -274,7 +274,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     ]
     assert got["crewBox"] == 3 and got["rolePills"] >= 2
     assert "From published lineup." in got["boxText"]
-    assert "Viewers: 12.3MM · Window-level figure (all Sunday afternoon games)." in paras
+    assert "Viewers: 12.3MM; window-level figure (all Sunday afternoon games)." in paras
     assert "Measured under Nielsen panel plus out-of-home." in paras
     facts = next(x for x in paras if x.startswith("Slot:"))
     assert "Slot: Monday Night Football (MNF). Shares its window." in facts
@@ -332,7 +332,7 @@ def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
       };
     """)
     paras = got["paras"]
-    assert paras[0] == "Sunday, Sep 7, 2025 · Kickoff time not recorded"
+    assert paras[0] == "Sun. Sept. 7, 2025, kickoff time not recorded"
     assert "Network not recorded." in paras and "Crew not listed." in paras
     assert "Viewers: not available (Ratings Reference does not compile regional games)" in paras
     assert not any(x.startswith("Measured under") for x in paras)

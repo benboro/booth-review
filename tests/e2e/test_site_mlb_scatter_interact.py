@@ -215,8 +215,13 @@ def test_hover_tooltip_ring_and_variants(
     _hover(page, 1)
     lines = _tooltip(page)
     assert page.locator("#chart-tooltip .tooltip-networks").count() == 1
-    assert " at " in lines[1] and "Apr 10, 2026" in lines[1] and "·" in lines[1]
-    assert lines[2] == "2MM viewers · Excitement 0.5"
+    assert (
+        " at " in lines[1]
+        and "Apr 10, 2026" in lines[1]
+        and ", " in lines[1]
+        and "·" not in lines[1]
+    )
+    assert lines[2] == "2MM viewers; excitement 0.5"
     ring = page.evaluate(
         "(() => { const r = document.getElementById('chart-hover-ring').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()"
     )
@@ -225,10 +230,10 @@ def test_hover_tooltip_ring_and_variants(
     page.mouse.move(5, 5)
     page.wait_for_function("document.getElementById('chart-tooltip').hidden")
     cases = {
-        10: "5.5MM viewers, whole window · Excitement 1.1",
-        6: "No public rating · Excitement 1.2",
-        4: "1.1MM viewers · Excitement pending Retrosheet 2026",
-        8: "3MM viewers · Excitement not available",
+        10: "5.5MM viewers, whole window; excitement 1.1",
+        6: "No public rating; excitement 1.2",
+        4: "1.1MM viewers; excitement pending Retrosheet 2026",
+        8: "3MM viewers; excitement not available",
     }
     for game, text in cases.items():
         _hover(page, game)
@@ -461,7 +466,7 @@ def test_tooltip_pending_follows_retrosheet_freshness(
     page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
     page.wait_for_timeout(300)
     _hover(page, 4)
-    assert _tooltip(page)[2] == "1.1MM viewers · Excitement not available"
+    assert _tooltip(page)[2] == "1.1MM viewers; excitement not available"
 
 
 @pytest.mark.parametrize("name", ["post", "post+lcs", "reg"])
@@ -525,4 +530,4 @@ def test_tooltip_says_retrosheet_not_loaded_without_retrosheet(
     page.wait_for_function(f"{HOOKS}.getViewModel('scatter').drawn === true")
     page.wait_for_timeout(300)
     _hover(page, 4)
-    assert _tooltip(page)[2] == "1.1MM viewers · Excitement: Retrosheet not loaded"
+    assert _tooltip(page)[2] == "1.1MM viewers; excitement: Retrosheet not loaded"

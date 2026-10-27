@@ -282,7 +282,7 @@ def test_phone_panel_fits_without_sideways_scroll(
 
 def test_panel_round_line(mlb: Page) -> None:
     _open(mlb, 6)
-    assert "Wild Card · AL, Game 1" in _panel(mlb)
+    assert "Wild Card, AL, Game 1" in _panel(mlb)
     _open(mlb, 0)
     assert "Reg. Season" in _panel(mlb)
 

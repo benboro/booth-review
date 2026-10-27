@@ -214,8 +214,8 @@ function hoverLines(item) {
   const p = item.p;
   const resid = current.eff === 'resid';
   const lines = [
-    { text: `${item.label}${item.windowLevel ? ' · window-level' : ''}`, kind: 'title' },
-    { text: `${p.season} · ${model.eras[p.era].label}`, kind: 'body' },
+    { text: `${item.label}${item.windowLevel ? ', window-level' : ''}`, kind: 'title' },
+    { text: `${p.season}, ${model.eras[p.era].label}`, kind: 'body' },
     { text: `${resid ? 'Residual' : 'Viewers'}: ${valueText(current.eff, item.y)}`, kind: 'body' },
   ];
   if (resid && item.y != null && item.err == null) {
