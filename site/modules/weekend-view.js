@@ -425,7 +425,7 @@ function sourceLink(text, href) {
 }
 
 /** The public table whose source_url column lists every Wikipedia article a stadium cites. */
-const NFL_STADIUM_LIST_URL = 'https://github.com/benboro/booth-review/blob/main/data/reference/nfl_stadiums.csv';
+const NFL_STADIUM_LIST_URL = 'https://github.com/benboro/booth-review/blob/main/data/reference/nfl_stadium_locations.csv';
 
 /** The credit line at the bottom: only the sources this sport actually uses (RT-01, RT-03). */
 export function buildSourceLine(ctx) {

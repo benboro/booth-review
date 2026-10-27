@@ -142,4 +142,5 @@ records only where the site settles or applies them.
 - The map has no keyboard path of its own: the Timeline is the keyboard-accessible twin, and
   the map's label says so. A panel opened from the map returns focus to the Map segment.
 - NFL map mode adds a stadium-location credit to the source line (Wikipedia, CC BY-SA 4.0).
-  The "stadium locations" link points at the stadium table until the location rows land (24-08).
+  The "stadium locations" link points at data/reference/nfl_stadium_locations.csv, whose
+  source_url column cites each stadium's Wikipedia article.

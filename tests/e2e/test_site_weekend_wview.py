@@ -277,7 +277,7 @@ def test_nfl_source_line_in_map_mode(wk_page: Page) -> None:
     assert "CollegeFootballData" not in line
     hrefs = wk_page.eval_on_selector_all(".wk-source a", "(as) => as.map((a) => a.href)")
     assert wiki in hrefs
-    assert any(h.endswith("data/reference/nfl_stadiums.csv") for h in hrefs)
+    assert any(h.endswith("data/reference/nfl_stadium_locations.csv") for h in hrefs)
     # Timeline mode is unchanged.
     _mount(wk_page, wview=None, model={**base, "links": {"wikipedia": wiki}})
     assert "Networks: Wikipedia (CC BY-SA 4.0)" in _source(wk_page)

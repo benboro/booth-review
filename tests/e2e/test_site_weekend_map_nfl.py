@@ -253,8 +253,8 @@ def test_the_source_line_credits_wikipedia_and_stadium_locations_only_in_map_mod
     assert "CollegeFootballData" not in page.locator(".wk-root").inner_text()
     hrefs = source.locator("a").evaluate_all("(n) => n.map((a) => a.href)")
     assert "https://en.wikipedia.org/wiki/2026_NFL_season" in hrefs
-    # The stadium-location credit links the location table (24-08 swaps in the article link).
-    assert any("nfl_stadiums.csv" in h for h in hrefs)
+    # The stadium credit links the location table; its source_url column cites each article.
+    assert any(h.endswith("data/reference/nfl_stadium_locations.csv") for h in hrefs)
 
 
 @pytest.mark.parametrize("theme", THEMES)
