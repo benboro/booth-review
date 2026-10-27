@@ -200,6 +200,25 @@ function stepButton(dir, label, disabled, title, onClick, id) {
 }
 
 /** The control row: day tabs (a second tablist) on the left, the week stepper on the right. */
+function buildViewSwitch(ctx) {
+  const group = el('div', 'wk-view-switch');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', 'Weekend view');
+  const map = ctx.opts.wview === 'map';
+  for (const [id, label] of [['timeline', 'Timeline'], ['map', 'Map']]) {
+    const pressed = (id === 'map') === map;
+    const seg = el('button', 'wk-view-seg', label);
+    seg.type = 'button';
+    seg.dataset.wkId = `wview:${id}`;
+    seg.setAttribute('aria-pressed', String(pressed));
+    seg.addEventListener('click', () => {
+      if (!pressed) ctx.opts.onView(id);
+    });
+    group.append(seg);
+  }
+  return group;
+}
+
 export function buildControls(ctx, api) {
   const { model, days, day } = ctx;
   const row = el('div', 'wk-controls');
@@ -254,7 +273,16 @@ export function buildControls(ctx, api) {
     stepButton('next', next ? `Next week, ${next.label}` : 'Next week', latest,
       latest ? 'Latest week' : null, () => ctx.opts.onWeek?.(1), 'step:next'),
   );
-  row.append(days.length ? tabs : el('div', 'wk-days'), stepper);
+  const lead = days.length ? tabs : el('div', 'wk-days');
+  // Phase 24: the Timeline | Map switch shows only when the host opts in with onView (MLB never
+  // does), left of the week stepper.
+  if (typeof ctx.opts.onView === 'function') {
+    const right = el('div', 'wk-controls-right');
+    right.append(buildViewSwitch(ctx), stepper);
+    row.append(lead, right);
+  } else {
+    row.append(lead, stepper);
+  }
   return row;
 }
 
@@ -396,6 +424,9 @@ function sourceLink(text, href) {
   return a;
 }
 
+/** The public table whose source_url column lists every Wikipedia article a stadium cites. */
+const NFL_STADIUM_LIST_URL = 'https://github.com/benboro/booth-review/blob/main/data/reference/nfl_stadiums.csv';
+
 /** The credit line at the bottom: only the sources this sport actually uses (RT-01, RT-03). */
 export function buildSourceLine(ctx) {
   const { model } = ctx;
@@ -406,8 +437,16 @@ export function buildSourceLine(ctx) {
   if (model.sport === 'nfl') {
     p.append(text('Schedule: '), sourceLink('nflverse', 'https://www.nflverse.com/'),
       text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'));
-    if (links.wikipedia) {
+    const mapMode = ctx.opts.wview === 'map';
+    if (links.wikipedia && mapMode) {
+      // Both Wikipedia uses keep a link: the networks article and the table of venue articles.
+      p.append(text(' · Networks and '), sourceLink('stadium locations', NFL_STADIUM_LIST_URL),
+        text(': '), sourceLink('Wikipedia', links.wikipedia), text(' (CC BY-SA 4.0)'));
+    } else if (links.wikipedia) {
       p.append(text(' · Networks: '), sourceLink('Wikipedia', links.wikipedia),
+        text(' (CC BY-SA 4.0)'));
+    } else if (mapMode) {
+      p.append(text(' · Stadium locations: '), sourceLink('Wikipedia', NFL_STADIUM_LIST_URL),
         text(' (CC BY-SA 4.0)'));
     }
   } else {
