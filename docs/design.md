@@ -111,3 +111,35 @@ records only where the site settles or applies them.
 - The Now line (1px, `--accent`, labelled "Now") is the one use of the accent in this
   view that is not a focus or changed-filter state; lead stars follow the stars rule above
   (Phase 18).
+
+- Weekend map (Phase 24): the This weekend tab has a Timeline | Map switch (default Timeline,
+  URL `wview=map`), one segmented control left of the week stepper (32px visually, a 44px
+  tap area on a phone). The map shows one dot per placed game in its network-family colour
+  with a 1.5px keyline in the page colour; the colour comes from the CFB Map's family
+  palette, deepened toward black where a family falls under 3:1 on the land. The kickoff
+  window is the shape: CFB circle (noon), square (afternoon), diamond (prime), triangle
+  (late); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
+  game is an open ring in its family colour, still listed in the Time TBA strip. Games at
+  one venue sit in a centred row, wrapping at four, never stacked. A game abroad is an edge
+  marker in the same shape, labelled by city once per site. A game with no venue is listed
+  under "Not on the map (n)", and a CFB ESPN+ game with a venue is dotted and also stays in
+  the compact table.
+- The weekend map's shading is the light game-count splat: one game weighs 1 and viewers
+  count for nothing, so the dots stay the data. Current values (`MAP_SPLAT_WEEKEND` in
+  palette.js; the CFB Map is 0.88): max opacity 0.4, spread 25, solid percentile 80. 24-11
+  tunes these in the critique renders; update this line then.
+- Under a pick the map fades non-matching dots to 0.15 (a dot has no text to keep readable,
+  so lower than the timeline's 0.3) and rings matches with a 2px `--ink` ring over a 3px
+  page-colour keyline; the splat follows the matching games only. This is the same ring and
+  fade rule as the timeline cells, in the dot's own terms.
+- The colour and shape key sits in flow under the map (never overlaid), listing only the
+  windows and families present that day; it is not a filter. On a phone the map is fixed
+  (no zoom or pan) at the map's own 975:610 ratio, the dots shrink (8 to 12px) and keep a
+  12px hit target, and a tap works as on the CFB Map: the first tap shows the game card with
+  a 1px ring on the mark and a full-width 44px `Open game` button, the second tap or the
+  button opens the panel, and a tap on the background clears only the card. A pointer that
+  can hover (a mouse at phone width) opens on the first click, with no button.
+- The map has no keyboard path of its own: the Timeline is the keyboard-accessible twin, and
+  the map's label says so. A panel opened from the map returns focus to the Map segment.
+- NFL map mode adds a stadium-location credit to the source line (Wikipedia, CC BY-SA 4.0).
+  The "stadium locations" link points at the stadium table until the location rows land (24-08).
