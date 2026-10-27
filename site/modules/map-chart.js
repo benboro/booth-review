@@ -378,24 +378,50 @@ export function renderMap(gd, figure) {
 /** Plotly's own default reach when the layout sets no hoverdistance. */
 const DEFAULT_HOVER_DISTANCE = 20;
 
+/** Plotly's scatter hover distance from a pointer to a marker of `size` px (its 'closest' rule). */
+function markerDistance(dx, dy, size) {
+  const rad = Math.max(3, size / 2);
+  return Math.max(Math.hypot(dx, dy) - rad, 1 - 3 / rad);
+}
+
 /**
- * Whether the clicked point lies within Plotly's hit reach of where the pointer landed.
- * Plotly skips the hover pass for a touch within 50 ms of the last one and then reports
- * the previous point, so a quick tap on the background would otherwise click the dot
- * tapped just before. A click without pointer coordinates is trusted.
+ * Whether the clicked point is the one under the pointer. Plotly skips the hover pass for
+ * a touch within 50 ms of the last one and then reports the previous point, so a quick tap
+ * on the background, or on a venue next to the last one, would otherwise click the venue
+ * tapped before. The point must be within Plotly's reach of where the pointer landed, and
+ * no other clickable point may be clearly nearer. A click without coordinates is trusted.
  */
 function underPointer(gd, ev) {
   const src = ev?.event;
   const at = src?.changedTouches?.[0] ?? src?.touches?.[0] ?? src;
   const p = ev?.points?.[0];
-  if (at?.clientX == null || !p?.xaxis || !p?.yaxis) return true;
+  const xa = gd._fullLayout?.xaxis;
+  const ya = gd._fullLayout?.yaxis;
+  if (at?.clientX == null || !p || !xa || !ya) return true;
   const box = gd.getBoundingClientRect();
-  const px = box.left + p.xaxis._offset + p.xaxis.c2p(p.x);
-  const py = box.top + p.yaxis._offset + p.yaxis.c2p(p.y);
-  const size = p.data?.marker?.size;
-  const radius = (Array.isArray(size) ? size[p.pointNumber] : size ?? 0) / 2;
-  const reach = radius + (gd._fullLayout?.hoverdistance ?? DEFAULT_HOVER_DISTANCE) + 1;
-  return Math.hypot(at.clientX - px, at.clientY - py) <= reach;
+  const cx = at.clientX - box.left;
+  const cy = at.clientY - box.top;
+  const sizeOf = (trace, i) => {
+    const s = trace.marker?.size;
+    return Array.isArray(s) ? s[i] : (s ?? 0);
+  };
+  const distOf = (trace, i) =>
+    markerDistance(
+      cx - (xa._offset + xa.c2p(trace.x[i])),
+      cy - (ya._offset + ya.c2p(trace.y[i])),
+      sizeOf(trace, i),
+    );
+  const picked = distOf(p.data, p.pointNumber);
+  if (picked > (gd._fullLayout.hoverdistance ?? DEFAULT_HOVER_DISTANCE) + 1) return false;
+  for (const trace of gd._fullData ?? []) {
+    if (trace.name !== 'venue-hits' && trace.name !== 'markers') continue;
+    for (let i = 0; i < trace.x.length; i += 1) {
+      if (trace.customdata?.[i] == null) continue;
+      if (trace.index === p.curveNumber && i === p.pointNumber) continue;
+      if (distOf(trace, i) < picked - 1) return false;
+    }
+  }
+  return true;
 }
 
 function venueOf(ev) {

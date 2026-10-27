@@ -491,7 +491,13 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
   handles = { setState, getState, getMatchedCount };
   /** The touch in progress inside the map: where it began and how many venue clicks preceded it. */
   let down = null;
+  /** Settles the last tap's background check now; null when none is waiting. */
+  let settleBackground = null;
   document.addEventListener('pointerdown', (ev) => {
+    // Input arrives in order, so the last tap's Plotly click (if any) is in by now: settle
+    // its background check before this tap, or a tap inside the wait would find the old
+    // venue still armed and filter it.
+    settleBackground?.();
     if (!ev.target.closest('#map-chart')) {
       down = null;
       if (pendingTapKey != null) {
@@ -514,11 +520,15 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
     if (!start || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) return;
     // UI-SPEC: a tap on the map that lands on no dot or marker clears only the card. Plotly
     // reports a hit through plotly_click a moment after the pointer lifts, so look afterwards.
-    setTimeout(() => {
+    const settle = () => {
+      clearTimeout(timer);
+      if (settleBackground === settle) settleBackground = null;
       if (venueClickCount !== start.clicks) return;
       resetMapTap();
       hideTooltip();
-    }, BACKGROUND_TAP_DELAY_MS);
+    };
+    const timer = setTimeout(settle, BACKGROUND_TAP_DELAY_MS);
+    settleBackground = settle;
   });
 }
 

@@ -522,6 +522,52 @@ def test_phone_stale_plotly_point_is_judged_by_the_touch(
     assert ("venue=" in search) is on_dot
 
 
+def test_phone_stale_point_next_to_the_tapped_venue_does_not_filter(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """A quick tap on venue B right beside venue A can come back as Plotly's stale A point
+    while still inside A's reach; B is nearer the finger, so it must not filter A."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    dots = _model(mobile_page)["venueDots"]
+    a, b = dots[0], dots[1]
+    moved = _shrink(mobile_page, b["key"], mobile=True, near=a["key"], offset=24)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    ax, ay = _pixel(mobile_page, a["x"], a["y"])
+    bx, by = _pixel(mobile_page, moved["x"], moved["y"])
+    mobile_page.evaluate(
+        """() => document.getElementById('map-chart').on('plotly_click', (e) => {
+             window.__firstClick ??= e; })"""
+    )
+    mobile_page.touchscreen.tap(ax, ay)
+    mobile_page.wait_for_function("() => window.__firstClick != null")
+    assert mobile_page.evaluate("() => window.__firstClick.points[0].customdata") == a["key"]
+    mobile_page.evaluate(_REPLAY_CLICK, [bx, by])
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+
+
+def test_phone_tap_inside_the_background_wait_rearms_first(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """Tapping the dot again before the background tap's check has run must find the card
+    cleared and show it again, not filter."""
+    px, py = _phone_dot(mobile_page, open_app)
+    box = mobile_page.locator("#map-chart").bounding_box()
+    assert box is not None
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    mobile_page.touchscreen.tap(box["x"] + 8, box["y"] + 8)
+    mobile_page.wait_for_timeout(70)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_timeout(400)
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+
+
 def test_phone_mouse_click_right_after_a_tap_counts(mobile_page: Page, open_app: OpenApp) -> None:
     """A mouse paired with a phone is not held back by any time window: a finger tap shows
     the card, and a mouse click on the same dot straight after lists its games."""
