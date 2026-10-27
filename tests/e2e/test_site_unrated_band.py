@@ -865,10 +865,10 @@ _WHY_HREF = "methodology.html#games-with-no-public-rating"
 @pytest.mark.parametrize(
     ("axis_query", "index", "line"),
     [
-        ("", 17, "No public rating · Conference Network games are rarely rated"),
+        ("", 17, "No public rating; Conference Network games are rarely rated"),
         # Unrated 19 (the pending, unplayed game) is never drawn (v2.1), so the Date-axis
         # case hovers 18, a rarely-rated Stream Plus game.
-        ("?axis=date", 18, "No public rating · Stream Plus games are rarely rated"),
+        ("?axis=date", 18, "No public rating; Stream Plus games are rarely rated"),
     ],
 )
 def test_hover_band_marker_shows_cause_tooltip_ring_and_modal(
@@ -900,7 +900,7 @@ def test_tap_band_marker_at_360_shows_cause_line(
     mobile_page.touchscreen.tap(point["x"], point["y"])
     mobile_page.wait_for_function("document.getElementById('detail-panel').open")
     shown = mobile_page.inner_text("#panel-body")
-    assert "No public rating · no figure found in our 2021\u201324 sources" in shown
+    assert "No public rating; no figure found in our 2021\u201324 sources" in shown
 
 
 def test_compare_faded_unrated_marker_is_inert(
@@ -934,4 +934,4 @@ def test_plotly_tooltip_mode_labels_band_marker_with_cause(
     guarded_page.mouse.move(point["x"], point["y"], steps=4)
     guarded_page.wait_for_selector(".hoverlayer .hovertext", timeout=3000)
     label = guarded_page.text_content(".hoverlayer .hovertext") or ""
-    assert "No public rating · no figure was published" in label
+    assert "No public rating; no figure was published" in label

@@ -215,12 +215,12 @@ def test_tooltip_lines_with_excitement_y(guarded_page: Page, open_app: OpenApp) 
     _hover_dot(page, picks["rated"])
     text = page.inner_text("#chart-tooltip")
     assert "Viewers: " in text
-    assert " · Excitement: " in text
+    assert "; Excitement: " in text
     _hover_dot(page, picks["unrated"])
     page.wait_for_function(
-        "document.getElementById('chart-tooltip').innerText.includes('No public rating · ')"
+        "document.getElementById('chart-tooltip').innerText.includes('No public rating; ')"
     )
-    assert " · Excitement: " in page.inner_text("#chart-tooltip")
+    assert "; Excitement: " in page.inner_text("#chart-tooltip")
 
     _use_plotly_tooltip(page)
     hover = page.evaluate(
@@ -234,7 +234,7 @@ def test_tooltip_lines_with_excitement_y(guarded_page: Page, open_app: OpenApp) 
         }""",
         picks["rated"],
     )
-    assert " · Excitement: " in hover
+    assert "; Excitement: " in hover
 
 
 _SUMMARY_JS = """() => ({

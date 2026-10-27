@@ -674,7 +674,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
 
     dot0 = _hover_text(traces, 0)
     assert "Lakeview 20 at Northfield 27" in dot0
-    assert "Sat, Sep 7, 2019" in dot0
+    assert "Sat. Sept. 7, 2019, 12:00 pm ET" in dot0
     assert "Noon" not in dot0
     assert "Click for details" not in dot0
     assert dot0.split("<br>")[-1].startswith("Spread:")
@@ -1154,7 +1154,7 @@ def test_html_tooltip_names_every_named_game(
     # The fixture's CFP game is a semifinal played at a bowl: bowl icon, trophy,
     # and the core bowl name with the round.
     assert guarded_page.locator(icon).count() == 2
-    assert marker.text_content() == "Summit Bowl \u00b7 CFP semifinal"
+    assert marker.text_content() == "Summit Bowl, CFP semifinal"
 
     _hover_dot(guarded_page, 0)
     guarded_page.wait_for_selector(f'{icon}[data-kind="rivalry"]')
@@ -1233,8 +1233,8 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
     ("round_", "kinds", "name"),
     [
         ("first_round", ["playoff"], "CFP first round"),
-        ("quarterfinal", ["bowl", "playoff"], "Summit Bowl \u00b7 CFP quarterfinal"),
-        ("semifinal", ["bowl", "playoff"], "Summit Bowl \u00b7 CFP semifinal"),
+        ("quarterfinal", ["bowl", "playoff"], "Summit Bowl, CFP quarterfinal"),
+        ("semifinal", ["bowl", "playoff"], "Summit Bowl, CFP semifinal"),
         ("championship", ["playoff"], "CFP championship"),
         (None, ["playoff"], "College Football Playoff"),
     ],
@@ -1248,7 +1248,7 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     name: str,
 ) -> None:
     """F3: a CFP quarterfinal or semifinal is played at a bowl, so its tooltip
-    marker is the bowl icon then the trophy plus "<core> \u00b7 <round>"; first
+    marker is the bowl icon then the trophy plus "<core>, <round>"; first
     round, championship and an unrecorded round show the trophy and the round
     label. The icons are aria-hidden and the span has no role (D-10)."""
     serve_round(guarded_page, round_)
@@ -1292,8 +1292,8 @@ def test_html_tooltip_named_game_sits_on_its_own_line_under_the_date(
     for index in (7, 5, 0):
         _hover_dot(guarded_page, index)
         got = guarded_page.evaluate(probe)
-        assert " \u00b7 " in got["dateText"]  # date and kickoff only, one separator
-        assert got["dateText"].count(" \u00b7 ") == 1
+        assert "\u00b7" not in got["dateText"]  # date and kickoff only, AP form
+        assert got["dateText"].count(", ") == 2  # day label, year, then the clock
         assert not any(w in got["dateText"] for w in ("Bowl", "Rivalry", "CFP"))
         assert got["nextIsMarker"] is True
         assert got["display"] == "block"
@@ -1323,7 +1323,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
             title: 't', dateText: 'd',
             networks: [{ name: 'N', family: 'other' }], crew: [], crewLines: [],
             viewersLine: 'v', axisLine: 'a', hint: 'h',
-            gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl \\u00b7 CFP semifinal' },
+            gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl, CFP semifinal' },
           };
           T.renderTooltipContent(el, model, 'light');
           const span = el.querySelector('.tooltip-game-type');
@@ -1335,7 +1335,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
         }
         """
     )
-    assert result == {"text": "Summit Bowl \u00b7 CFP semifinal", "svgs": 0, "role": None}
+    assert result == {"text": "Summit Bowl, CFP semifinal", "svgs": 0, "role": None}
 
 
 def test_tooltip_model_adds_excitement_line_for_excitement_y(
@@ -1400,7 +1400,7 @@ def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
 
     assert "Noon" not in _hover_text(traces, 0)
     assert "Lakeshore Rivalry" in _hover_text(traces, 0)
-    assert "Summit Bowl \u00b7 CFP semifinal" in _hover_text(traces, 5)
+    assert "Summit Bowl, CFP semifinal" in _hover_text(traces, 5)
     assert "Harbor Bowl" in _hover_text(traces, 7)
     # notes-2 #6: the named game is its own <br> line, not on the date line.
     lines = _hover_text(traces, 7).split("<br>")
@@ -1531,7 +1531,7 @@ def test_html_tooltip_long_bowl_name_wraps_inside_max_width(
 
     assert (
         guarded_page.locator("#chart-tooltip .tooltip-game-type").text_content()
-        == "Cotton Bowl Classic \u00b7 CFP semifinal"
+        == "Cotton Bowl Classic, CFP semifinal"
     )
     metrics = guarded_page.locator("#chart-tooltip").evaluate(
         """el => {

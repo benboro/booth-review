@@ -443,3 +443,19 @@ def test_strip_collapsed_default(weekend_page: Page) -> None:
         "return [0, 6, 7, 12].map(W.stripCollapsedByDefault);",
     )
     assert out == [False, False, True, True]
+
+
+def test_ap_kickoff_year_option(weekend_page: Page) -> None:
+    out = _run(
+        weekend_page,
+        "return ["
+        " W.apKickoff('2020-11-21', '2020-11-21T12:00:00-05:00', 'kickoff time not recorded',"
+        " { year: true }),"
+        " W.apKickoff('2020-11-21', null, 'kickoff time not recorded', { year: true }),"
+        " W.apKickoff('2026-10-31', '2026-10-31T12:00:00-04:00')];",
+    )
+    assert out == [
+        "Sat. Nov. 21, 2020, 12:00 pm ET",
+        "Sat. Nov. 21, 2020, kickoff time not recorded",
+        "Sat. Oct. 31, 12:00 pm ET",
+    ]

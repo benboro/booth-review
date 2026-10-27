@@ -242,7 +242,7 @@ def test_panel_network_and_also_on_lines_use_marks(
     line = guarded_page.locator("#panel-body .panel-networks")
     text = re.sub(r"\s+", " ", line.inner_text())
     assert text.startswith("Network: ")
-    assert " · Also on: " in text
+    assert "; also on: " in text
     assert line.locator(".net-mark").count() == 3
     assert line.locator(".pill").count() == 0
     _check_logo_attrs(guarded_page, "#panel-body .panel-networks", {"Alpha Sports", "Beta Network"})

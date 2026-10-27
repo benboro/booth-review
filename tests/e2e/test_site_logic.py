@@ -1117,7 +1117,7 @@ def test_summary_copy_formats_n_of_m(guarded_page: Page, site_url: str) -> None:
     big = {**base, "count": 10583, "rated": 3491, "altCount": 0}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, big) == {
         "count": "3,491 rated of 10,583 games",
-        "detail": "2014\u20132025 \u00b7 ESPN, FOX",
+        "detail": "2014\u20132025, ESPN, FOX",
     }
     one = {**base, "count": 1, "rated": 1, "altCount": 0}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, one)["count"] == "1 rated of 1 game"
@@ -1149,12 +1149,12 @@ def test_summary_copy_caps_a_long_network_list(guarded_page: Page, site_url: str
     base = {"kind": "matches", "seasonMin": 2014, "seasonMax": 2025, "count": 900, "rated": 400}
     three = {**base, "networks": ["ESPN", "FOX", "ABC"], "altCount": 0}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, three)["detail"] == (
-        "2014\u20132025 \u00b7 ESPN, FOX, ABC"
+        "2014\u20132025, ESPN, FOX, ABC"
     )
     networks = ["ESPN", "FOX", "ABC", "CBS", "NBC", "FS1", "ESPN2"]
     many = {**base, "networks": networks, "altCount": 2}
     assert guarded_page.evaluate(_SUMMARY_COPY_JS, many)["detail"] == (
-        "2014\u20132025 \u00b7 ESPN, FOX, ABC +4 more \u00b7 includes 2 alt-cast games"
+        "2014\u20132025, ESPN, FOX, ABC +4 more, includes 2 alt-cast games"
     )
 
 
@@ -1273,7 +1273,7 @@ def test_named_game_info_and_rivalry_name(guarded_page: Page, site_url: str) -> 
     }
     assert guarded_page.evaluate(_FORMAT_JS, [named, 5]) == {
         "icons": ["bowl", "playoff"],
-        "text": "Summit Bowl · CFP semifinal",
+        "text": "Summit Bowl, CFP semifinal",
     }
     assert guarded_page.evaluate(_FORMAT_JS, [named, 1]) is None
     assert guarded_page.evaluate(_FORMAT_JS, [named, 3]) is None
@@ -1435,7 +1435,7 @@ def test_cause_wording_and_format_viewers_null(guarded_page: Page, site_url: str
         "Conference Network games are rarely rated",
         "viewership not posted yet",
     ]
-    assert r["line"] == "No public rating \u00b7 no figure was published"
+    assert r["line"] == "No public rating; no figure was published"
     assert r["fv"] == "No public rating"
 
 

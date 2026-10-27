@@ -22,9 +22,7 @@ import {
   crewEntries,
   axisValueText,
   boothLabel,
-  formatDate,
   formatAudienceShort,
-  formatKickoff,
   formatMatchup,
   formatViewers,
   namedGameInfo,
@@ -34,6 +32,7 @@ import {
 import { makeGameTypeIcon } from './icons.js';
 import { networkMark, networkMarks, sortNetworks } from './network.js';
 import { crewBox } from './panel-parts.js';
+import { apKickoff } from './weekend.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
   FAMILY_COLORS,
@@ -84,7 +83,7 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
 
   const title = formatMatchup(data, i, { withScore: true });
 
-  const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
+  const dateText = apKickoff(t.date[i], t.kickoff[i], 'kickoff time not recorded', { year: true });
   const gameType = namedGameInfo(data, i);
 
   const primaryNetwork = data.lookups.networks[t.network[i]];

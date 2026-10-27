@@ -233,13 +233,14 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
     body0 = guarded_page.inner_text("#panel-body")
     assert "Conference: SEC vs Pac-12" in body0
     assert "Noon (before 2 PM ET)" in body0
+    assert "pm ET; Noon" in body0 or "am ET; Noon" in body0
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
     body7 = guarded_page.inner_text("#panel-body")
     assert "Acme Harbor Bowl" in body7
     assert "Neutral site" not in body7
     assert "Prime time" not in body7
-    assert "Sat, Dec 6, 2025" in body7
+    assert "Sat. Dec. 6, 2025, 7:00 pm ET" in body7
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
     body5 = guarded_page.inner_text("#panel-body")
@@ -1199,11 +1200,11 @@ def test_tooltip_model_and_hover_text_for_unrated_games(
           };
         }"""
     )
-    assert lines["u15"] == "No public rating · Stream Plus games are rarely rated"
-    assert lines["u12"] == "No public rating · no figure was published"
+    assert lines["u15"] == "No public rating; Stream Plus games are rarely rated"
+    assert lines["u12"] == "No public rating; no figure was published"
     assert lines["c12"] == ["Crew not recorded"]
-    assert lines["u19"] == "No public rating · viewership not posted yet"
-    assert lines["u13"] == "No public rating · no figure found in our 2021\u201324 sources"
+    assert lines["u19"] == "No public rating; viewership not posted yet"
+    assert lines["u13"] == "No public rating; no figure found in our 2021\u201324 sources"
     assert lines["rated"].startswith("Viewers: ")
     if lines["hover"] is not None:
-        assert "No public rating · Stream Plus games are rarely rated" in lines["hover"]
+        assert "No public rating; Stream Plus games are rarely rated" in lines["hover"]
