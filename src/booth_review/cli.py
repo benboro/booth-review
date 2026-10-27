@@ -311,6 +311,11 @@ def build_parser() -> argparse.ArgumentParser:
     pwiki.add_argument("--league", choices=("nfl", "mlb"), default="nfl")
     pwiki.add_argument("--season", required=True, type=parse_season_spec_any_league)
     pwiki.add_argument("--lists", action="store_true", help="MLB only: also the list pages")
+    pwiki.add_argument(
+        "--stadiums",
+        action="store_true",
+        help="NFL only: the stadium articles for map coordinates",
+    )
     pwiki.add_argument("--refresh", action="store_true")
     pwiki.add_argument("--dry-run", action="store_true")
     pwiki.add_argument("--no-commit", action="store_true")
@@ -576,6 +581,12 @@ def build_parser() -> argparse.ArgumentParser:
     review_smw_diff.add_argument("--season", required=True, type=int)
     review_smw_diff.add_argument("--root", type=Path, default=SMW_DEFAULT_ROOT)
     review_smw_diff.add_argument("--check-pass", choices=("a", "b"), default=None)
+
+    review_nfl_stadiums = review_sub.add_parser(
+        "nfl-stadiums",
+        help="draft nfl_stadium_locations rows from cached stadium articles (offline)",
+    )
+    review_nfl_stadiums.add_argument("--out", type=Path, default=Path("data/incoming/nfl-stadiums"))
 
     review_smw_merge = review_sub.add_parser(
         "smw-merge", help="merge SMW transcription passes and resolutions into rows.csv"
@@ -1032,6 +1043,9 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
     if args.lists and not mlb:
         print("error: --lists is MLB only", file=sys.stderr)
         return 2
+    if args.stadiums and mlb:
+        print("error: --stadiums is NFL only", file=sys.stderr)
+        return 2
     runtime = build_runtime(with_budget=False)
     try:
         collector = (
@@ -1060,6 +1074,8 @@ def _collect_wikipedia(args: argparse.Namespace) -> int:
                     )
                 else:
                     summaries.extend(collector.run([season], refresh=refresh, dry_run=args.dry_run))
+            if args.stadiums and isinstance(collector, WikipediaCollector):
+                summaries.append(collector.run_stadiums(refresh=args.refresh, dry_run=args.dry_run))
         except (RobotsDisallowedError, UnknownHostError) as exc:
             error = exc
         except BaseException:
@@ -2352,6 +2368,16 @@ def _review_teams(args: argparse.Namespace) -> int:
     return _with_vault_lock(lambda: resolve_diagnose.main([]))
 
 
+def _review_nfl_stadiums(args: argparse.Namespace) -> int:
+    from booth_review.nfl.stadium_draft import build_draft_rows, write_draft
+
+    rows = build_draft_rows(DataPaths.from_env(), Path("data/reference"))
+    target = write_draft(rows, args.out)
+    filled = sum(1 for row in rows if row["lat"])
+    print(f"wrote {target}: {len(rows)} rows, {filled} with coordinates")
+    return 0
+
+
 def _review_people(args: argparse.Namespace) -> int:
     return _with_vault_lock(lambda: people_review.main(["apply"] if args.apply else ["scan"]))
 
@@ -2463,6 +2489,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _review_sample(args)
             if args.review_command == "smw-diff":
                 return _review_smw_diff(args)
+            if args.review_command == "nfl-stadiums":
+                return _review_nfl_stadiums(args)
             if args.review_command == "smw-merge":
                 return _review_smw_merge(args)
             raise AssertionError(f"unknown review command: {args.review_command!r}")
