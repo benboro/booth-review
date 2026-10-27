@@ -12,18 +12,31 @@ from datetime import UTC, date, datetime
 import pytest
 
 from booth_review.job.attention import (
+    _LINE_RE,
     ATTENTION_TITLE,
+    REMINDER_506_NFL_URL,
+    REMINDER_AA_CFB_URL,
+    REMINDER_AA_NFL_URL,
+    REMINDER_ESPNPR_CFB_URL,
+    REMINDER_FOX_CFB_URL,
     AttentionItem,
     build_attention_body,
     cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
     error_type_name,
+    espnpr_week_unsaved,
     has_attention,
     missed_runs,
     nfl_506_missing,
     nfl_506_stale,
     push_failed,
+    reminder_506_nfl,
+    reminder_506_nfl_played,
+    reminder_aa_cfb,
+    reminder_aa_nfl,
+    reminder_espnpr,
+    reminder_fox_cfb,
     rr_backlog,
     rr_failed,
     rr_step_failed,
@@ -399,3 +412,93 @@ def test_espnpr_week_unsaved_rejects_a_label_that_is_not_a_week_number(label: st
 
 def test_step_failed_accepts_espnpr_gaps() -> None:
     assert step_failed("espnpr_gaps", "ValueError").line == "espnpr_gaps step failed: ValueError"
+
+
+# -- Phase 24 reminders ---------------------------------------------------------------
+
+
+def _passes(item: AttentionItem) -> None:
+    assert _LINE_RE.match(item.line)
+    assert len(item.line) <= 200
+    assert item.line in build_attention_body([item], generated_at=_NOW)
+
+
+def test_reminder_espnpr_line() -> None:
+    item = reminder_espnpr(2026, "10")
+    assert item.kind == "reminder_espnpr"
+    assert item.severity == "attention"
+    assert item.line == (
+        "reminder 2026 cfb week 10: save the espn pr commentators release "
+        f"{REMINDER_ESPNPR_CFB_URL}, then booth-review import espnpr"
+    )
+    assert (
+        REMINDER_ESPNPR_CFB_URL
+        == "https://espnpressroom.com/press-release-category/college-football/"
+    )
+    _passes(item)
+    assert not item.line.startswith(espnpr_week_unsaved(2026, "10").line[:30])
+
+
+@pytest.mark.parametrize(
+    ("builder", "kind", "url", "sport"),
+    [
+        (reminder_aa_cfb, "reminder_aa_cfb", REMINDER_AA_CFB_URL, "cfb"),
+        (reminder_fox_cfb, "reminder_fox_cfb", REMINDER_FOX_CFB_URL, "cfb"),
+        (reminder_aa_nfl, "reminder_aa_nfl", REMINDER_AA_NFL_URL, "nfl"),
+    ],
+)
+def test_reminder_link_builders(builder, kind: str, url: str, sport: str) -> None:
+    week = "10" if sport == "cfb" else "9"
+    item = builder(2026, week)
+    assert item.kind == kind
+    assert item.line.startswith(f"reminder 2026 {sport} week {week}: ")
+    assert item.line.endswith(url)
+    _passes(item)
+    assert builder(2026, "8").line != item.line  # the week label keeps each week distinct
+
+
+def test_reminder_506_nfl_line() -> None:
+    item = reminder_506_nfl(2026, "9")
+    assert item.kind == "reminder_506_nfl"
+    assert item.line == (
+        "reminder 2026 nfl week 9: save the 506 nfl week 9 page before thursday night "
+        f"{REMINDER_506_NFL_URL}, then booth-review import 506 --season 2026 --league nfl"
+    )
+    _passes(item)
+
+
+def test_reminder_506_nfl_played_lines() -> None:
+    missing = reminder_506_nfl_played(2026, "9", "missing", ["3", "5"])
+    stale = reminder_506_nfl_played(2026, "9", "stale", ["4"])
+    assert missing.kind == stale.kind == "reminder_506_nfl_played"
+    assert missing.line == (
+        "reminder 2026 nfl week 9: 506 nfl pages not saved for weeks 3, 5, "
+        f"save {REMINDER_506_NFL_URL}"
+    )
+    assert stale.line == (
+        "reminder 2026 nfl week 9: 506 nfl pages saved before their games finished for week 4, "
+        f"save {REMINDER_506_NFL_URL}"
+    )
+    for item in (missing, stale):
+        _passes(item)
+    assert missing.line != nfl_506_missing(2026, ["3", "5"]).line
+    assert stale.line != nfl_506_stale(2026, ["4"]).line
+
+
+def test_reminder_builders_reject_bad_input() -> None:
+    for builder in (reminder_espnpr, reminder_aa_cfb, reminder_fox_cfb):
+        for bad in ("x1", "", "100"):
+            with pytest.raises(ValueError):
+                builder(2026, bad)
+    for builder in (reminder_aa_nfl, reminder_506_nfl):
+        for bad in ("x1", "", "19"):
+            with pytest.raises(ValueError):
+                builder(2026, bad)
+    with pytest.raises(ValueError):
+        reminder_506_nfl_played(2026, "9", "late", ["3"])
+    with pytest.raises(ValueError):
+        reminder_506_nfl_played(2026, "9", "missing", [])
+    with pytest.raises(ValueError):
+        reminder_506_nfl_played(2026, "9", "missing", ["19"])
+    with pytest.raises(ValueError):
+        reminder_506_nfl_played(2026, "19", "missing", ["3"])

@@ -234,6 +234,103 @@ def espnpr_week_unsaved(season: int, label: str) -> AttentionItem:
     )
 
 
+# Phase 24 hand-save reminder links (fixed public pages; the job never fetches them).
+# The user approved these on 2026-10-26 and may change them later: each is one line.
+REMINDER_ESPNPR_CFB_URL = "https://espnpressroom.com/press-release-category/college-football/"
+REMINDER_AA_CFB_URL = "https://awfulannouncing.com/college-football/"
+REMINDER_AA_NFL_URL = "https://awfulannouncing.com/nfl/"
+REMINDER_FOX_CFB_URL = "https://www.foxsports.com/presspass"
+# Path only: 506's week URL (nfl.php?yr=..&wk=..) holds "?", "=" and "&", which the
+# whitelist rejects, so the line names the week in text instead.
+REMINDER_506_NFL_URL = "https://506sports.com/nfl.php"
+
+
+def _require_cfb_week(label: str) -> None:
+    if not _ESPNPR_LABEL_RE.match(label):
+        raise ValueError(f"label is not a college football week number: {label!r}")
+
+
+def _require_nfl_week(label: str) -> None:
+    if label not in _NFL_WEEK_LABELS:
+        raise ValueError(f"label is not a recognized NFL week label: {label!r}")
+
+
+def _reminder(kind: str, line: str) -> AttentionItem:
+    return AttentionItem(kind=kind, line=line, severity="attention")
+
+
+def reminder_espnpr(season: int, label: str) -> AttentionItem:
+    """Phase 24 D-13: save the ESPN Press Room commentators release for CFB week `label`."""
+    _require_cfb_week(label)
+    return _reminder(
+        "reminder_espnpr",
+        f"reminder {season} cfb week {label}: save the espn pr commentators release "
+        f"{REMINDER_ESPNPR_CFB_URL}, then booth-review import espnpr",
+    )
+
+
+def reminder_aa_cfb(season: int, label: str) -> AttentionItem:
+    """Phase 24 D-13: save the Awful Announcing college football schedule post."""
+    _require_cfb_week(label)
+    return _reminder(
+        "reminder_aa_cfb",
+        f"reminder {season} cfb week {label}: save the aa college football schedule post "
+        f"{REMINDER_AA_CFB_URL}",
+    )
+
+
+def reminder_fox_cfb(season: int, label: str) -> AttentionItem:
+    """Phase 24 D-13: save the FOX Sports press college football release."""
+    _require_cfb_week(label)
+    return _reminder(
+        "reminder_fox_cfb",
+        f"reminder {season} cfb week {label}: save the fox sports press release "
+        f"{REMINDER_FOX_CFB_URL}",
+    )
+
+
+def reminder_aa_nfl(season: int, label: str) -> AttentionItem:
+    """Phase 24 D-12: save the Awful Announcing NFL schedule post."""
+    _require_nfl_week(label)
+    return _reminder(
+        "reminder_aa_nfl",
+        f"reminder {season} nfl week {label}: save the aa nfl schedule post {REMINDER_AA_NFL_URL}",
+    )
+
+
+def reminder_506_nfl(season: int, label: str) -> AttentionItem:
+    """Phase 24 D-12: save the upcoming week's 506 NFL page before Thursday night."""
+    _require_nfl_week(label)
+    return _reminder(
+        "reminder_506_nfl",
+        f"reminder {season} nfl week {label}: save the 506 nfl week {label} page before "
+        f"thursday night {REMINDER_506_NFL_URL}, then booth-review import 506 "
+        f"--season {season} --league nfl",
+    )
+
+
+def reminder_506_nfl_played(
+    season: int, label: str, status: str, labels: list[str]
+) -> AttentionItem:
+    """Phase 24 D-12: already-played NFL weeks whose 506 page is still `missing` or `stale`.
+
+    `label` is the upcoming week (it keeps the line unique per week for the WR-07
+    compare); `labels` are the played weeks.
+    """
+    _require_nfl_week(label)
+    if status not in ("missing", "stale"):
+        raise ValueError(f"status must be missing or stale: {status!r}")
+    if not labels:
+        raise ValueError("labels must name at least one played week")
+    _require_nfl_labels(labels)
+    what = "not saved" if status == "missing" else "saved before their games finished"
+    return _reminder(
+        "reminder_506_nfl_played",
+        f"reminder {season} nfl week {label}: 506 nfl pages {what} for {_week_list(labels)}, "
+        f"save {REMINDER_506_NFL_URL}",
+    )
+
+
 def missed_runs(n: int) -> AttentionItem:
     """`n` scheduled slots passed with no attempt since the last attempt; this run caught up."""
     _require_non_negative("n", n)
