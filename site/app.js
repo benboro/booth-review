@@ -50,6 +50,7 @@ import { PHONE_QUERY } from './modules/breakpoints.js';
 import { etParts, etWallMinutes } from './modules/weekend.js';
 import { renderWeekend } from './modules/weekend-view.js';
 import { renderWeekendList } from './modules/weekend-list.js';
+import { renderWeekendMap } from './modules/weekend-map-view.js';
 import { cfbWeekendPasses, isUnplayedGame } from './modules/weekend-data.js';
 import {
   currentWeek,
@@ -285,10 +286,13 @@ function cfbActive() {
 
 /** The mounted This weekend view, so leaving the tab (or CFB) stops its clock timer. */
 let weekendInstance = null;
+/** Which renderer built `weekendInstance`: 'map' or 'timeline'. */
+let weekendKind = null;
 
 function destroyWeekend() {
   weekendInstance?.destroy();
   weekendInstance = null;
+  weekendKind = null;
 }
 
 /**
@@ -335,6 +339,10 @@ function renderWeekendPanel() {
     now: () => new Date(),
     passes,
     networksPicked,
+    wview: state.wview,
+    onView(v) {
+      setState({ wview: v === 'map' ? 'map' : null });
+    },
     onDay(iso) {
       setState({ day: dayToken(iso) });
     },
@@ -344,7 +352,9 @@ function renderWeekendPanel() {
       if (!target) return;
       setState({ week: target.number === current.number ? null : target.number });
     },
-    onOpen(game) {
+    onOpen(game, opener) {
+      // The panel returns focus to the focused element on close: the Map segment, not the chart.
+      if (opener && typeof opener.focus === 'function') opener.focus();
       const now = etParts(opts.now());
       const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
       if (game.block === 'scheduled') {
@@ -356,7 +366,16 @@ function renderWeekendPanel() {
     },
   };
   // A second mount on the same host replaces the first and keeps focus on the same control.
-  weekendInstance = (mobileMedia.matches ? renderWeekendList : renderWeekend)(weekendPanelEl, model, opts);
+  const kind = state.wview === 'map' ? 'map' : 'timeline';
+  // Leaving the map purges its Plotly node; map to map re-renders in place (no destroy between).
+  if (weekendKind === 'map' && kind !== 'map') destroyWeekend();
+  if (kind === 'map') {
+    if (weekendKind !== 'map') resetMapTap();
+    weekendInstance = renderWeekendMap(weekendPanelEl, model, opts);
+  } else {
+    weekendInstance = (mobileMedia.matches ? renderWeekendList : renderWeekend)(weekendPanelEl, model, opts);
+  }
+  weekendKind = kind;
   const inDay = games.filter((g) => g.date === day || g.date == null);
   const matching = pickActive ? inDay.filter((g) => passes(g) === true).length : inDay.length;
   return { matching, total: inDay.length };

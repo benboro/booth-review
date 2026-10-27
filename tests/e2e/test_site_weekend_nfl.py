@@ -421,3 +421,17 @@ def test_weekend_panel_uses_the_ap_kickoff(nfl_guarded_page: Page, open_nfl_app:
         strip.first.click()
         dialog.wait_for()
         assert dialog.locator("p").first.inner_text().endswith(", Time TBA")
+
+
+def test_map_switch_round_trip(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+    """Phase 24-09: the Map segment mounts the weekend map, sets wview=map and keeps the day;
+    Timeline unmounts it and drops wview."""
+    _open(nfl_guarded_page, open_nfl_app)
+    day = nfl_guarded_page.locator(".wk-day[aria-selected=true]").inner_text()
+    nfl_guarded_page.click('[data-wk-id="wview:map"]')
+    nfl_guarded_page.wait_for_function("location.search.includes('wview=map')")
+    assert nfl_guarded_page.locator(".wk-day[aria-selected=true]").inner_text() == day
+    nfl_guarded_page.click('[data-wk-id="wview:timeline"]')
+    nfl_guarded_page.wait_for_function("!location.search.includes('wview=map')")
+    nfl_guarded_page.wait_for_selector(".wk-row")
+    assert nfl_guarded_page.locator(".js-plotly-plot").count() == 0
