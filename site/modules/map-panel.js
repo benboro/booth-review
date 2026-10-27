@@ -30,11 +30,9 @@ import {
 } from './map-model.js';
 import { MAP_LAND, MAP_SPLAT, MAP_VENUE_DOT, PAGE_BG } from './palette.js';
 import { showVenueTooltip, hideTooltip } from './tooltip.js';
+import { createTapController } from './map-tap.js';
+import { createSplatLayer } from './map-splat-layer.js';
 
-/** A touch that moves farther than this is a drag, not a tap. */
-const TAP_SLOP_PX = 10;
-/** How long after the pointer lifts to wait for Plotly's click on a dot before calling it background. */
-const BACKGROUND_TAP_DELAY_MS = 120;
 const DOTS_TRACE = MAP_TRACE_NAMES.indexOf('venue-dots');
 const HOVER_HINT = 'Click to list these games';
 const TAP_HINT = 'Tap again to list these games';
@@ -48,20 +46,14 @@ let geometryPromise = null;
 let latest = null;
 let bound = false;
 let renderCount = 0;
-let pendingTapKey = null;
 /** The venue-dots ring arrays from the last draw, restored on unhover. */
 let baseRing = null;
-/** Venue dot / marker clicks seen so far; a tap that leaves it unchanged hit the background. */
-let venueClickCount = 0;
+/** The tap controller, created by initMapPanel; it owns the pending first tap and the click count. */
+let tap = null;
 /** app.js handles (Phase 11 D-05): the click filters the table through the same setState. */
 let handles = { setState: null, getState: null, getMatchedCount: null };
-/** Splat raster state (Phase 11 D-06): a render token coalesces paints, one image is live. */
-let splatToken = 0;
-let currentImageUrl = null;
-let currentImageSpec = null;
-let splatCount = 0;
-/** Tail of the queued raster layout changes (see serialLayout). */
-let layoutChain = Promise.resolve();
+/** The splat layer for #map-chart, created with the first draw (it owns the token, image and queue). */
+let splatLayer = null;
 let splatBroken = false;
 // A render that asked for a resize but was superseded hands the request to the next render.
 let pendingResize = false;
@@ -111,7 +103,7 @@ function syncMapZoom(gd, fromRelayout) {
 
 /** Clears the pending first tap so the next tap on a dot shows its tooltip again. */
 export function resetMapTap() {
-  pendingTapKey = null;
+  tap?.reset();
 }
 
 /** How many times the figure has been drawn (test hook). */
@@ -121,34 +113,7 @@ export function mapRenderCount() {
 
 /** How many splat rasters have been applied to the layout (test hook). */
 export function mapSplatCount() {
-  return splatCount;
-}
-
-/**
- * Runs one raster layout change after every earlier one has settled, so a slow older
- * relayout can never land on top of a newer render's layout. Failures do not break the chain.
- */
-function serialLayout(task) {
-  const run = layoutChain.then(task, task);
-  layoutChain = run.catch(() => {});
-  return run;
-}
-
-/** Drops the live raster (if any) from the layout and revokes its blob URL. */
-async function clearSplat(gd) {
-  splatToken += 1;
-  // Decided when the turn comes: an in-flight paint has registered its image by then.
-  await serialLayout(async () => {
-    if (!currentImageUrl) return;
-    const url = currentImageUrl;
-    currentImageUrl = null;
-    currentImageSpec = null;
-    try {
-      await window.Plotly.relayout(gd, { images: [] });
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  });
+  return splatLayer ? splatLayer.count : 0;
 }
 
 /** Draws the size-only key. */
@@ -161,8 +126,8 @@ function drawKey({ model, env }) {
   if (model.emptyAll) keyEl.hidden = true;
 }
 
-/** Falls back to the plain land fill after a failed raster; logs once, shows nothing. */
-function splatFailed(gd, err, theme, mine) {
+/** Logs once and redraws the key after a failed raster; the layer restores the plain land fill. */
+function splatFailed(err) {
   splatBroken = true;
   if (!splatWarned) {
     splatWarned = true;
@@ -172,95 +137,37 @@ function splatFailed(gd, err, theme, mine) {
     drawKey(latest);
     positionOverlays();
   }
-  currentImageSpec = null;
-  const url = currentImageUrl;
-  currentImageUrl = null;
-  // Queued behind every other layout change; a newer render (token) owns the image and the
-  // fill by the time this runs, so it only revokes the blob it was holding.
-  serialLayout(async () => {
-    if (mine === splatToken) {
-      try {
-        await window.Plotly.restyle(gd, { fill: 'toself', fillcolor: MAP_LAND[theme] }, [0]);
-      } catch {
-        // The relayout below still clears the image.
-      }
-      if (mine === splatToken) {
-        try {
-          await window.Plotly.relayout(gd, { images: [] });
-        } catch {
-          // Nothing more to fall back on.
-        }
-      }
-    }
-    if (url) URL.revokeObjectURL(url);
-  });
 }
 
-/**
- * Puts one painted raster into the layout. Runs in the serialized queue, so it starts only
- * after every earlier layout change has settled; a render that has overtaken it by then
- * (token) costs only its own blob. The image is registered as live before the relayout so
- * a clear or a newer paint that follows always sees and removes it; the previous image is
- * revoked once this one is in the layout.
- */
-async function applySplat(gd, mine, blob, theme) {
-  const url = URL.createObjectURL(blob);
-  if (mine !== splatToken) {
-    URL.revokeObjectURL(url);
-    return;
+/** The one splat layer, bound to #map-chart. */
+function layerFor(gd) {
+  if (!splatLayer) {
+    splatLayer = createSplatLayer(gd, {
+      imageSpec: splatImageSpec,
+      landFill: (theme) => MAP_LAND[theme],
+      onFail: splatFailed,
+    });
   }
-  const spec = splatImageSpec(url);
-  const prev = currentImageUrl;
-  const prevSpec = currentImageSpec;
-  currentImageUrl = url;
-  currentImageSpec = spec;
-  try {
-    await window.Plotly.relayout(gd, { images: [spec] });
-  } catch (err) {
-    if (currentImageUrl === url) {
-      currentImageUrl = prev;
-      currentImageSpec = prevSpec;
-    }
-    URL.revokeObjectURL(url);
-    if (mine === splatToken) splatFailed(gd, err, theme, mine);
-    return;
-  }
-  if (prev) URL.revokeObjectURL(prev);
-  // A newer render took over while the image went in: it re-applies or removes the image
-  // and sets the fill itself, so this one leaves the fill and the shared state alone.
-  if (mine !== splatToken) return;
-  try {
-    await window.Plotly.restyle(gd, { fill: 'none' }, [0]);
-  } catch (err) {
-    if (mine === splatToken) splatFailed(gd, err, theme, mine);
-    return;
-  }
-  if (mine === splatToken) splatCount += 1;
+  return splatLayer;
 }
 
-/**
- * Paints the splat behind one requestAnimationFrame; the render token discards a paint a
- * newer render has overtaken, and the previous image stays in place until the new one is in.
- */
+/** Paints the splat for one render through the layer. */
 function scheduleSplat(args, geometry) {
   const gd = el('map-chart');
   const { model, env } = args;
-  const mine = ++splatToken;
-  requestAnimationFrame(async () => {
-    if (mine !== splatToken || latest !== args) return;
-    try {
+  layerFor(gd).schedule(
+    async () => {
       const { blob } = await paintSplat({
         venueModel: model.venueModel,
         states: geometry,
         theme: env.theme,
         cell: env.mobile ? MAP_SPLAT.cell.phone : MAP_SPLAT.cell.desktop,
       });
-      if (mine !== splatToken) return;
-      await serialLayout(() => applySplat(gd, mine, blob, env.theme));
-    } catch (err) {
-      if (mine === splatToken) splatFailed(gd, err, env.theme);
-    }
-  });
+      return blob;
+    },
+    () => latest === args,
+    env.theme,
+  );
 }
 
 function loadGeometry() {
@@ -466,69 +373,20 @@ function applyVenue(key) {
 }
 
 function onVenueClick(key, ev) {
-  venueClickCount += 1;
-  if (!latest) return;
-  if (!hoverNone()) {
-    applyVenue(key);
-    return;
-  }
-  // The touch pointerdown is cancelled (initMapPanel), so a tap reaches Plotly once, from
-  // its touch events. A compatibility mouse click that still arrives says it came from
-  // touch; dropping it by its source, not by time, means no queue order or delay lets it
-  // count as a second tap, and a real mouse's clicks are never held back.
-  const src = ev?.event;
-  if (src?.type?.startsWith('mouse') && src.sourceCapabilities?.firesTouchEvents) return;
-  if (key !== pendingTapKey) {
-    pendingTapKey = key;
-    cardAt(key, ev, TAP_HINT);
-    return;
-  }
-  applyVenue(key);
+  tap?.onVenueClick(key, ev);
 }
 
-/** Wires the outside-tap and map-background-tap listeners once. */
+/** Creates the tap controller on #map-chart (outside-tap and background-tap listeners). */
 export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
   handles = { setState, getState, getMatchedCount };
-  /** The touch in progress inside the map: where it began and how many venue clicks preceded it. */
-  let down = null;
-  /** Settles the last tap's background check now; null when none is waiting. */
-  let settleBackground = null;
-  document.addEventListener('pointerdown', (ev) => {
-    // Input arrives in order, so the last tap's Plotly click (if any) is in by now: settle
-    // its background check before this tap, or a tap inside the wait would find the old
-    // venue still armed and filter it.
-    settleBackground?.();
-    if (!ev.target.closest('#map-chart')) {
-      down = null;
-      if (pendingTapKey != null) {
-        resetMapTap();
-        hideTooltip();
-      }
-      return;
-    }
-    // Cancelling a touch pointerdown stops the browser's compatibility mouse events (Pointer
-    // Events), so Plotly sees each tap once. Scrolling and pinch follow touch-action instead.
-    if (ev.pointerType === 'touch') ev.preventDefault();
-    down = hoverNone() ? { x: ev.clientX, y: ev.clientY, clicks: venueClickCount } : null;
-  });
-  document.addEventListener('pointercancel', () => {
-    down = null;
-  });
-  document.addEventListener('pointerup', (ev) => {
-    const start = down;
-    down = null;
-    if (!start || Math.hypot(ev.clientX - start.x, ev.clientY - start.y) > TAP_SLOP_PX) return;
-    // UI-SPEC: a tap on the map that lands on no dot or marker clears only the card. Plotly
-    // reports a hit through plotly_click a moment after the pointer lifts, so look afterwards.
-    const settle = () => {
-      clearTimeout(timer);
-      if (settleBackground === settle) settleBackground = null;
-      if (venueClickCount !== start.clicks) return;
-      resetMapTap();
-      hideTooltip();
-    };
-    const timer = setTimeout(settle, BACKGROUND_TAP_DELAY_MS);
-    settleBackground = settle;
+  tap?.destroy();
+  tap = createTapController({
+    container: el('map-chart'),
+    isTouchOnly: hoverNone,
+    isReady: () => Boolean(latest),
+    onShowCard: (key, ev) => cardAt(key, ev, TAP_HINT),
+    onOpen: (key) => applyVenue(key),
+    onClear: hideTooltip,
   });
 }
 
@@ -577,8 +435,8 @@ export async function renderMapPanel(args) {
       // D-21: the plot size in pixels, so edge markers can be spaced by label height.
       plot: { w: gd.clientWidth, h: gd.clientHeight },
       // The land stays filled until the raster that replaces it is in the layout.
-      splat: wantSplat && currentImageSpec !== null,
-      images: wantSplat && currentImageSpec ? [currentImageSpec] : [],
+      splat: wantSplat && splatLayer?.currentSpec != null,
+      images: wantSplat && splatLayer?.currentSpec ? [splatLayer.currentSpec] : [],
     });
     const dots = figure.traces[DOTS_TRACE];
     baseRing = { width: dots.marker.line.width, color: dots.marker.line.color };
@@ -619,7 +477,7 @@ export async function renderMapPanel(args) {
       }
     }
     if (wantSplat) scheduleSplat(args, geometry);
-    else await clearSplat(gd);
+    else await layerFor(gd).clear();
   } catch {
     // Plotly can reject (a zero-width container, say): show the same note as a
     // failed geometry import rather than leave an empty map and an unhandled
