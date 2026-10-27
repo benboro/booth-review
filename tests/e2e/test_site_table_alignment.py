@@ -226,7 +226,7 @@ def test_nfl_count_line_matches_the_cfb_count(
         "/rated of/.test(document.getElementById('nfl-summary').textContent)"
     )
     got = nfl_guarded_page.evaluate(_FONT_JS, "#nfl-summary")
-    assert "Crimson Text" in got["cfb"][0]
+    assert "Latin Modern Demi" in got["cfb"][0]
     assert got["line"] == got["cfb"]
 
 
@@ -238,7 +238,7 @@ def test_mlb_count_line_matches_the_cfb_count(
         "/rated of/.test(document.getElementById('mlb-summary').textContent)"
     )
     got = mlb_guarded_page.evaluate(_FONT_JS, "#mlb-summary")
-    assert "Crimson Text" in got["cfb"][0]
+    assert "Latin Modern Demi" in got["cfb"][0]
     assert got["line"] == got["cfb"]
 
 

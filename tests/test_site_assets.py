@@ -78,3 +78,27 @@ def test_gust_licence_present_and_pinned(name: str) -> None:
 def test_lm_subset_size_ceiling() -> None:
     size = (FONT_DIR / "lm-roman-demi-latin-600-normal.woff2").stat().st_size
     assert size <= LM_SUBSET_MAX_BYTES
+
+
+def test_no_crimson_left() -> None:
+    """The type swap is complete: no reference to the old serif remains (Plotly's bundle excluded,
+    since it carries the CSS colour name)."""
+    needle = "crim" + "son"  # split so this file does not match itself
+    offenders: list[str] = []
+    for top in ("site", "src", "tests"):
+        for path in (REPO_ROOT / top).rglob("*"):
+            if (
+                path == Path(__file__)
+                or not path.is_file()
+                or "__pycache__" in path.parts
+                or "vendor" in path.parts
+            ):
+                continue
+            if path.suffix in {".woff2", ".png", ".pyc", ".svg", ".jpg"}:
+                continue
+            if (
+                needle in path.name.lower()
+                or needle in path.read_text(encoding="utf-8", errors="ignore").lower()
+            ):
+                offenders.append(path.relative_to(REPO_ROOT).as_posix())
+    assert not offenders, offenders

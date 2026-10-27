@@ -74,11 +74,11 @@ def test_os_dark_still_renders_light(opened: Callable[[str], Page], which: str) 
     page = opened(which)
     assert page.evaluate("matchMedia('(prefers-color-scheme: dark)').matches") is True
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
-    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(251, 249, 245)"
+    assert page.evaluate("getComputedStyle(document.body).backgroundColor") == "rgb(245, 247, 246)"
     assert page.evaluate("getComputedStyle(document.documentElement).colorScheme") == "light"
     assert page.evaluate(_NO_DARK_RULES_JS) == []
     if which in ("methodology", "coverage"):
-        assert page.evaluate("document.fonts.check('600 20px \"Crimson Text\"')") is True
+        assert page.evaluate("document.fonts.check('600 22px \"Latin Modern Demi\"')") is True
     # The guard fixture fails the test on teardown for any off-origin request or CSP error.
 
 

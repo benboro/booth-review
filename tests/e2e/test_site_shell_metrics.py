@@ -17,7 +17,7 @@ pytestmark = pytest.mark.e2e
 
 WIDTHS = (1440, 1104, 1024, 768, 390)
 FONT_FILES = {
-    "crimson-text-latin-600-normal.woff2",
+    "lm-roman-demi-latin-600-normal.woff2",
     "roboto-latin-400-normal.woff2",
     "roboto-latin-600-normal.woff2",
     "roboto-condensed-latin-400-normal.woff2",
@@ -450,7 +450,7 @@ _WALK = """() => {
   return out;
 }"""
 
-ALLOWED_SIZES = {12.0, 14.0, 20.0, 24.0}
+ALLOWED_SIZES = {12.0, 14.0, 20.0, 22.0, 27.0}
 ALLOWED_WEIGHTS = {"400", "600"}
 
 
@@ -459,7 +459,7 @@ ALLOWED_WEIGHTS = {"400", "600"}
 def test_type_scale_weights_and_requests_across_every_view(
     both_guarded_page: Page, both_site_url: str, sport_key: str, width: int
 ) -> None:
-    """V3: no text below 12px, only 12/14/20/24 (plus 16px inputs in the phone sheet), only
+    """V3: no text below 12px, only 12/14/20/22/27 (plus 16px inputs in the phone sheet), only
     weights 400 and 600, only the four font files requested, and nothing off-origin."""
     page = both_guarded_page
     sport = SPORT_BY_KEY[sport_key]

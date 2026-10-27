@@ -90,7 +90,7 @@ _COVERAGE_SHA256 = "3074e9ae1352583f8aaa11ff48cafe46a3ec74007a33811216c06469e3ef
 # approved by the user at plan 12 sign-off ("Fix both items").
 # Re-pinned at Phase 18 Plan 13 (F1): the week label column moves the index only through its
 # site-data cache-bust hash. Re-pinned again for F7's scheduled crew columns, the same way.
-# Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces Crimson (1 changed line).
+# Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces the old serif (1 changed line).
 _INDEX_PRE_PHASE_SHA256 = "48d3fd14d4c7be4dc8159a460d584c9f29e2fc6bf71f247d5c1c231a8a8ed238"
 
 _CANARY = "invented-nfl-canary-key-0001"
