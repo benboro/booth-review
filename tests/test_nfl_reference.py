@@ -300,4 +300,16 @@ def test_stadium_locations_reject_bad_rows(ref: Path, line: str, line_no: int) -
 
 
 def test_shipped_stadium_locations_table_loads() -> None:
-    assert load_nfl_stadium_locations(Path(__file__).parent.parent / "data" / "reference") == {}
+    """The user-confirmed table parses, cites Wikipedia per row and carries its approval note."""
+    ref_dir = Path(__file__).parent.parent / "data" / "reference"
+    locations = load_nfl_stadium_locations(ref_dir)
+    assert locations
+    for stadium_id, row in locations.items():
+        assert row.source_url.startswith("https://en.wikipedia.org/wiki/"), stadium_id
+        if row.country == "US":
+            assert len(row.state) == 2, stadium_id
+            assert row.state.isupper(), stadium_id
+    lines = (ref_dir / "nfl_stadium_locations.csv").read_text(encoding="utf-8").splitlines()[1:]
+    assert len(lines) == len(locations)
+    assert all(line.rsplit(",", 1)[1].startswith("approved ") for line in lines)
+    assert [line.split(",", 1)[0] for line in lines] == sorted(locations)

@@ -94,7 +94,7 @@ NFL_WIKIPEDIA_STADIUM_PAGES: tuple[tuple[str, str], ...] = (
     ("MIA00", "Hard_Rock_Stadium"),
     ("MIN01", "U.S._Bank_Stadium"),
     ("MUN01", "Allianz_Arena"),
-    ("NAS00", "Nissan_Stadium"),
+    ("NAS00", "Nissan_Stadium_(Nashville)"),
     ("NOR00", "Caesars_Superdome"),
     ("NYC01", "MetLife_Stadium"),
     ("PAR00", "Stade_de_France"),

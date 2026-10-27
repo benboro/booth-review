@@ -1,1 +1,45 @@
 stadium_id,name,city,state,country,lat,lon,source_url,note
+ATL97,Mercedes-Benz Stadium,Atlanta,GA,US,33.7556,-84.4000,https://en.wikipedia.org/wiki/Mercedes-Benz_Stadium,approved 2026-10-27
+BAL00,M&T Bank Stadium,Baltimore,MD,US,39.2781,-76.6228,https://en.wikipedia.org/wiki/M%26T_Bank_Stadium,approved 2026-10-27
+BER00,Olympiastadion,Berlin,,DE,52.5147,13.2394,https://en.wikipedia.org/wiki/Olympiastadion_(Berlin),approved 2026-10-27
+BOS00,Gillette Stadium,Foxborough,MA,US,42.0910,-71.2640,https://en.wikipedia.org/wiki/Gillette_Stadium,approved 2026-10-27
+BUF00,Highmark Stadium,Orchard Park,NY,US,42.7731,-78.7922,https://en.wikipedia.org/wiki/Highmark_Stadium_(New_York),approved 2026-10-27
+CAR00,Bank of America Stadium,Charlotte,NC,US,35.2258,-80.8528,https://en.wikipedia.org/wiki/Bank_of_America_Stadium,approved 2026-10-27
+CHI98,Soldier Field,Chicago,IL,US,41.8623,-87.6167,https://en.wikipedia.org/wiki/Soldier_Field,approved 2026-10-27
+CIN00,Paycor Stadium,Cincinnati,OH,US,39.0950,-84.5160,https://en.wikipedia.org/wiki/Paycor_Stadium,approved 2026-10-27
+CLE00,Huntington Bank Field,Cleveland,OH,US,41.5061,-81.6994,https://en.wikipedia.org/wiki/Huntington_Bank_Field,approved 2026-10-27
+DAL00,AT&T Stadium,Arlington,TX,US,32.7478,-97.0928,https://en.wikipedia.org/wiki/AT%26T_Stadium,approved 2026-10-27
+DEN00,Empower Field at Mile High,Denver,CO,US,39.7439,-105.0200,https://en.wikipedia.org/wiki/Empower_Field_at_Mile_High,approved 2026-10-27
+DET00,Ford Field,Detroit,MI,US,42.3400,-83.0456,https://en.wikipedia.org/wiki/Ford_Field,approved 2026-10-27
+DUB00,Croke Park,Dublin,,IE,53.3608,-6.2511,https://en.wikipedia.org/wiki/Croke_Park,approved 2026-10-27
+FRA00,Deutsche Bank Park,Frankfurt,,DE,50.0681,8.6458,https://en.wikipedia.org/wiki/Waldstadion_(Frankfurt),approved 2026-10-27
+GER00,Allianz Arena,Munich,,DE,48.2188,11.6248,https://en.wikipedia.org/wiki/Allianz_Arena,approved 2026-10-27
+GNB00,Lambeau Field,Green Bay,WI,US,44.5014,-88.0622,https://en.wikipedia.org/wiki/Lambeau_Field,approved 2026-10-27
+HOU00,NRG Stadium,Houston,TX,US,29.6847,-95.4108,https://en.wikipedia.org/wiki/NRG_Stadium,approved 2026-10-27
+IND00,Lucas Oil Stadium,Indianapolis,IN,US,39.7601,-86.1638,https://en.wikipedia.org/wiki/Lucas_Oil_Stadium,approved 2026-10-27
+JAX00,EverBank Stadium,Jacksonville,FL,US,30.3239,-81.6375,https://en.wikipedia.org/wiki/EverBank_Stadium,approved 2026-10-27
+KAN00,GEHA Field at Arrowhead Stadium,Kansas City,MO,US,39.0489,-94.4839,https://en.wikipedia.org/wiki/Arrowhead_Stadium,approved 2026-10-27
+LAX01,SoFi Stadium,Inglewood,CA,US,33.9530,-118.3390,https://en.wikipedia.org/wiki/SoFi_Stadium,approved 2026-10-27
+LON00,Wembley Stadium,London,,GB,51.5556,-0.2794,https://en.wikipedia.org/wiki/Wembley_Stadium,approved 2026-10-27
+LON01,Twickenham Stadium,London,,GB,51.4558,-0.3414,https://en.wikipedia.org/wiki/Twickenham_Stadium,approved 2026-10-27
+LON02,Tottenham Hotspur Stadium,London,,GB,51.6044,-0.0664,https://en.wikipedia.org/wiki/Tottenham_Hotspur_Stadium,approved 2026-10-27
+MAD01,Santiago Bernabeu Stadium,Madrid,,ES,40.4531,-3.6883,https://en.wikipedia.org/wiki/Santiago_Bernab%C3%A9u_Stadium,approved 2026-10-27
+MEL00,Melbourne Cricket Ground,Melbourne,,AU,-37.8200,144.9833,https://en.wikipedia.org/wiki/Melbourne_Cricket_Ground,approved 2026-10-27
+MEX00,Estadio Azteca,Mexico City,,MX,19.3030,-99.1505,https://en.wikipedia.org/wiki/Estadio_Azteca,approved 2026-10-27
+MIA00,Hard Rock Stadium,Miami Gardens,FL,US,25.9581,-80.2389,https://en.wikipedia.org/wiki/Hard_Rock_Stadium,approved 2026-10-27
+MIN01,U.S. Bank Stadium,Minneapolis,MN,US,44.9740,-93.2580,https://en.wikipedia.org/wiki/U.S._Bank_Stadium,approved 2026-10-27
+MUN01,Allianz Arena,Munich,,DE,48.2188,11.6248,https://en.wikipedia.org/wiki/Allianz_Arena,approved 2026-10-27
+NAS00,Nissan Stadium,Nashville,TN,US,36.1664,-86.7714,https://en.wikipedia.org/wiki/Nissan_Stadium_(Nashville),approved 2026-10-27
+NOR00,Caesars Superdome,New Orleans,LA,US,29.9508,-90.0811,https://en.wikipedia.org/wiki/Caesars_Superdome,approved 2026-10-27
+NYC01,MetLife Stadium,East Rutherford,NJ,US,40.8136,-74.0744,https://en.wikipedia.org/wiki/MetLife_Stadium,approved 2026-10-27
+PAR00,Stade de France,Saint-Denis,,FR,48.9244,2.3600,https://en.wikipedia.org/wiki/Stade_de_France,approved 2026-10-27
+PHI00,Lincoln Financial Field,Philadelphia,PA,US,39.9008,-75.1675,https://en.wikipedia.org/wiki/Lincoln_Financial_Field,approved 2026-10-27
+PHO00,State Farm Stadium,Glendale,AZ,US,33.5280,-112.2630,https://en.wikipedia.org/wiki/State_Farm_Stadium,approved 2026-10-27
+PIT00,Acrisure Stadium,Pittsburgh,PA,US,40.4467,-80.0158,https://en.wikipedia.org/wiki/Acrisure_Stadium,approved 2026-10-27
+RIO00,Maracana Stadium,Rio de Janeiro,,BR,-22.9122,-43.2303,https://en.wikipedia.org/wiki/Maracan%C3%A3_Stadium,approved 2026-10-27
+SAO00,Arena Corinthians,Sao Paulo,,BR,-23.5453,-46.4742,https://en.wikipedia.org/wiki/Arena_Corinthians,approved 2026-10-27
+SEA00,Lumen Field,Seattle,WA,US,47.5952,-122.3316,https://en.wikipedia.org/wiki/Lumen_Field,approved 2026-10-27
+SFO01,Levi's Stadium,Santa Clara,CA,US,37.4030,-121.9700,https://en.wikipedia.org/wiki/Levi%27s_Stadium,approved 2026-10-27
+TAM00,Raymond James Stadium,Tampa,FL,US,27.9758,-82.5033,https://en.wikipedia.org/wiki/Raymond_James_Stadium,approved 2026-10-27
+VEG00,Allegiant Stadium,Paradise,NV,US,36.0906,-115.1839,https://en.wikipedia.org/wiki/Allegiant_Stadium,approved 2026-10-27
+WAS00,Northwest Stadium,Landover,MD,US,38.9078,-76.8644,https://en.wikipedia.org/wiki/Northwest_Stadium,approved 2026-10-27
