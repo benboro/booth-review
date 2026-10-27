@@ -85,8 +85,9 @@ records only where the site settles or applies them.
   narrower than the module (the 120 cap, or floor rounding) stretches its lane to the
   module edge and runs the hour ticks on to the lane's end or midnight, so the rules never
   stop mid-module; a longer day keeps its scroll width (v2.1 polish, 18-UI-REVIEW 9, 11).
-- A day tab's count box keeps a min-width of one ch per character of the day's full count,
-  so the count a pick adds never widens the tab or moves the next one. The legend chip row
+- A day tab always shows a count: the day's games with no pick, its matches under a pick
+  (Phase 24 sign-off). The count box keeps a min-width of one ch per character of the day's
+  full count, so a pick's count never widens the tab or moves the next one. The legend chip row
   and the Matched games section hide under This weekend, as on Crews and the NFL page, and
   on the phone the empty chart-tools row goes too (v2.1 polish, 18-UI-REVIEW 4, 5, 7, 10).
 - On a phone the Map also drops the chart-tools row (its concealed scatter controls and

@@ -237,10 +237,13 @@ export function buildControls(ctx, api) {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     tab.append(document.createTextNode(dayLabel(d)));
-    // The count box is always at least as wide as the day's full count (one ch per character,
-    // tabular digits), so a pick's count never widens the tab or shifts the next one
-    // (18-UI-REVIEW item 5). The leading space lives inside the box.
-    const count = el('span', 'wk-count', ctx.anyPick ? ` (${ctx.countFor(d)})` : '');
+    // The count always shows: the day's games with no pick, its matches under a pick (user,
+    // Phase 24 sign-off, so the labels never sit beside a blank box). The box is always at
+    // least as wide as the day's full count (one ch per character, tabular digits), so a pick's
+    // count never widens the tab or shifts the next one (18-UI-REVIEW item 5). The leading
+    // space lives inside the box.
+    const shown = ctx.anyPick ? ctx.countFor(d) : ctx.totalFor(d);
+    const count = el('span', 'wk-count', ` (${shown})`);
     count.style.minWidth = `${` (${ctx.totalFor(d)})`.length}ch`;
     tab.append(count);
     tab.addEventListener('click', () => api.setDay(d));

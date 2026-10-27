@@ -181,8 +181,8 @@ def test_opening_the_tab_makes_no_request(
 def test_day_tabs_and_default_day(wk: Callable[..., Page]) -> None:
     page = wk()
     tabs = page.locator(".wk-days .wk-day")
-    assert tabs.all_inner_texts() == ["Fri. Oct. 2", "Sat. Oct. 3"]
-    assert page.locator(".wk-day[aria-selected=true]").inner_text() == "Sat. Oct. 3"
+    assert tabs.all_inner_texts() == ["Fri. Oct. 2 (1)", "Sat. Oct. 3 (12)"]
+    assert page.locator(".wk-day[aria-selected=true]").inner_text() == "Sat. Oct. 3 (12)"
     page.locator(".wk-day", has_text="Fri.").click()
     assert _state(page)["day"] == "fri"
     assert _url(page) == "?view=weekend&day=fri"
