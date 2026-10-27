@@ -212,6 +212,10 @@ DUBLIN = {"name": "Aviva Stadium", "city": "Dublin", "state": None, "country": "
           "lat": 53.3352, "lon": -6.2285}  # fmt: skip
 MADRID = {"name": "Santiago Bernabeu", "city": "Madrid", "state": None, "country": "ES",
           "lat": 40.4531, "lon": -3.6883}  # fmt: skip
+MELBOURNE = {"name": "Melbourne Cricket Ground", "city": "Melbourne", "state": None,
+             "country": "AU", "lat": -37.82, "lon": 144.98}  # fmt: skip
+SYDNEY = {"name": "Accor Stadium", "city": "Sydney", "state": None, "country": "AU",
+          "lat": -33.85, "lon": 151.06}  # fmt: skip
 NAMELESS = {"name": None, "city": None, "state": None, "country": "BR",
             "lat": -23.5, "lon": -46.6}  # fmt: skip
 NO_POINT = {"name": "Mystery Field", "city": "Nowhere", "state": "ZZ", "country": "US",
@@ -457,6 +461,49 @@ def test_edge_marker_boxes_never_intersect_at_390(map_page: Page) -> None:
         for b in boxes[i + 1 :]:
             apart = a[4] <= b[2] or b[4] <= a[2] or a[5] <= b[3] or b[5] <= a[3]
             assert apart, (a, b)
+
+
+def test_edge_label_is_the_venue_city_not_the_country_anchor(map_page: Page) -> None:
+    """The AU anchor is labelled Sydney for the CFB game; a Melbourne game says Melbourne, and a
+    Sydney plus a Melbourne game on one day make two sites (the label is the grouping key)."""
+    out = _model(map_page, [_game("mel", MELBOURNE)])
+    assert [(m["key"], m["label"]) for m in out["markers"]] == [("mel", "Melbourne")]
+    both = _model(map_page, [_game("mel", MELBOURNE), _game("syd", SYDNEY)])
+    labels = {m["key"]: m["label"] for m in both["markers"]}
+    assert labels == {"mel": "Melbourne", "syd": "Sydney"}
+    assert sorted(m["text"] for m in both["markers"] if m["text"]) == ["Melbourne", "Sydney"]
+
+
+def test_a_rejected_paint_after_a_good_one_restores_the_land_fill(map_page: Page) -> None:
+    """A paint that rejects (not one whose relayout fails) must run the fallback: land fill back
+    and the old raster dropped, instead of the old image under the new dots with fill 'none'."""
+    out = map_page.evaluate(
+        """async () => {
+          const { createSplatLayer } = await import('./modules/map-splat-layer.js');
+          const calls = [];
+          const real = window.Plotly;
+          window.Plotly = {
+            relayout: async (_gd, u) => { calls.push(['relayout', String(u.images.length)]); },
+            restyle: async (_gd, u) => { calls.push(['restyle', u.fill]); },
+          };
+          try {
+            const layer = createSplatLayer({}, {
+              imageSpec: (url) => ({ source: url }), landFill: () => '#eee', onFail: () => {},
+            });
+            const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+            layer.schedule(async () => new Blob(['x']), () => true, 'light');
+            await frame(); await frame(); await new Promise((r) => setTimeout(r, 50));
+            calls.length = 0;
+            layer.schedule(async () => { throw new Error('paint'); }, () => true, 'light');
+            await frame(); await frame(); await new Promise((r) => setTimeout(r, 50));
+            return { calls, spec: layer.currentSpec };
+          } finally {
+            window.Plotly = real;
+          }
+        }"""
+    )
+    assert out["calls"] == [["restyle", "toself"], ["relayout", "0"]]
+    assert out["spec"] is None
 
 
 # -- figure builder ------------------------------------------------------------------------

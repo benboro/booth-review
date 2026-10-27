@@ -268,7 +268,7 @@ export function buildWeekendMapModel(env) {
     const at = placeVenue(venue);
     const symbol = symbolOf(game);
     if (at.abroad || at.edge) {
-      const label = at.label ?? venue.city ?? venue.name ?? null;
+      const label = venue.city ?? at.label ?? venue.name ?? null;
       if (label == null) {
         lost.push(game);
         continue;

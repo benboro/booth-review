@@ -176,13 +176,15 @@ def test_the_gb_games_are_edge_markers_labelled_by_city(
     _open(page, open_nfl_app, theme=theme)
     t = _traces(page)
     assert sorted(t["markers"]["keys"]) == sorted([LONDON_NIGHT, LONDON_EARLY])
-    assert [x for x in t["markers"]["text"] if x] == ["London"]  # one label per site
+    assert [x for x in t["markers"]["text"] if x] == [
+        "Londonish"
+    ]  # the venue city (fixture), one label per site
     assert sorted(t["dots"]["keys"] + t["dots-faded"]["keys"]) == sorted(
         [*US_DOTS, "nfl:upcoming:8"]
     )
     # Hover and click work on an edge marker.
     _hover(page, LONDON_NIGHT)
-    assert "London" in page.locator("#chart-tooltip").inner_text()
+    assert "Londonish" in page.locator("#chart-tooltip").inner_text()
     at = _point(page, LONDON_NIGHT)
     page.mouse.click(at["x"], at["y"])
     expect(page.locator("dialog[open]")).to_be_visible()
@@ -214,7 +216,7 @@ def test_no_two_edge_marker_or_label_boxes_intersect_at_390px(
     boxes = page.evaluate(_MARKER_BOXES)
     symbols, labels = boxes["symbols"], boxes["labels"]
     assert len(symbols) == 2
-    assert [label["text"] for label in labels] == ["London"]
+    assert [label["text"] for label in labels] == ["Londonish"]
     for i, a in enumerate(symbols):
         for b in symbols[i + 1 :]:
             assert not _intersect(a, b), (a, b)
@@ -335,3 +337,15 @@ def test_view_and_switch_make_no_request(nfl_guarded_page: Page, open_nfl_app: O
     page.wait_for_selector(".wk-grid")
     static = ("/logos/", "/vendor/")
     assert [u for u in seen if not any(m in u for m in static) and not u.startswith("blob:")] == []
+
+
+def test_nfl_map_to_timeline_keeps_focus_on_the_timeline_segment(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    page.locator('[data-wk-id="wview:timeline"]').focus()
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".wk-map-box", state="detached", timeout=5000)
+    assert page.evaluate("document.activeElement?.dataset?.wkId") == "wview:timeline"
