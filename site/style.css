@@ -1,11 +1,11 @@
 /* booth-review — hand-written CSS. No remote imports; fonts are self-hosted same-origin woff2 files under fonts/. */
 
 @font-face {
-  font-family: "Crimson Text";
+  font-family: "Latin Modern Demi";
   font-style: normal;
   font-weight: 600;
   font-display: swap;
-  src: url("fonts/crimson-text-latin-600-normal.woff2") format("woff2");
+  src: url("fonts/lm-roman-demi-latin-600-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Roboto";
@@ -29,6 +29,10 @@
   src: url("fonts/roboto-condensed-latin-400-normal.woff2") format("woff2");
 }
 
+html {
+  font-synthesis: none;
+}
+
 /* Phone breakpoint: 480px and under; desktop 481px and up (mirrors site/modules/breakpoints.js). */
 :root {
   color-scheme: light;
@@ -44,13 +48,13 @@
   --space-2xl: 48px;
   --space-3xl: 64px;
 
-  --serif: "Crimson Text", Georgia, serif;
+  --serif: "Latin Modern Demi", Georgia, serif;
   --sans: "Roboto", Arial, sans-serif;
   --plot: "Roboto Condensed", Arial, sans-serif;
   --font-caption: 12px/1.4 var(--sans);
   --font-body: 14px/1.5 var(--sans);
-  --font-heading: 600 20px/1.2 var(--serif);
-  --font-display: 600 24px/1.1 var(--serif);
+  --font-heading: 600 22px/1.2 var(--serif);
+  --font-display: 600 27px/1.1 var(--serif);
   --weight-regular: 400;
   --weight-semibold: 600;
 
@@ -67,7 +71,7 @@
   --legend-none: #687270;
   --error: #B3261E;
   /* Game-type icon colors (notes-4 A1/A2a follow-up): trophy = gold, bowl =
-     bronze/copper, rivalry = rose crimson. Each reaches 3:1 non-text
+     bronze/copper, rivalry = deep rose. Each reaches 3:1 non-text
      contrast (WCAG 1.4.11) against --bg and --surface. */
   --game-playoff: #A37800;
   --game-bowl: #A8501C;
@@ -5707,7 +5711,7 @@ tr.is-matched > :first-child {
     padding-inline: var(--space-md);
   }
 
-  /* 13-14: at 390px "The Broadcast Ledger" at the 24px display size (214px) plus the
+  /* 13-14: at 390px "The Broadcast Ledger" at the 27px display size plus the
      sport switch (141px at 8px button padding) and the theme slot cannot share one
      row in 358px, and dropping "The" alone still left it 11px over. The title drops to
      20px on phone (177px, "The" kept) and the switch buttons lose half their side

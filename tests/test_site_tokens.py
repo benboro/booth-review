@@ -39,7 +39,7 @@ REMOVED = (
     "--font-label",
 )
 SIZE_TOKENS = {"--font-caption", "--font-body", "--font-heading", "--font-display"}
-ALLOWED_SIZES = {"12px", "14px", "20px", "24px"}
+ALLOWED_SIZES = {"12px", "14px", "20px", "22px", "27px"}
 
 
 def _css() -> str:
@@ -110,7 +110,7 @@ def test_fonts_are_self_hosted() -> None:
         "roboto-condensed-latin-400-normal",
         "roboto-latin-400-normal",
         "roboto-latin-600-normal",
-        "crimson-text-latin-600-normal",
+        "lm-roman-demi-latin-600-normal",
     ):
         assert f'url("fonts/{name}.woff2") format("woff2")' in css
 

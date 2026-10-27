@@ -67,12 +67,13 @@ RT23_TEXT = (
     "Their use does not imply endorsement, and they are not covered by this site's MIT license."
 )
 RT24_TEXT = (
-    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), Roboto "
+    "Type: Latin Modern (copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+    "used under the GUST Font License; Roboto "
     "(copyright 2011 The Roboto Project Authors) and Roboto Condensed "
     "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
 )
 RT24_HREFS = [
-    "fonts/OFL-crimson-text.txt",
+    "fonts/GUST-FONT-LICENSE.txt",
     "fonts/OFL-roboto.txt",
     "fonts/OFL-roboto-condensed.txt",
 ]

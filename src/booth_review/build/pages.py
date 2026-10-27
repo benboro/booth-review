@@ -123,8 +123,9 @@ def footer_html(freshness: Freshness) -> str:
         'rel="noopener noreferrer">CollegeFootballData.com</a>'
     )
     type_html = (
-        'Type: <a href="fonts/OFL-crimson-text.txt">Crimson Text</a> '
-        "(copyright 2010 The Crimson Text Project Authors), "
+        'Type: <a href="fonts/GUST-FONT-LICENSE.txt">Latin Modern</a> '
+        "(copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+        "used under the GUST Font License; "
         '<a href="fonts/OFL-roboto.txt">Roboto</a> '
         "(copyright 2011 The Roboto Project Authors) and "
         '<a href="fonts/OFL-roboto-condensed.txt">Roboto Condensed</a> '

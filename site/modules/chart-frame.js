@@ -26,6 +26,9 @@ export const FRAME_MIN_FONT_PX = 12;
 /** Default wait for the faces before the first draw, in ms (T-13-27: a failed font never blocks). */
 export const FONT_WAIT_MS = 1500;
 
+/** The serif stack for chart text; mirrors --serif in style.css. */
+export const FRAME_SERIF = '"Latin Modern Demi", Georgia, serif';
+
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** Deep-merges `over` onto a copy of `base`; arrays and scalars in `over` replace. */
@@ -152,7 +155,7 @@ export async function waitForFonts(timeoutMs = FONT_WAIT_MS) {
     fonts.load('12px "Roboto Condensed"'),
     fonts.load('14px "Roboto"'),
     fonts.load('600 14px "Roboto"'),
-    fonts.load('600 20px "Crimson Text"'),
+    fonts.load('600 22px "Latin Modern Demi"'),
   ]).then(
     () => true,
     () => false,

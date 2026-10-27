@@ -12,9 +12,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 FONT_DIR = REPO_ROOT / "site" / "fonts"
 
 FONT_SHA256 = {
-    "crimson-text-latin-600-normal.woff2": (
-        "e2ca4f57a77f4db70d61c4d16e748545ce2000e0252be1f67fa1c964040f9b9b"
-    ),
     "lm-roman-demi-latin-600-normal.woff2": (
         "667737468c8b2a50e4b0b2c07ed5a426f88e27655205fe17bc8e4cb3996da2c1"
     ),
@@ -30,7 +27,6 @@ FONT_SHA256 = {
 }
 
 OFL_COPYRIGHT = {
-    "OFL-crimson-text.txt": "Copyright 2010 The Crimson Text Project Authors",
     "OFL-roboto.txt": "Copyright 2011 The Roboto Project Authors",
     "OFL-roboto-condensed.txt": "Copyright 2011 Google Inc.",
 }

@@ -88,7 +88,7 @@ def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     assert footer.count('class="trademark-line"') == 1
     assert footer.count('class="type-line"') == 1
     for href in (
-        "fonts/OFL-crimson-text.txt",
+        "fonts/GUST-FONT-LICENSE.txt",
         "fonts/OFL-roboto.txt",
         "fonts/OFL-roboto-condensed.txt",
     ):
@@ -391,7 +391,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # switch line removed.
 # Re-pinned at Phase 17.1 review: dot-size prose follows D-20, D-23 and D-24 (scale set by the
 # busiest venue shown, rescaling with filters and picks; paler dots sized without the pick).
-_METHODOLOGY_FLAG_OFF_SHA256 = "acea43bb8e649bd295726f907367b26a9132bd52b668c8278ce37abc4b52de83"
+# Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
+_METHODOLOGY_FLAG_OFF_SHA256 = "08dd6b845beff0c51166313e86c02cc61f803c6d2fe35361b255b332b7008d16"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

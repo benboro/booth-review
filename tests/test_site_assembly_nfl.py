@@ -66,7 +66,8 @@ _SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad4
 # #theme-slot toggle in the header.
 # Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
-_COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070411c"
+# Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
+_COVERAGE_SHA256 = "3074e9ae1352583f8aaa11ff48cafe46a3ec74007a33811216c06469e3ef7759"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -89,7 +90,8 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # approved by the user at plan 12 sign-off ("Fix both items").
 # Re-pinned at Phase 18 Plan 13 (F1): the week label column moves the index only through its
 # site-data cache-bust hash. Re-pinned again for F7's scheduled crew columns, the same way.
-_INDEX_PRE_PHASE_SHA256 = "691e9407679b73d24bf6eae9117df8a7e7010d42f7809d8ab252678b8e1fd735"
+# Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces Crimson (1 changed line).
+_INDEX_PRE_PHASE_SHA256 = "48d3fd14d4c7be4dc8159a460d584c9f29e2fc6bf71f247d5c1c231a8a8ed238"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
