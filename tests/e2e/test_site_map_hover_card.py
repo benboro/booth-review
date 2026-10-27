@@ -435,6 +435,38 @@ def test_phone_background_tap_clears_the_card_and_rearms_the_first_tap(
     assert "venue=" not in mobile_page.evaluate("() => location.search")
 
 
+def test_phone_late_compatibility_click_does_not_filter(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """One tap reaches Plotly twice (touchstart, then the compatibility mousedown). On a slow
+    runner the second is handled more than the old 350 ms debounce later; it must still not
+    count as a second tap. A real main-thread stall after the first click reproduces that."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    mobile_page.evaluate(
+        """() => {
+          const gd = document.getElementById('map-chart');
+          let armed = true;
+          gd.on('plotly_click', () => {
+            if (!armed) return;
+            armed = false;
+            const t = performance.now();
+            while (performance.now() - t < 450) { /* stall the renderer */ }
+          });
+        }"""
+    )
+    mobile_page.touchscreen.tap(px, py)
+    # No wait for the card first: the stalled renderer would hide a late filter's effect from it.
+    mobile_page.wait_for_timeout(900)
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    tip = _tooltip(mobile_page)
+    assert tip is not None
+    assert tip["hint"] == "Tap again to list these games"
+
+
 # -- Phase 17.1 D-16: an invisible 12px hit target under every small dot ----------------------
 
 _SHRINK_JS = """async ([key, size, mobile, near, offsetPx]) => {
