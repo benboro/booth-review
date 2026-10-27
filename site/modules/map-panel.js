@@ -59,6 +59,8 @@ let venueClickCount = 0;
 let tapSeq = 0;
 /** The tapSeq whose first Plotly click has been handled. */
 let handledTapSeq = -1;
+/** Whether the latest pointerdown inside the map was a touch (a mouse on a phone is not). */
+let lastDownTouch = false;
 /** app.js handles (Phase 11 D-05): the click filters the table through the same setState. */
 let handles = { setState: null, getState: null, getMatchedCount: null };
 /** Splat raster state (Phase 11 D-06): a render token coalesces paints, one image is live. */
@@ -482,9 +484,9 @@ function onVenueClick(key, ev) {
   // the second must not undo the first, whether that showed the card or filtered. Both
   // clicks arrive before the next tap's pointerdown, so the pointer sequence tells them
   // apart however late the second is handled. The time debounce only covers clicks with
-  // no preceding touch pointerdown.
+  // no preceding touch pointerdown, such as a mouse paired with a phone.
   const now = performance.now();
-  if (tapSeq > 0) {
+  if (lastDownTouch) {
     if (handledTapSeq === tapSeq) return;
     handledTapSeq = tapSeq;
   } else if (now - lastTapActionAt < TAP_DEBOUNCE_MS) {
@@ -513,7 +515,8 @@ export function initMapPanel({ setState, getState, getMatchedCount } = {}) {
       }
       return;
     }
-    if (ev.pointerType === 'touch') tapSeq += 1;
+    lastDownTouch = ev.pointerType === 'touch';
+    if (lastDownTouch) tapSeq += 1;
     down = hoverNone() ? { x: ev.clientX, y: ev.clientY, clicks: venueClickCount } : null;
   });
   document.addEventListener('pointercancel', () => {

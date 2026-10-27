@@ -467,6 +467,25 @@ def test_phone_late_compatibility_click_does_not_filter(
     assert tip["hint"] == "Tap again to list these games"
 
 
+def test_phone_mouse_click_after_a_tap_still_counts(mobile_page: Page, open_app: OpenApp) -> None:
+    """A mouse paired with a phone sends no touch pointerdown, so the tap sequence must not
+    swallow its click: a finger tap shows the card, then a mouse click on the same dot
+    lists its games."""
+    mobile_page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(mobile_page, open_app)
+    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(mobile_page)["venueDots"][0]
+    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function(
+        "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
+    )
+    assert "venue=" not in mobile_page.evaluate("() => location.search")
+    mobile_page.wait_for_timeout(500)
+    mobile_page.mouse.click(px, py)
+    mobile_page.wait_for_function("() => location.search.includes('venue=')")
+
+
 # -- Phase 17.1 D-16: an invisible 12px hit target under every small dot ----------------------
 
 _SHRINK_JS = """async ([key, size, mobile, near, offsetPx]) => {
