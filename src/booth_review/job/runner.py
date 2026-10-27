@@ -146,6 +146,7 @@ from booth_review.job.catchup import (
 )
 from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.gaps_espnpr import espnpr_page_week, find_espnpr_gap
+from booth_review.job.reminders import due_reminders
 from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
 from booth_review.nfl.freeze import schedule_drift
 from booth_review.nfl.gaps import find_nfl_506_gaps
@@ -408,17 +409,21 @@ class ScheduledJob:
 
         mode = resolve_mode(state, now, self._trigger, self._mode)
         if mode is None:
+            # Phase 24 D-12..D-16: hand-save reminders (vault reads only, no request) on the
+            # comment-only path, ahead of every budget, CFBD, vault-commit, state, build and
+            # deploy line, so a reminder slot is never a missed or failed collection run.
+            quiet_items: list[AttentionItem] = []
             if self._update:
-                stale_items: list[AttentionItem] = []
-                self._staleness_step(stale_items, state.last_build_at, now, season)
-                if has_attention(stale_items):
-                    return JobRunResult(
-                        exit_code=4,
-                        items=stale_items,
-                        counts={"skipped": 1},
-                        window=window,
-                        stale_only=True,
-                    )
+                self._staleness_step(quiet_items, state.last_build_at, now, season)
+            quiet_items.extend(due_reminders(paths, now))
+            if has_attention(quiet_items):
+                return JobRunResult(
+                    exit_code=4,
+                    items=quiet_items,
+                    counts={"skipped": 1},
+                    window=window,
+                    stale_only=True,
+                )
             return JobRunResult(
                 exit_code=EXIT_NOTHING_DUE, items=[], counts={"skipped": 1}, window=window
             )
@@ -522,6 +527,7 @@ class ScheduledJob:
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak
+        items.extend(due_reminders(paths, now))  # a due reminder joins the run's comment
         status = "attention" if has_attention(items) else "ok"
 
         if not self._dry_run:
@@ -700,6 +706,7 @@ class ScheduledJob:
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak
+        items.extend(due_reminders(self._runtime.paths, now))
         if not self._dry_run:
             # 18-13 F11: only a schedule run that pulled and built cleanly marks its slot done;
             # a failed pull or a rebuild leaves it, so the next backup slot still pulls.

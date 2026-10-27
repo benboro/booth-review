@@ -72,18 +72,29 @@ def test_version_matches_pyproject_and_lock() -> None:
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
 
 
-def test_workflow_has_nine_america_new_york_timezone_entries() -> None:
+def test_workflow_has_thirteen_america_new_york_timezone_entries() -> None:
     # 2 main slots (D-11) + 3 backup-slot groups (D-12: Sun afternoon/evening,
     # Wed late, Thu daytime) + the 4 Phase 18 schedule-only entries (Fri/Sat
-    # main and backup) -- every schedule entry uses the same timezone.
-    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 9
+    # main and backup) + the 4 Phase 24 reminder entries -- every schedule
+    # entry uses the same timezone.
+    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 13
 
 
-def test_workflow_schedule_has_exactly_nine_entries_all_america_new_york() -> None:
+def test_workflow_schedule_has_exactly_thirteen_entries_all_america_new_york() -> None:
     workflow = yaml.safe_load(WORKFLOW_TEXT)
     entries = workflow[True]["schedule"]
-    assert len(entries) == 9
+    assert len(entries) == 13
     assert all(entry["timezone"] == "America/New_York" for entry in entries)
+
+
+def test_workflow_has_the_phase_24_reminder_crons() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    crons = [entry["cron"] for entry in workflow[True]["schedule"]]
+    for cron in ("30 17,18 * * 1", "30 21,22 * * 2", "0 12,13 * * 3", "30 11,12 * * 5"):
+        assert crons.count(cron) == 1
+    # Thursday 12:00 and 14:00 already fire through the existing entry: no duplicate.
+    assert crons.count("0 6-16/2 * * 4") == 1
+    assert len(crons) == len(set(crons))
 
 
 def test_workflow_has_sunday_and_wednesday_main_slot_cron_entries() -> None:
@@ -1093,5 +1104,67 @@ def test_stale_only_run_comments_only_when_the_report_changed(
     commented = [c for c in calls if c.startswith("issue comment ")]
     created = [c for c in calls if c.startswith("issue create ")]
     assert not any(c.startswith(("issue close", "issue edit 7")) for c in calls)
+    assert len(commented) == (1 if action == "comment" else 0)
+    assert len(created) == (1 if action == "create" else 0)
+
+
+_REMINDER_LINE = (
+    "- reminder 2026 cfb week 10: save the aa college football schedule post "
+    "https://awfulannouncing.com/college-football/"
+)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("issue", "body", "comment", "report", "action"),
+    [
+        # A first reminder for the week: comment once.
+        ("7", "Counts only.", "", _REMINDER_LINE, "comment"),
+        # The backup slot an hour later repeats the same line: no second comment.
+        (
+            "7",
+            "Counts only.",
+            "Counts only.\n" + _REMINDER_LINE + "\n\nrun: https://example.invalid/r/2",
+            _REMINDER_LINE,
+            "none",
+        ),
+        # Next week's line differs by its week label: comment again.
+        (
+            "7",
+            "Counts only.",
+            "Counts only.\n" + _REMINDER_LINE + "\n\nrun: https://example.invalid/r/2",
+            _REMINDER_LINE.replace("week 10", "week 11"),
+            "comment",
+        ),
+        # No open issue: open one.
+        ("", "", "", _REMINDER_LINE, "create"),
+    ],
+    ids=["first", "repeat-same-week", "new-week", "no-issue"],
+)
+def test_reminder_only_run_comments_once_per_week(
+    issue: str, body: str, comment: str, report: str, action: str, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    (tmp_path / "issue-body.md").write_text(body, encoding="utf-8", newline="")
+    (tmp_path / "issue-comment.md").write_text(comment, encoding="utf-8", newline="")
+    (tmp_path / "attention.md").write_text(
+        "Counts only. Updated 2026-11-03 21:30 UTC\n" + report, encoding="utf-8"
+    )
+    env.update(
+        {
+            "FAKE_ISSUE": issue,
+            "FAKE_BODY": str(tmp_path / "issue-body.md"),
+            "FAKE_COMMENT": str(tmp_path / "issue-comment.md"),
+            "JOB_CODE": "4",
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": "true",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    commented = [c for c in calls if c.startswith("issue comment ")]
+    created = [c for c in calls if c.startswith("issue create ")]
     assert len(commented) == (1 if action == "comment" else 0)
     assert len(created) == (1 if action == "create" else 0)

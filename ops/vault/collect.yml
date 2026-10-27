@@ -89,6 +89,18 @@ on:
       timezone: "America/New_York"
     - cron: "0 9,10 * * 6" # Saturday 09:00, 10:00 (schedule-only backup slots, before noon kickoffs)
       timezone: "America/New_York"
+    # Phase 24 hand-save reminders (D-12, D-13): comment-only runs that fetch nothing. Each
+    # fires at the slot and an hour later; the stale_only comment step below posts a line once.
+    - cron: "30 17,18 * * 1" # Monday 17:30, 18:30 (ESPN Press Room, Phase 24 D-13)
+      timezone: "America/New_York"
+    - cron: "30 21,22 * * 2" # Tuesday 21:30, 22:30 (Awful Announcing CFB, Phase 24 D-13)
+      timezone: "America/New_York"
+    - cron: "0 12,13 * * 3" # Wednesday 12:00, 13:00 (Awful Announcing NFL, Phase 24 D-12)
+      timezone: "America/New_York"
+    - cron: "30 11,12 * * 5" # Friday 11:30, 12:30 (FOX, Phase 24 D-13)
+      timezone: "America/New_York"
+    # The Thursday 12:00 (506 NFL, D-12) reminder rides the Thursday 06-16/2 entry above, which
+    # also fires at 12:00 and 14:00. An older JOB_REF tag exits 5 at these slots (harmless).
   workflow_dispatch: # manual trigger, used for the D-13 catch-up drill
     inputs:
       mode:
@@ -294,6 +306,7 @@ jobs:
           fi
 
           if [ "$STALE_ONLY" = "true" ]; then
+            # stale_only now means any comment-only run: staleness or a Phase 24 reminder.
             # WR-07: D-14 checks staleness at every backup slot, but its items
             # rarely change between main runs. Comment only when some item line
             # is missing from the issue's current body or from its last comment,

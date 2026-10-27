@@ -2153,3 +2153,163 @@ def test_update_schedule_mode_requests_only_games_and_media_then_deploys(
     after = load_state(paths.job_state)
     assert after.last_schedule_at == later
     assert after.last_success_at == before.last_success_at
+
+
+# -- Phase 24: hand-save reminders ride the comment-only path ----------------------------------
+
+# Mon 2026-10-12 17:30 EDT: ESPN Week 7's commentators page is the one up now.
+_REMINDER_MON = datetime(2026, 10, 12, 21, 30, tzinfo=UTC)
+# Tue 2026-10-13 21:30 EDT: the Awful Announcing CFB slot, same week.
+_REMINDER_TUE = datetime(2026, 10, 14, 1, 30, tzinfo=UTC)
+
+
+def _reminder_vault(paths, *, last_attempt: datetime) -> str:
+    """A committed vault with the 2026 games file and a saved state with nothing due."""
+    _seed_required_state(paths, cfbd_month="2026-10")
+    games = paths.raw / "cfbd" / "games" / "2026.json"
+    games.parent.mkdir(parents=True, exist_ok=True)
+    games.write_bytes(_espnpr_games_json())
+    save_state(
+        paths.job_state,
+        JobState(
+            season=2026,
+            last_success_at=last_attempt,
+            last_attempt_at=last_attempt,
+            last_status="ok",
+            last_window_start=last_attempt,
+            retry_pending=False,
+            last_build_at=last_attempt,
+        ),
+    )
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: reminder vault")
+    return _git(paths, "rev-parse", "HEAD")
+
+
+def test_reminder_slot_exits_4_stale_only_and_writes_nothing(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    head = _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    state_bytes = paths.job_state.read_bytes()
+    handle = mock_transport_factory(_espnpr_responses())
+
+    runtime = _runtime(paths, handle, now=lambda: _REMINDER_MON, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: _REMINDER_MON, trigger="schedule"
+    ).run()
+
+    assert result.exit_code == 4
+    assert result.stale_only is True
+    assert result.deploy_ready is False
+    reminders = [item for item in result.items if item.kind == "reminder_espnpr"]
+    assert [item.line for item in reminders] == [
+        "reminder 2026 cfb week 7: save the espn pr commentators release "
+        "https://espnpressroom.com/press-release-category/college-football/, "
+        "then booth-review import espnpr"
+    ]
+    assert handle.requests == []
+    assert _git(paths, "rev-parse", "HEAD") == head
+    assert _git(paths, "status", "--porcelain") == ""
+    assert paths.job_state.read_bytes() == state_bytes
+
+
+def test_reminder_slot_with_the_page_saved_is_quiet(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    page = paths.raw / "espnpr" / "2026" / "commentators" / "wk-7.html"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_bytes(b"<html>synthetic</html>")
+    handle = mock_transport_factory(_espnpr_responses())
+
+    runtime = _runtime(paths, handle, now=lambda: _REMINDER_MON, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: _REMINDER_MON, trigger="schedule"
+    ).run()
+
+    assert result.exit_code == 5
+    assert result.stale_only is False
+    assert result.items == []
+
+
+def test_outside_every_reminder_window_nothing_is_due(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    handle = mock_transport_factory(_espnpr_responses())
+    moment = datetime(2026, 10, 12, 18, 0, tzinfo=UTC)  # Monday 14:00 EDT, before the slot
+
+    runtime = _runtime(paths, handle, now=lambda: moment, fake_clock=fake_clock)
+    result = ScheduledJob(runtime, token="test-token", now=lambda: moment, trigger="schedule").run()
+
+    assert result.exit_code == 5
+    assert result.stale_only is False
+    assert handle.requests == []
+
+
+def test_reminder_and_staleness_items_merge_into_one_result(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    old_build = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    save_state(
+        paths.job_state,
+        replace(load_state(paths.job_state), last_build_at=old_build),
+    )
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: old build")
+    head = _git(paths, "rev-parse", "HEAD")
+    handle = mock_transport_factory(_update_cfbd_responses())
+
+    result = _update_job(
+        paths, handle, fake_clock, tmp_path, now=_REMINDER_MON, trigger="schedule"
+    ).run()
+
+    assert result.exit_code == 4
+    assert result.stale_only is True
+    assert {"build_stale", "reminder_espnpr"} <= _kinds(result)
+    assert handle.requests == []
+    assert _git(paths, "rev-parse", "HEAD") == head
+    assert not (tmp_path / "site-out").exists()
+
+
+def test_a_full_run_at_a_reminder_time_adds_the_due_reminders_to_its_items(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    """Collision: the full run wins the slot and the reminder lines join its comment."""
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    handle = mock_transport_factory(_espnpr_responses())
+    result = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE).run()
+
+    kinds = [item.kind for item in result.items]
+    assert kinds.count("reminder_aa_cfb") == 1
+    assert "cfb week 7" in next(i.line for i in result.items if i.kind == "reminder_aa_cfb")
+    assert "espnpr_week_unsaved" in kinds  # the full run's own line is untouched
+    assert result.exit_code == 4
+    assert all("awfulannouncing" not in request.url for request in handle.requests)
+
+
+def test_a_schedule_run_at_a_reminder_time_adds_the_due_reminders_to_its_items(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+
+    handle = mock_transport_factory(_espnpr_responses())
+    runtime = _runtime(paths, handle, now=lambda: _REMINDER_TUE, fake_clock=fake_clock)
+    result = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: _REMINDER_TUE,
+        trigger="manual",
+        mode="schedule",
+    ).run()
+
+    assert [item.kind for item in result.items].count("reminder_aa_cfb") == 1
+    assert result.exit_code == 4
