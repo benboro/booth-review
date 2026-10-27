@@ -125,9 +125,11 @@ records only where the site settles or applies them.
   under "Not on the map (n)", and a CFB ESPN+ game with a venue is dotted and also stays in
   the compact table.
 - The weekend map's shading is the light game-count splat: one game weighs 1 and viewers
-  count for nothing, so the dots stay the data. Current values (`MAP_SPLAT_WEEKEND` in
-  palette.js; the CFB Map is 0.88): max opacity 0.4, spread 25, solid percentile 80. 24-11
-  tunes these in the critique renders; update this line then.
+  count for nothing, so the dots stay the data. Final values (`MAP_SPLAT_WEEKEND` in
+  palette.js; the CFB Map is 0.88), kept after the 24-11 real-data renders: max opacity 0.4,
+  spread 25, solid percentile 80. Dot sizes (`WEEKEND_MAP_DOT`) and the open Time TBA ring
+  (no `x` fallback needed: it reads as a thin family-colour ring, never as the dark ink pick
+  ring) were also kept.
 - Under a pick the map fades non-matching dots to 0.15 (a dot has no text to keep readable,
   so lower than the timeline's 0.3) and rings matches with a 2px `--ink` ring over a 3px
   page-colour keyline; the splat follows the matching games only. This is the same ring and
