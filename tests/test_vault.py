@@ -42,15 +42,6 @@ def _remote_log_count(remote: Path) -> int:
 
 
 @pytest.fixture
-def isolated_git_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Blocks the operator's global/system git config from leaking into tests."""
-    empty_config = tmp_path / "empty-gitconfig"
-    empty_config.write_text("", encoding="utf-8")
-    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
-    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(empty_config))
-
-
-@pytest.fixture
 def vault_repo_env(tmp_path: Path, isolated_git_env: None) -> tuple[Path, Path]:
     """A bare remote plus a clone at tmp_path/'vault', with a seed commit pushed."""
     remote = tmp_path / "remote.git"
