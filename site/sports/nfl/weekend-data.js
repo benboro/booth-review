@@ -171,6 +171,9 @@ export function nflWeekendGames(model, week) {
     const rank = ranks.get(i) ?? null;
     out.push({
       key: `nfl:t:${i}`,
+      placeIdx: c.place?.[i] ?? null,
+      venue: model.venues?.[c.place?.[i]] ?? null,
+      slotName: model.slots?.[c.slot?.[i]] ?? null,
       sport: 'nfl',
       block: 't',
       index: i,
@@ -197,6 +200,9 @@ export function nflWeekendGames(model, week) {
     const rank = u.booth_rank?.[j] ?? null;
     out.push({
       key: `nfl:upcoming:${j}`,
+      placeIdx: u.place?.[j] ?? null,
+      venue: model.venues?.[u.place?.[j]] ?? null,
+      slotName: model.slots?.[u.slot?.[j]] ?? null,
       sport: 'nfl',
       block: 'upcoming',
       index: j,
