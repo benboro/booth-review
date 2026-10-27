@@ -35,6 +35,17 @@ NFL_TEAM_CROSSWALK_COLUMNS = (
     "note",
 )
 NFL_STADIUM_COLUMNS = ("stadium_id", "stadium", "country", "source_url", "note")
+NFL_STADIUM_LOCATION_COLUMNS = (
+    "stadium_id",
+    "name",
+    "city",
+    "state",
+    "country",
+    "lat",
+    "lon",
+    "source_url",
+    "note",
+)
 NFL_STADIUM_OVERRIDE_COLUMNS = ("nflverse_game_id", "stadium_id", "source_url", "note")
 NFL_NETWORK_COLUMNS = ("source", "variant", "network_id", "note")
 NFL_LEAD_BOOTH_OVERRIDE_COLUMNS = ("season", "network_id", "person_id", "reason", "source_url")
@@ -233,6 +244,53 @@ def load_nfl_stadiums(reference_dir: Path) -> Mapping[str, str]:
         _check_https(path, line_no, raw["source_url"])
         _check_note(path, line_no, raw["note"])
         out[sid] = raw["country"]
+    return out
+
+
+@dataclass(frozen=True)
+class NflStadiumLocation:
+    name: str
+    city: str | None
+    state: str | None
+    country: str
+    lat: float
+    lon: float
+    source_url: str
+
+
+def load_nfl_stadium_locations(reference_dir: Path) -> Mapping[str, NflStadiumLocation]:
+    """stadium_id -> where the stadium is, from nfl_stadium_locations.csv (user-confirmed
+    rows). A missing or header-only table is empty."""
+    path = reference_dir / "nfl_stadium_locations.csv"
+    raw_rows = read_reference_csv_numbered(path, NFL_STADIUM_LOCATION_COLUMNS, required=False)
+    out: dict[str, NflStadiumLocation] = {}
+    for line_no, raw in raw_rows:
+        sid = raw["stadium_id"]
+        if not sid:
+            raise _err(path, line_no, "stadium_id is required")
+        if sid in out:
+            raise _err(path, line_no, "duplicate stadium_id")
+        if not raw["name"]:
+            raise _err(path, line_no, "name is required")
+        country, state = raw["country"], raw["state"]
+        if not _COUNTRY_RE.fullmatch(country):
+            raise _err(path, line_no, "country must be two uppercase letters")
+        if country == "US":
+            if not _COUNTRY_RE.fullmatch(state):
+                raise _err(path, line_no, "state must be two uppercase letters for a US stadium")
+        elif state:
+            raise _err(path, line_no, "state must be empty outside the US")
+        try:
+            lat, lon = float(raw["lat"]), float(raw["lon"])
+        except ValueError:
+            raise _err(path, line_no, "lat and lon must be numbers") from None
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            raise _err(path, line_no, "lat or lon is out of range")
+        _check_https(path, line_no, raw["source_url"])
+        _check_note(path, line_no, raw["note"])
+        out[sid] = NflStadiumLocation(
+            raw["name"], raw["city"] or None, state or None, country, lat, lon, raw["source_url"]
+        )
     return out
 
 

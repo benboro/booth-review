@@ -13,6 +13,7 @@ from booth_review.nfl.reference import (
     load_nfl_franchises,
     load_nfl_lead_booth_overrides,
     load_nfl_networks,
+    load_nfl_stadium_locations,
     load_nfl_stadium_overrides,
     load_nfl_stadiums,
     load_nfl_team_crosswalk,
@@ -249,3 +250,54 @@ def test_override_header_only_is_empty(ref: Path) -> None:
         "season,network_id,person_id,reason,source_url\n", encoding="utf-8"
     )
     assert load_nfl_lead_booth_overrides(ref) == {}
+
+
+_LOC_HEADER = "stadium_id,name,city,state,country,lat,lon,source_url,note"
+_LOC_OK = "FAKE01,Fake Field,Faketown,TX,US,29.68,-95.41,https://en.wikipedia.org/wiki/Fake,"
+
+
+def _locations(ref: Path, *lines: str) -> None:
+    (ref / "nfl_stadium_locations.csv").write_text(
+        "\n".join([_LOC_HEADER, *lines]) + "\n", encoding="utf-8"
+    )
+
+
+def test_stadium_locations_missing_or_header_only_is_empty(ref: Path) -> None:
+    assert load_nfl_stadium_locations(ref) == {}
+    _locations(ref)
+    assert load_nfl_stadium_locations(ref) == {}
+
+
+def test_stadium_locations_load_a_valid_row(ref: Path) -> None:
+    _locations(ref, _LOC_OK, "FAKE02,Foreign Park,Londonish,,GB,51.5,-0.1,https://example.com/x,")
+    out = load_nfl_stadium_locations(ref)
+    assert out["FAKE01"].name == "Fake Field"
+    assert out["FAKE01"].state == "TX"
+    assert out["FAKE02"].state is None
+    assert out["FAKE02"].lon == -0.1
+
+
+@pytest.mark.parametrize(
+    ("line", "line_no"),
+    [
+        (",Fake Field,Faketown,TX,US,29.68,-95.41,https://example.com/x,", 2),
+        ("FAKE01,,Faketown,TX,US,29.68,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,US,91,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,US,29.68,-181,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,US,north,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,US,29.68,-95.41,http://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,us,29.68,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,,US,29.68,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,tx,US,29.68,-95.41,https://example.com/x,", 2),
+        ("FAKE01,Fake Field,Faketown,TX,GB,29.68,-95.41,https://example.com/x,", 2),
+        (_LOC_OK, 3),  # duplicate id: the first copy is line 2
+    ],
+)
+def test_stadium_locations_reject_bad_rows(ref: Path, line: str, line_no: int) -> None:
+    _locations(ref, *([_LOC_OK, line] if line_no == 3 else [line]))
+    with pytest.raises(ReferenceTableError, match=rf"nfl_stadium_locations\.csv: line {line_no}:"):
+        load_nfl_stadium_locations(ref)
+
+
+def test_shipped_stadium_locations_table_loads() -> None:
+    assert load_nfl_stadium_locations(Path(__file__).parent.parent / "data" / "reference") == {}
