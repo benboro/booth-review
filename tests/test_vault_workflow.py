@@ -519,7 +519,8 @@ def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
         '  "issue view")\n'
         '    case "$*" in\n'
         '      *"--json body"*) cat "$FAKE_BODY" 2>/dev/null || true ;;\n'
-        '      *"--json comments"*"| last"*) cat "${FAKE_COMMENT_LAST:-$FAKE_COMMENT}" 2>/dev/null || true ;;\n'
+        '      *"--json comments"*"| last"*)\n'
+        '        cat "${FAKE_COMMENT_LAST:-$FAKE_COMMENT}" 2>/dev/null || true ;;\n'
         '      *"--json comments"*) cat "$FAKE_COMMENT" 2>/dev/null || true ;;\n'
         "    esac ;;\n"
         "esac\n",
