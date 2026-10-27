@@ -732,6 +732,20 @@
           "title": "Original Slot",
           "type": "array"
         },
+        "place": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Place",
+          "type": "array"
+        },
         "rr_url": {
           "items": {
             "anyOf": [
@@ -852,7 +866,8 @@
         "era",
         "rr_url",
         "source_url",
-        "cause"
+        "cause",
+        "place"
       ],
       "title": "NflGameColumns",
       "type": "object"
@@ -923,6 +938,13 @@
           "title": "Team Names",
           "type": "array"
         },
+        "venues": {
+          "items": {
+            "$ref": "#/$defs/VenueRef"
+          },
+          "title": "Venues",
+          "type": "array"
+        },
         "view_categories": {
           "items": {
             "$ref": "#/$defs/NflViewCategoryRef"
@@ -938,6 +960,7 @@
         "network_groups",
         "view_categories",
         "people",
+        "venues",
         "eras",
         "slots"
       ],
@@ -1518,6 +1541,20 @@
           "title": "Neutral",
           "type": "array"
         },
+        "place": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Place",
+          "type": "array"
+        },
         "season": {
           "items": {
             "type": "integer"
@@ -1564,7 +1601,8 @@
         "crew",
         "crew_source",
         "crew_source_url",
-        "booth_rank"
+        "booth_rank",
+        "place"
       ],
       "title": "NflUpcomingColumns",
       "type": "object"
@@ -1737,9 +1775,74 @@
       ],
       "title": "NflWeekendFreshness",
       "type": "object"
+    },
+    "VenueRef": {
+      "additionalProperties": false,
+      "description": "A venue some shipped game was played at, with usable coordinates (04.18).",
+      "properties": {
+        "city": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "City"
+        },
+        "country": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Country"
+        },
+        "lat": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Lat",
+          "type": "number"
+        },
+        "lon": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Lon",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "State"
+        }
+      },
+      "required": [
+        "name",
+        "city",
+        "state",
+        "country",
+        "lat",
+        "lon"
+      ],
+      "title": "VenueRef",
+      "type": "object"
     }
   },
-  "$id": "booth-review/nfl-data/2.1.0",
+  "$id": "booth-review/nfl-data/2.2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1759,7 +1862,7 @@
       "$ref": "#/$defs/NflLookups"
     },
     "schema_version": {
-      "const": "2.1.0",
+      "const": "2.2.0",
       "title": "Schema Version",
       "type": "string"
     },

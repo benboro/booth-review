@@ -22,7 +22,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-NFL_SCHEMA_VERSION = "2.1.0"
+from booth_review.contract.models import VenueRef
+
+NFL_SCHEMA_VERSION = "2.2.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -178,6 +180,8 @@ class NflLookups(BaseModel):
     network_groups: list[NflNetworkGroupRef]
     view_categories: list[NflViewCategoryRef]
     people: list[NflPersonRef]
+    # Phase 24: only the venues a game or upcoming game points at, in first-reference order.
+    venues: list[VenueRef]
     eras: list[NflEraRef]
     slots: list[NflSlotLabel]
 
@@ -226,6 +230,8 @@ class NflGameColumns(BaseModel):
     rr_url: list[str | None]
     source_url: list[str | None]
     cause: list[Literal["pending", "regional", "none"] | None]
+    # Index into lookups.venues; null when the stadium is not in the location table.
+    place: list[int | None]
 
 
 class NflUpcomingColumns(BaseModel):
@@ -262,6 +268,8 @@ class NflUpcomingColumns(BaseModel):
     # Published booth rank (nfl_booth_ranks.csv) for the game's network and season; null
     # when the crew is empty.
     booth_rank: list[int | None]
+    # Index into lookups.venues; null when the stadium is not in the location table.
+    place: list[int | None]
 
 
 class NflSpecialColumns(BaseModel):
@@ -431,7 +439,7 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.1.0"]
+    schema_version: Literal["2.2.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
@@ -468,6 +476,10 @@ class NflSiteData(BaseModel):
         for k in range(len(self.lookups.networks)):
             if k not in referenced_networks:
                 raise ValueError(f"lookups.networks[{k}]: not referenced by any game")
+        referenced_venues = {p for p in (*self.games.place, *self.upcoming.place) if p is not None}
+        for k in range(len(self.lookups.venues)):
+            if k not in referenced_venues:
+                raise ValueError(f"lookups.venues[{k}]: not referenced by any game")
         return self
 
     def _check_lookups(self) -> None:
@@ -510,6 +522,7 @@ class NflSiteData(BaseModel):
             _check_index("games", "original_network", i, g.original_network[i], len(lk.networks))
             _check_index("games", "network", i, g.network[i], len(lk.networks))
             _check_index("games", "era", i, g.era[i], len(lk.eras))
+            _check_index("games", "place", i, g.place[i], len(lk.venues))
             for col in (g.network[i], g.original_network[i]):
                 if col is not None:
                     referenced_networks.add(col)
@@ -533,6 +546,7 @@ class NflSiteData(BaseModel):
             _check_index("upcoming", "away_name", i, u.away_name[i], len(lk.team_names))
             _check_index("upcoming", "slot", i, u.slot[i], len(lk.slots))
             _check_index("upcoming", "network", i, u.network[i], len(lk.networks))
+            _check_index("upcoming", "place", i, u.place[i], len(lk.venues))
             network = u.network[i]
             if network is not None:
                 referenced_networks.add(network)

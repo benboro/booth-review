@@ -1306,3 +1306,66 @@ def test_upcoming_payload_is_deterministic_and_input_order_free() -> None:
     assert nfl_site_payload_bytes(_with_upcoming([a, b])) == nfl_site_payload_bytes(
         _with_upcoming([b, a])
     )
+
+
+# ------------------------------------------------------- place and lookups.venues (Phase 24)
+
+
+def _loc(name: str, country: str = "US", state: str | None = "TX") -> Any:
+    from booth_review.nfl.reference import NflStadiumLocation
+
+    return NflStadiumLocation(
+        name, "Faketown", state if country == "US" else None, country, 30.0, -95.0, "https://x.y/z"
+    )
+
+
+def _place_site(game_stadiums: list[str | None], up_stadiums: list[str | None]) -> Any:
+    from dataclasses import replace
+
+    from booth_review.nfl.upcoming import UPCOMING_SCHEMA
+
+    base = _scenario()
+    games = base.games.with_columns(
+        pl.Series(
+            "stadium_id", [game_stadiums[i % len(game_stadiums)] for i in range(base.games.height)]
+        )
+    )
+    ups = pl.DataFrame(
+        [_up(game_id=f"u{i}", week=10 + i, stadium_id=s) for i, s in enumerate(up_stadiums)],
+        schema=UPCOMING_SCHEMA,
+        orient="row",
+    )
+    locations = {"S1": _loc("Alpha Field"), "S2": _loc("Pitch Park", "GB")}
+    return build_nfl_site_data(replace(base, games=games, upcoming=ups, locations=locations))
+
+
+def test_place_indexes_venues_in_first_reference_order_and_missing_is_null() -> None:
+    site = _place_site(["S2", "S1", "NOT-IN-TABLE", None], ["S1", "S9", None])
+    assert [v.name for v in site.lookups.venues] == ["Pitch Park", "Alpha Field"]
+    assert site.lookups.venues[0].country == "GB"
+    assert site.lookups.venues[0].state is None
+    places = site.games.place
+    assert places[0] == 0 and places[1] == 1 and places[2] is None and places[3] is None
+    assert site.upcoming.place == [1, None, None]
+
+
+def test_unreferenced_stadiums_do_not_ship() -> None:
+    site = _place_site([None], [None])
+    assert site.lookups.venues == []
+    assert all(p is None for p in site.games.place)
+
+
+def test_upcoming_parquet_without_stadium_id_reads_as_null(tmp_path: Path) -> None:
+    from booth_review.nfl.upcoming import UPCOMING_SCHEMA
+
+    paths = DataPaths(tmp_path / "vault")
+    paths.processed.mkdir(parents=True)
+    inputs = _scenario()
+    inputs.games.write_parquet(paths.processed / "nfl_games.parquet")
+    inputs.special.write_parquet(paths.processed / "nfl_special_games_by_team_season.parquet")
+    inputs.task1.write_parquet(paths.processed / "nfl_task1_crews.parquet")
+    old = pl.DataFrame([_up()], schema=UPCOMING_SCHEMA, orient="row").drop("stadium_id")
+    old.write_parquet(paths.processed / "nfl_upcoming.parquet")
+    loaded = load_nfl_site_inputs(paths, REFERENCE)
+    assert loaded.upcoming["stadium_id"].to_list() == [None]
+    assert loaded.locations == {}

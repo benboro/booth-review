@@ -28,6 +28,37 @@ from booth_review.contract.nfl_models import (
     validate_nfl_site_data,
 )
 
+# Synthetic venues (Phase 24): two US stadiums and a foreign one, so a map has a dot, a second
+# dot and an edge marker; a null place stands for a stadium missing from the location table.
+VENUES: list[dict[str, Any]] = [
+    {
+        "name": "Fixture Field",
+        "city": "Faketown",
+        "state": "TX",
+        "country": "US",
+        "lat": 29.7,
+        "lon": -95.4,
+    },
+    {
+        "name": "Example Dome",
+        "city": "Sampleville",
+        "state": "OH",
+        "country": "US",
+        "lat": 41.5,
+        "lon": -81.7,
+    },
+    {
+        "name": "Test Park",
+        "city": "Londonish",
+        "state": None,
+        "country": "GB",
+        "lat": 51.5,
+        "lon": -0.1,
+    },
+]
+PLACE_CYCLE: list[int | None] = [0, 1, None, 2, 0]
+UPCOMING_PLACE_CYCLE: list[int | None] = [0, 1, 2, None, 0, 1, 0, None, 1, 2]
+
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "contract" / "nfl-data.fixture.json"
 
 _ET = ZoneInfo("America/New_York")
@@ -590,6 +621,7 @@ def _games_block(specs: list[dict[str, Any]], person_roles: dict[int, str]) -> d
             "rr_url": f"https://example.com/rr/{i}" if rated else None,
             "source_url": f"https://example.com/src/{i}" if rated else None,
             "cause": None if rated else (s["cause"] or "none"),
+            "place": PLACE_CYCLE[i % len(PLACE_CYCLE)],
         }
         for name, value in values.items():
             cols[name].append(value)
@@ -639,6 +671,7 @@ def _upcoming_block(person_roles: dict[int, str]) -> dict[str, list[Any]]:
             "crew_source": "506" if entries else None,
             "crew_source_url": LINEUP_URL if entries else None,
             "booth_rank": rank,
+            "place": UPCOMING_PLACE_CYCLE[len(cols["season"]) % len(UPCOMING_PLACE_CYCLE)],
         }
         for name in cols:
             cols[name].append(values[name])
@@ -922,7 +955,7 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "2.1.0",
+        "schema_version": "2.2.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -953,6 +986,7 @@ def build_fixture() -> dict[str, Any]:
                 {"id": i, "label": label, "window_level": w} for i, label, w in NFL_VIEW_CATEGORIES
             ],
             "people": [{"id": f"p{k:02d}", "name": n} for k, n in enumerate(PEOPLE)],
+            "venues": VENUES,
             "eras": [
                 {"id": i, "label": label, "start": start, "end": end, "source_url": url}
                 for i, label, start, end, url in ERAS

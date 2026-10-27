@@ -42,7 +42,12 @@ from booth_review.nfl.adjust import LOW_N
 from booth_review.nfl.booths import assign_booths
 from booth_review.nfl.games import NFL_GAME_COLUMNS
 from booth_review.nfl.network_groups import NETWORK_FAMILY, NETWORK_GROUPS
-from booth_review.nfl.reference import NflFranchises, load_nfl_franchises
+from booth_review.nfl.reference import (
+    NflFranchises,
+    NflStadiumLocation,
+    load_nfl_franchises,
+    load_nfl_stadium_locations,
+)
 from booth_review.nfl.tables import NFL_SPECIAL_COLUMNS
 from booth_review.nfl.task1 import NFL_TASK1_COLUMNS, view_category_expr
 from booth_review.nfl.upcoming import UPCOMING_COLUMNS, WEEKEND_COLUMNS
@@ -132,6 +137,8 @@ class NflSiteInputs:
     # Phase 18: absent in a vault built before it (empty frames: no upcoming, no stamp).
     upcoming: pl.DataFrame = field(default_factory=pl.DataFrame)
     weekend: pl.DataFrame = field(default_factory=pl.DataFrame)
+    # Phase 24: stadium_id -> where it is; a stadium missing here ships `place: null`.
+    locations: Mapping[str, NflStadiumLocation] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------------------
@@ -158,6 +165,16 @@ def _read_optional(paths: DataPaths, name: str, columns: Sequence[str]) -> pl.Da
     return _read_table(paths, name, columns)
 
 
+def _read_upcoming(paths: DataPaths) -> pl.DataFrame:
+    """nfl_upcoming; a table built before Phase 24 lacks stadium_id and reads it as null."""
+    frame = _read_optional(
+        paths, "nfl_upcoming", [c for c in UPCOMING_COLUMNS if c != "stadium_id"]
+    )
+    if frame.width and "stadium_id" not in frame.columns:
+        frame = frame.with_columns(pl.lit(None, dtype=pl.String).alias("stadium_id"))
+    return frame
+
+
 def load_nfl_site_inputs(paths: DataPaths, reference_directory: Path) -> NflSiteInputs:
     """Read the three vault tables plus the public people, franchise and era tables."""
     return NflSiteInputs(
@@ -167,8 +184,9 @@ def load_nfl_site_inputs(paths: DataPaths, reference_directory: Path) -> NflSite
         people=load_people(reference_directory),
         franchises=load_nfl_franchises(reference_directory),
         eras=load_eras(reference_directory),
-        upcoming=_read_optional(paths, "nfl_upcoming", UPCOMING_COLUMNS),
+        upcoming=_read_upcoming(paths),
         weekend=_read_optional(paths, "nfl_weekend", WEEKEND_COLUMNS),
+        locations=load_nfl_stadium_locations(reference_directory),
     )
 
 
@@ -189,6 +207,28 @@ class _Index:
             self._pos[key] = len(self.items)
             self.items.append(key if value is None else value)
         return self._pos[key]
+
+
+def _place_index(
+    venues: _Index, locations: Mapping[str, NflStadiumLocation], stadium_id: str | None
+) -> int | None:
+    """Index into lookups.venues, or None when the stadium is unknown (never a home-city guess)."""
+    if not stadium_id:
+        return None
+    loc = locations.get(stadium_id)
+    if loc is None:
+        return None
+    return venues.add(
+        stadium_id,
+        {
+            "name": loc.name,
+            "city": loc.city,
+            "state": loc.state,
+            "country": loc.country,
+            "lat": loc.lat,
+            "lon": loc.lon,
+        },
+    )
 
 
 def _latest_display_name(franchises: NflFranchises, franchise_id: str) -> str:
@@ -260,6 +300,7 @@ def _games_block(
         "team_names": _Index(),
         "networks": _Index(),
         "people": _Index(),
+        "venues": _Index(),
     }
     era_pos = {e.era_id: k for k, e in enumerate(inputs.eras)}
     cols: dict[str, list[Any]] = {name: [] for name in NflGameColumns.model_fields}
@@ -377,6 +418,7 @@ def _append_game(
         cols["era"].append(era_pos.get(era_id) if era_id is not None else None)
         cols["cause"].append(None)
     cols["rr_url"].append(row["rr_record_url"] if viewers is not None else None)
+    cols["place"].append(_place_index(lookups["venues"], inputs.locations, row.get("stadium_id")))
     cols["source_url"].append(row["rr_source_url"] if viewers is not None else None)
 
 
@@ -455,6 +497,7 @@ def _append_upcoming(
     cols["crew_source"].append(row["crew_source"] if crew else None)
     cols["crew_source_url"].append(row["crew_source_url"] if crew else None)
     cols["booth_rank"].append(row["booth_rank"] if crew else None)
+    cols["place"].append(_place_index(lookups["venues"], inputs.locations, row.get("stadium_id")))
 
 
 def _franchise_entry(inputs: NflSiteInputs, franchise_id: str) -> dict[str, str]:
@@ -771,6 +814,7 @@ def build_nfl_site_data(inputs: NflSiteInputs) -> NflSiteData:
                 {"id": c[0], "label": c[1], "window_level": c[2]} for c in NFL_VIEW_CATEGORIES
             ],
             "people": lookups["people"].items,
+            "venues": lookups["venues"].items,
             "eras": era_rows,
             "slots": list(NFL_SLOTS),
         },

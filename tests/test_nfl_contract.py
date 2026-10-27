@@ -49,7 +49,7 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "2.1.0",
+        "schema_version": "2.2.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -83,6 +83,7 @@ def _minimal_payload() -> Payload:
                 {"id": i, "label": label, "window_level": w} for i, label, w in NFL_VIEW_CATEGORIES
             ],
             "people": [{"id": "p1", "name": "Ada Quill"}],
+            "venues": [],
             "eras": [
                 {
                     "id": "e1",
@@ -126,6 +127,7 @@ def _minimal_payload() -> Payload:
             "rr_url": ["https://example.com/rr/1", None],
             "source_url": ["https://example.com/src/1", None],
             "cause": [None, "pending"],
+            "place": [None, None],
         },
         "upcoming": {name: [] for name in nfl_models.NflUpcomingColumns.model_fields},
         "special": {
@@ -597,6 +599,7 @@ def test_nfl_game_fields_pinned() -> None:
         "rr_url",
         "source_url",
         "cause",
+        "place",
     )
 
 
@@ -616,8 +619,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "2.1.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/2.1.0"
+    assert NFL_SCHEMA_VERSION == "2.2.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/2.2.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -853,4 +856,65 @@ def test_upcoming_rejects_a_published_lineup_source_and_extra_keys() -> None:
     data = _fixture()
     data["upcoming"]["viewers"] = [None] * len(data["upcoming"]["season"])
     with pytest.raises(ValidationError, match=r"upcoming\.viewers"):
+        validate_nfl_site_data(data)
+
+
+# --- Phase 24 Plan 06: place and lookups.venues (contract 2.2.0) ---
+
+
+def _venue(name: str = "Fixture Field") -> dict[str, object]:
+    return {
+        "name": name,
+        "city": "Faketown",
+        "state": "TX",
+        "country": "US",
+        "lat": 29.7,
+        "lon": -95.4,
+    }
+
+
+def test_old_schema_version_is_rejected() -> None:
+    data = _load()
+    data["schema_version"] = "2.1.0"
+    with pytest.raises(ValidationError, match="schema_version"):
+        validate_nfl_site_data(data)
+
+
+def test_place_index_must_be_in_range_and_venues_must_be_referenced() -> None:
+    data = _load()
+    data["lookups"]["venues"] = [_venue()]
+    with pytest.raises(ValidationError, match=r"lookups\.venues\[0\]"):
+        validate_nfl_site_data(data)
+    data["games"]["place"][0] = 0
+    validate_nfl_site_data(data)
+    data["games"]["place"][0] = 1
+    with pytest.raises(ValidationError, match=r"games\.place\[0\]"):
+        validate_nfl_site_data(data)
+
+
+def test_upcoming_place_references_count_and_must_match_length() -> None:
+    data = _fixture()
+    n = len(data["upcoming"]["season"])
+    data["upcoming"]["place"][0] = len(data["lookups"]["venues"])
+    with pytest.raises(ValidationError, match=r"upcoming\.place\[0\]"):
+        validate_nfl_site_data(data)
+    data = _fixture()
+    data["upcoming"]["place"] = data["upcoming"]["place"][: n - 1]
+    with pytest.raises(ValidationError, match=r"upcoming\.place"):
+        validate_nfl_site_data(data)
+
+
+def test_fixture_has_placed_null_and_foreign_places() -> None:
+    site = validate_nfl_site_data(_fixture())
+    assert any(p is not None for p in site.games.place)
+    assert any(p is None for p in site.games.place)
+    assert any(p is not None for p in site.upcoming.place)
+    assert any(v.country == "GB" for v in site.lookups.venues)
+
+
+def test_venue_coordinates_are_range_checked() -> None:
+    data = _load()
+    data["lookups"]["venues"] = [{**_venue(), "lat": 95.0}]
+    data["games"]["place"][0] = 0
+    with pytest.raises(ValidationError, match=r"venues\.0\.lat"):
         validate_nfl_site_data(data)
