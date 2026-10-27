@@ -51,6 +51,7 @@ from booth_review.nfl.reference import (
     NFL_LEAD_BOOTH_OVERRIDE_COLUMNS,
     NFL_NETWORK_COLUMNS,
     NFL_STADIUM_COLUMNS,
+    NFL_STADIUM_LOCATION_COLUMNS,
     NFL_STADIUM_OVERRIDE_COLUMNS,
     NFL_TEAM_CROSSWALK_COLUMNS,
     NFL_WEEK_OVERRIDE_COLUMNS,
@@ -58,6 +59,7 @@ from booth_review.nfl.reference import (
     load_nfl_franchises,
     load_nfl_lead_booth_overrides,
     load_nfl_networks,
+    load_nfl_stadium_locations,
     load_nfl_stadium_overrides,
     load_nfl_stadiums,
     load_nfl_team_crosswalk,
@@ -122,6 +124,7 @@ KNOWN_TABLES: dict[str, tuple[tuple[str, ...] | None, Loader | None]] = {
     "nfl_franchises.csv": (NFL_FRANCHISE_COLUMNS, load_nfl_franchises),
     "nfl_team_crosswalk.csv": (NFL_TEAM_CROSSWALK_COLUMNS, load_nfl_team_crosswalk),
     "nfl_stadiums.csv": (NFL_STADIUM_COLUMNS, load_nfl_stadiums),
+    "nfl_stadium_locations.csv": (NFL_STADIUM_LOCATION_COLUMNS, load_nfl_stadium_locations),
     "nfl_stadium_overrides.csv": (NFL_STADIUM_OVERRIDE_COLUMNS, load_nfl_stadium_overrides),
     "nfl_networks.csv": (NFL_NETWORK_COLUMNS, load_nfl_networks),
     "nfl_lead_booth_overrides.csv": (

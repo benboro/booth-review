@@ -57,6 +57,7 @@ UPCOMING_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "home_display_name": pl.String,
     "away_display_name": pl.String,
     "slot_name": pl.String,
+    "stadium_id": pl.String,
     "is_international": pl.Boolean,
     "is_neutral": pl.Boolean,
     "network_id": pl.String,
@@ -212,7 +213,8 @@ def assemble_upcoming(
         if home.franchise_id is None or away.franchise_id is None:
             counts["upcoming_unresolved_teams"] += 1
             continue
-        country = ref.stadiums.get(ref.stadium_overrides.get(game.game_id, game.stadium_id))
+        stadium_id = ref.stadium_overrides.get(game.game_id, game.stadium_id)
+        country = ref.stadiums.get(stadium_id)
         neutral = game.location == "Neutral"
         # Unknown site on a neutral field is treated as possibly international: no slot fill.
         international = country is not None and country != "US"
@@ -260,6 +262,7 @@ def assemble_upcoming(
                 "slot_name": (
                     None if kickoff is None else slot_name(kickoff, outside_us=international)
                 ),
+                "stadium_id": stadium_id or None,
                 "is_international": international,
                 "is_neutral": neutral,
                 "network_id": network_id,

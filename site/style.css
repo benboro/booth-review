@@ -6753,3 +6753,217 @@ tr.is-matched > :first-child {
     height: var(--space-2xl);
   }
 }
+
+/* ---------- This weekend map (Phase 24) ---------- */
+
+/* The right cluster of the control row: view switch, then the week stepper. */
+.wk-controls-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex: none;
+}
+
+/* Timeline | Map: two square segments in one 1px frame. Selected is ink on surface (the
+   accent stays reserved for focus), unselected is muted on the page. */
+.wk-view-switch {
+  display: inline-flex;
+  height: var(--space-xl);
+  border: 1px solid var(--rule-strong);
+  box-sizing: border-box;
+}
+
+.wk-view-seg {
+  position: relative;
+  min-width: 80px;
+  min-height: 0;
+  height: 100%;
+  padding: 0 var(--space-md);
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: var(--font-body);
+  font-weight: var(--weight-regular);
+  text-align: center;
+  cursor: pointer;
+}
+
+.wk-view-seg + .wk-view-seg {
+  border-left: 1px solid var(--rule-strong);
+}
+
+.wk-view-seg[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: var(--weight-semibold);
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .wk-view-seg[aria-pressed="false"]:hover {
+    background: var(--surface);
+  }
+}
+
+/* The map body: the box, the key under it, then the lists. */
+.wk-map-wrap {
+  position: relative;
+}
+
+.wk-map-box {
+  width: 100%;
+  height: 520px;
+  margin-top: var(--space-sm);
+  background: var(--bg);
+}
+
+.wk-map-wrap .map-overlay {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font: var(--font-caption);
+  text-align: center;
+}
+
+.wk-map-wrap .wk-map-fail {
+  font: var(--font-body);
+  color: var(--error);
+}
+
+.wk-map-key {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0 var(--space-lg);
+  font: var(--font-body);
+  color: var(--muted);
+}
+
+.wk-map-key-part {
+  min-width: 0;
+}
+
+.wk-map-key-heading {
+  margin: 0 0 var(--space-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+}
+
+.wk-map-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs) var(--space-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wk-map-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
+}
+
+.wk-map-key-item svg {
+  flex: none;
+}
+
+.wk-map-key-row--nets {
+  font: var(--font-caption);
+}
+
+.wk-map-key-caption {
+  margin: var(--space-xs) 0 0;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.wk-map-key-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* "Not on the map" reuses the Time TBA strip; only its note line is new. */
+.wk-notmap-note {
+  margin: 0;
+  padding-top: var(--space-xs);
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+/* The phone card's one button: 44px, full card width, ink on surface, 1px frame. */
+.chart-tooltip[data-kind='game'] {
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+.chart-tooltip .tooltip-game-matchup {
+  font-size: 14px;
+}
+
+.chart-tooltip .tooltip-game-booth,
+.chart-tooltip .tooltip-game-kickoff,
+.chart-tooltip .tooltip-game-venue {
+  font: var(--font-caption);
+}
+
+.chart-tooltip .tooltip-game-booth {
+  font-weight: var(--weight-semibold);
+}
+
+.chart-tooltip .tooltip-game-kickoff,
+.chart-tooltip .tooltip-game-venue {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tooltip .tooltip-game-star {
+  margin-right: var(--space-xs);
+}
+
+.chart-tooltip[data-kind='game'][data-phone] {
+  pointer-events: auto;
+}
+
+.tt-open-game {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin-top: var(--space-sm);
+  padding: 0 var(--space-md);
+  box-sizing: border-box;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule-strong);
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+@media (max-width: 480px) {
+  /* Day tabs take the first line; the switch (left) and stepper (right) share the second. */
+  .wk-controls-right {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+
+  .wk-view-seg::after {
+    content: "";
+    position: absolute;
+    inset: -7px 0;
+  }
+
+  .wk-map-box {
+    height: auto;
+    aspect-ratio: 975 / 610;
+  }
+
+  .wk-map-key {
+    margin-bottom: var(--space-md);
+  }
+}

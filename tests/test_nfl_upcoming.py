@@ -426,3 +426,23 @@ def test_build_writes_upcoming_tables_and_ships_the_block(
     site = json.loads((git_vault.processed / "nfl-data.json").read_text())
     assert len(site["upcoming"]["season"]) == 2
     assert site["freshness"]["weekend"]["week"] == 1
+
+
+def test_upcoming_holds_the_override_applied_stadium_id(tmp_path: Path) -> None:
+    rows = [
+        _row("2026_05_PHI_JAX", 1, 2, "2026-10-25", "09:30", "Sunday", stadium_id="JAX00"),
+        _row("plain", 3, 4, "2026-10-25", "13:00", "Sunday", stadium_id="S1"),
+        _row("blank", 5, 6, "2026-10-25", "13:00", "Sunday", stadium_id=""),
+    ]
+    inputs = make_inputs(rows)
+    ups, unplaced = parse_upcoming(schedule_csv(rows), seasons=[2026])
+    inputs = replace(inputs, upcoming=tuple(ups), upcoming_unplaced=unplaced)
+    ref = replace(
+        make_ref(tmp_path, stadiums={"S1": "US", "LON02": "GB", "JAX00": "US"}),
+        stadium_overrides={"2026_05_PHI_JAX": "LON02"},
+    )
+    frame, _ = assemble_upcoming(inputs, ref, now=EARLY, reference_directory=tmp_path / "ref")
+    by_id = _by_id(frame)
+    assert by_id["2026_05_PHI_JAX"]["stadium_id"] == "LON02"
+    assert by_id["plain"]["stadium_id"] == "S1"
+    assert by_id["blank"]["stadium_id"] is None

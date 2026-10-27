@@ -16,7 +16,7 @@
  * `school` (comma-separated team slugs, ordered by team index), `postseason`
  * (`exclude`/`only`; omitted at the default `all`), `seasons`, `networks`,
  * `slot`, `axis` (`excitement`/`date`; Spread is the default and is omitted), `y`
- * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`/`map`/`crews`/`weekend`), `week` and `day` (This weekend, Phase 18), `by` (`network`/`team`/`conference`);
+ * (`excitement`/`points`/`margin`; Viewers is the default and is omitted; y wins over `axis=excitement`, 04.15 D-12), `view` (`bars`/`butterfly`/`map`/`crews`/`weekend`), `week`, `day` and `wview=map` (This weekend, Phase 18 and 24), `by` (`network`/`team`/`conference`);
  * each of the last two is omitted at its default (D-13). `h2h` (`1`, only with
  * exactly two schools; omitted at Either team) and `dots` (`hide`; omitted at
  * the Fade default; 04.7 D-10, D-14). `game` (one named-game slug: a bowl franchise,
@@ -132,6 +132,8 @@ export function encodeState(state, data) {
   if (state.view === 'weekend') {
     if (Number.isInteger(state.week)) params.push(['week', String(state.week)]);
     if (DAY_TOKENS.includes(state.day)) params.push(['day', state.day]);
+    // Phase 24: the Map view of the tab; Timeline is the default and is omitted.
+    if (state.wview === 'map') params.push(['wview', 'map']);
   }
   if (state.by) params.push(['by', state.by]);
   if (state.dots === 'hide') params.push(['dots', 'hide']);
@@ -370,6 +372,8 @@ export function decodeState(search, data) {
   const onWeekend = state.view === 'weekend';
   state.week = onWeekend ? decodeWeek(scalarParam(params, 'week'), data) : null;
   state.day = onWeekend ? decodeDay(scalarParam(params, 'day'), data, state.week) : null;
+  // Allowlist: only the literal 'map' survives, and only on the weekend tab (T-24-13).
+  state.wview = onWeekend && scalarParam(params, 'wview') === 'map' ? 'map' : null;
   const rawBy = scalarParam(params, 'by');
   state.by = ['network', 'team', 'conference'].includes(rawBy) ? rawBy : null;
   // Fade is the default; only the literal 'hide' selects Hide (04.7 D-10).

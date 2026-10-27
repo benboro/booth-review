@@ -156,6 +156,9 @@ export function prepareNfl(raw) {
     people,
     eras,
     slots,
+    // Phase 24: stadium table; `place` on games and upcoming indexes it. A file from before 2.2.0
+    // reads venues as [] and place as null.
+    venues: raw.lookups?.venues ?? [],
     freshness: raw.freshness,
     constants: raw.constants,
     seasons: n ? [minSeason, maxSeason] : [0, 0],

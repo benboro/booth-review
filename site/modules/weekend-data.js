@@ -160,6 +160,7 @@ function weekendGame(data, obj, block, i, week, weekend) {
   const tier = obj.boothTier[i];
   const past = weekend != null && week.number < weekend.number;
   const scored = Boolean(obj.rated[i]) || t.home_points[i] != null || t.away_points[i] != null;
+  const placeIdx = t.place?.[i] ?? null;
   return {
     key: `cfb:${block}:${i}`,
     sport: 'cfb',
@@ -182,6 +183,8 @@ function weekendGame(data, obj, block, i, week, weekend) {
     crewKnown: pbp != null || analyst != null,
     past,
     scored,
+    placeIdx,
+    venue: placeIdx == null ? null : (obj.lookups.venues?.[placeIdx] ?? null),
   };
 }
 

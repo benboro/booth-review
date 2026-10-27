@@ -1,6 +1,6 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `2.1.0`). It is separate from
+`nfl-data.json` is the NFL site file (schema `2.2.0`). It is separate from
 `site-data.json` (see `docs/site-data.md`, schema `2.7.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
@@ -67,10 +67,11 @@ formats them in ET, and the file carries no wall clock of its own.
 | `network_groups` | `{id, name, flagship, members}` in picker order: networks that share one booth ranking (`members` index `networks`; every network is in exactly one group) and the label of the group's flagship window (AGOTW, Late national, SNF, MNF, TNF), `null` when it has none |
 | `view_categories` | `{id, label, window_level}`: the 12 special-game categories in line order (agotw, cbs_national, snf, mnf, tnf, thanksgiving, christmas, black_friday, international, saturday, friday, other); `window_level` is true for agotw and cbs_national |
 | `people` | `{id, name}`: NFL-only; a `person_id` is shared with CFB but the lists are not linked (D-02) |
+| `venues` | `{name, city, state, country, lat, lon}`: only the stadiums a game or upcoming game points at, in first-reference order (Phase 24); names come from `data/reference/nfl_stadium_locations.csv`, never from nflverse |
 | `eras` | `{id, label, start, end, source_url}`: Nielsen measurement eras; `start`/`end` null when open |
 | `slots` | the 12 slot names in a fixed order: Christmas, Thanksgiving, Black Friday, International, TNF, SNF, MNF, Saturday, Friday, Sunday early, Sunday late, Other |
 
-Every `people` and `networks` entry must be referenced by something.
+Every `people`, `networks` and `venues` entry must be referenced by something.
 
 ### games
 
@@ -95,6 +96,7 @@ Every `people` and `networks` entry must be referenced by something.
 | `era` | `lookups.eras` index; set only when `viewers` is set |
 | `rr_url`, `source_url` | the Ratings Reference record URL and the figure's original source |
 | `cause` | why a game has no figure: `pending`, `regional` or `none`; set exactly when `viewers` is null. The wording lives in the client, never in the data |
+| `place` | `lookups.venues` index of the stadium (after the stadium overrides); null when the stadium is not in the location table, never a guess from the home team's city |
 
 `pending` follows the CFB rule: a game in the current season (`freshness.season`) at or
 after `freshness.viewership_through_week`, or any current-season game when that stamp is
@@ -112,7 +114,8 @@ Phase 18's This weekend tab. Unplayed games of the weekend, kept apart from `gam
 played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `home`,
 `away`, `home_name`, `away_name` (the same lookup indexes as `games`), `slot` (index into
 `lookups.slots`), `international`, `neutral` (nflverse location `Neutral`), `network`,
-`network_basis`, `crew`, `crew_source`, `crew_source_url`, `booth_rank`.
+`network_basis`, `crew`, `crew_source`, `crew_source_url`, `booth_rank`, `place` (the same
+`lookups.venues` index as on `games`).
 
 - The This weekend tab writes "vs" for an `international` game on both blocks, since
   `games` ships no `neutral` column; `neutral` is not used for it (18-13).
@@ -230,6 +233,8 @@ never 0. Figures for the window-level categories are labeled as such by the clie
 - Ratings Reference (viewership): the record URL (`rr_url`) plus the figure's original
   `source_url`, both kept.
 - Wikipedia (`original_slot`, `original_network`, `change_url`): CC BY-SA 4.0.
+- Wikipedia (`lookups.venues` names, cities and coordinates): CC BY-SA 4.0; only extracted
+  facts ship, and each row's article URL stays in `data/reference/nfl_stadium_locations.csv`.
 - 506 Sports (crews and networks), shown under the same precedent as college football.
 
 ## Versioning
@@ -242,3 +247,4 @@ removed or retyped field. Changing the CFB contract's version is out of scope he
   families, network groups, view categories, solo segments and crew source added.
 - 2.1.0 (Phase 18): the `upcoming` block and `freshness.weekend` for the This weekend tab
   (additive).
+- 2.2.0 (Phase 24): `place` on `games` and `upcoming`, `lookups.venues` (additive minor).

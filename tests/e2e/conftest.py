@@ -298,6 +298,104 @@ def serve_map_venues(fixture_raw: dict[str, Any]) -> Callable[[Page], None]:
     return _serve
 
 
+WEEKEND_MAP_NOW = "2026-10-03T09:00:00-04:00"
+# Saturday 2026-10-03 of the weekend-map fixture, by game key (the venue-hits customdata).
+# Placed dots: t:11 (noon, Orlando), unrated 19 (prime, Pasadena, tier-a booth), 0 and 1 (noon,
+# the same Lincoln venue), 3 (Time TBA, Ann Arbor), 5 (prime, Atlanta), 6 (afternoon, Boulder),
+# 7 (prime, Pasadena), 10 (ESPN+, afternoon, Honolulu), 11 (late, Atlanta). Edge marker: 12 (noon,
+# a GB venue). No venue: 2, 4, 8.
+WEEKEND_MAP_PLACED_DOTS = 10
+WEEKEND_MAP_MARKERS = 1
+WEEKEND_MAP_NO_VENUE = 3
+
+
+def weekend_map_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
+    """Synthetic CFB weekend for the Phase 24 map tests; fictional fixture data only, no vault
+    data. A deep copy of the contract fixture (never edited) with real network ids, an ESPN+
+    network, a tier-a disney booth on the pending game, a GB venue, and Saturday games spread
+    over all four windows (see the constants above for the layout).
+    """
+    raw = copy.deepcopy(fixture_raw)
+    nets = raw["lookups"]["networks"]
+    for net, real in zip(nets, ["espn", "fox", "acc-network", "cbs", "peacock"], strict=True):
+        net["id"] = real
+    nets.append({"id": "espn-plus", "name": "ESPN+", "family": "disney"})
+    venues = raw["lookups"]["venues"]
+    venues.append(
+        {
+            "name": "Wembley Test Ground",
+            "city": "London",
+            "state": None,
+            "country": "GB",
+            "lat": 51.556,
+            "lon": -0.2796,
+        }
+    )
+    gb = len(venues) - 1
+    raw["lookups"]["booths"] = [
+        {
+            "family": "disney",
+            "season": 2026,
+            "pbp": 4,
+            "analyst": 5,
+            "rank": 1,
+            "tier": "a",
+            "lead_network": None,
+        }
+    ]
+    raw["telecasts"]["booth"] = [None] * len(raw["telecasts"]["season"])
+    raw["telecasts_unrated"]["booth"] = [None] * len(raw["telecasts_unrated"]["season"])
+    raw["telecasts_unrated"]["booth"][7] = 0
+    sched = raw["telecasts_scheduled"]
+    for index, place in {0: 0, 1: 0, 3: 1, 5: 3, 6: 2, 7: 5}.items():
+        sched["place"][index] = place
+
+    def add(date: str, kickoff: str | None, network: int | None, place: int | None) -> None:
+        row: dict[str, Any] = {
+            "season": 2026,
+            "date": date,
+            "kickoff": kickoff,
+            "time_slot": "prime" if kickoff else None,
+            "away_team": 0,
+            "home_team": 1,
+            "neutral": False,
+            "away_rank": None,
+            "home_rank": None,
+            "network": network,
+            "outlets": [],
+            "crew": [],
+            "crew_source_url": None,
+            "crew_source_label": None,
+            "home_conference": 0,
+            "away_conference": 3,
+            "place": place,
+            "week": "5",
+        }
+        assert row.keys() == sched.keys()
+        for key, value in row.items():
+            sched[key].append(value)
+
+    add("2026-10-02", "2026-10-02T20:00:00-04:00", 1, 0)  # 9: Friday
+    add("2026-10-03", "2026-10-03T18:00:00-04:00", 5, 4)  # 10: ESPN+, Honolulu
+    add("2026-10-03", "2026-10-03T22:30:00-04:00", 1, 3)  # 11: late, Atlanta
+    add("2026-10-03", "2026-10-03T09:30:00-04:00", 0, gb)  # 12: noon, London
+    return raw
+
+
+@pytest.fixture
+def serve_weekend_map(fixture_raw: dict[str, Any]) -> Callable[..., None]:
+    """Returns `serve(page, now=WEEKEND_MAP_NOW)`: fixes the clock and loads the
+    `weekend_map_raw` synthetic fixture. Call it before opening the app.
+    """
+
+    def _serve(page: Page, now: str = WEEKEND_MAP_NOW) -> None:
+        raw = weekend_map_raw(fixture_raw)
+        page.clock.set_fixed_time(now)
+        page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+
+    return _serve
+
+
 def expand_family(page: Page, family: str) -> None:
     """Expands a Networks family so its channel rows show. Since 04.16 D-10 the
     families open collapsed, so channel-level tests expand first.

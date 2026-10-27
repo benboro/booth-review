@@ -15,6 +15,11 @@ original slot and network, 2014 to 2026. Planned fields are in
   (which satisfies the Wikimedia user-agent policy), robots.txt checks
   including wildcard rules, a minimum interval of 2 seconds, and the raw cache.
 
+- For the NFL map (Phase 24), `booth-review collect wikipedia --league nfl --stadiums`
+  also requests the plain stadium articles listed in `NFL_WIKIPEDIA_STADIUM_PAGES`
+  (one request per distinct article, 43 in all), by the same rules. No other path
+  is used.
+
 ## What is read
 
 Only the scheduling-changes lists under "Regular season". The parser keeps the
@@ -22,6 +27,12 @@ week, the two team names as written, the original day, time (ET) and network,
 and the new network or slot wording. Venue relocations are counted and
 dropped. A bullet the parser cannot read cleanly goes to an unparsed list,
 which is written to a private vault review file, never guessed at.
+
+From each stadium article only the coordinates microformat is read (latitude and
+longitude); a page without one yields no row, never a guess. `booth-review review
+nfl-stadiums` drafts rows for `data/reference/nfl_stadium_locations.csv` into the
+gitignored `data/incoming/nfl-stadiums/`; the user confirms every row. Each row keeps
+its article URL (CC BY-SA 4.0) and the cached HTML stays in the private vault.
 
 ## Cadence
 

@@ -58,6 +58,8 @@ export function defaultState(_data) {
     // weekend and the sport's default day).
     week: null,
     day: null,
+    // Phase 24: 'map' selects the weekend Map view; null is the Timeline.
+    wview: null,
     by: null,
     dots: 'fade',
     h2h: false,

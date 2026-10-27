@@ -118,7 +118,9 @@ model, and build phases; read the relevant section before starting a phase.
   user-agent or header changes, or other endpoints.
 - Wikipedia: read plain articles (`/wiki/<title>`) with
   `booth-review collect wikipedia --league nfl|mlb`, never the `/w/` or `/api/` paths
-  its robots.txt disallows. For MLB that means the '<year> Major League Baseball
+  its robots.txt disallows. For the NFL that means the season articles and, with
+  `--stadiums`, the stadium articles listed in `NFL_WIKIPEDIA_STADIUM_PAGES` (map
+  coordinates only). For MLB that means the '<year> Major League Baseball
   postseason' articles from 2014 and the named broadcaster list pages only. Its text
   is CC BY-SA 4.0; store only extracted facts with the article URL.
 - Sports Media Watch: never collect with scripts; its robots.txt blocks them. Save

@@ -200,6 +200,25 @@ function stepButton(dir, label, disabled, title, onClick, id) {
 }
 
 /** The control row: day tabs (a second tablist) on the left, the week stepper on the right. */
+function buildViewSwitch(ctx) {
+  const group = el('div', 'wk-view-switch');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', 'Weekend view');
+  const map = ctx.opts.wview === 'map';
+  for (const [id, label] of [['timeline', 'Timeline'], ['map', 'Map']]) {
+    const pressed = (id === 'map') === map;
+    const seg = el('button', 'wk-view-seg', label);
+    seg.type = 'button';
+    seg.dataset.wkId = `wview:${id}`;
+    seg.setAttribute('aria-pressed', String(pressed));
+    seg.addEventListener('click', () => {
+      if (!pressed) ctx.opts.onView(id);
+    });
+    group.append(seg);
+  }
+  return group;
+}
+
 export function buildControls(ctx, api) {
   const { model, days, day } = ctx;
   const row = el('div', 'wk-controls');
@@ -218,10 +237,13 @@ export function buildControls(ctx, api) {
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
     tab.append(document.createTextNode(dayLabel(d)));
-    // The count box is always at least as wide as the day's full count (one ch per character,
-    // tabular digits), so a pick's count never widens the tab or shifts the next one
-    // (18-UI-REVIEW item 5). The leading space lives inside the box.
-    const count = el('span', 'wk-count', ctx.anyPick ? ` (${ctx.countFor(d)})` : '');
+    // The count always shows: the day's games with no pick, its matches under a pick (user,
+    // Phase 24 sign-off, so the labels never sit beside a blank box). The box is always at
+    // least as wide as the day's full count (one ch per character, tabular digits), so a pick's
+    // count never widens the tab or shifts the next one (18-UI-REVIEW item 5). The leading
+    // space lives inside the box.
+    const shown = ctx.anyPick ? ctx.countFor(d) : ctx.totalFor(d);
+    const count = el('span', 'wk-count', ` (${shown})`);
     count.style.minWidth = `${` (${ctx.totalFor(d)})`.length}ch`;
     tab.append(count);
     tab.addEventListener('click', () => api.setDay(d));
@@ -254,7 +276,16 @@ export function buildControls(ctx, api) {
     stepButton('next', next ? `Next week, ${next.label}` : 'Next week', latest,
       latest ? 'Latest week' : null, () => ctx.opts.onWeek?.(1), 'step:next'),
   );
-  row.append(days.length ? tabs : el('div', 'wk-days'), stepper);
+  const lead = days.length ? tabs : el('div', 'wk-days');
+  // Phase 24: the Timeline | Map switch shows only when the host opts in with onView (MLB never
+  // does), left of the week stepper.
+  if (typeof ctx.opts.onView === 'function') {
+    const right = el('div', 'wk-controls-right');
+    right.append(buildViewSwitch(ctx), stepper);
+    row.append(lead, right);
+  } else {
+    row.append(lead, stepper);
+  }
   return row;
 }
 
@@ -269,7 +300,7 @@ export function buildStampLine(ctx) {
   p.setAttribute('aria-live', 'off');
   if (ctx.anyPick && ctx.inDay.length > 0 && !ctx.inDay.some((g) => ctx.passes(g) === true)) {
     p.classList.add('wk-stamp--picks');
-    p.textContent = `No games match your picks on ${dayLabel(ctx.day)}. `
+    p.textContent = `No games match your picks${ctx.day != null ? ` on ${dayLabel(ctx.day)}` : ''}. `
       + 'Try another day or clear a filter.';
     return p;
   }
@@ -396,6 +427,9 @@ function sourceLink(text, href) {
   return a;
 }
 
+/** The public table whose source_url column lists every Wikipedia article a stadium cites. */
+const NFL_STADIUM_LIST_URL = 'https://github.com/benboro/booth-review/blob/main/data/reference/nfl_stadium_locations.csv';
+
 /** The credit line at the bottom: only the sources this sport actually uses (RT-01, RT-03). */
 export function buildSourceLine(ctx) {
   const { model } = ctx;
@@ -406,8 +440,16 @@ export function buildSourceLine(ctx) {
   if (model.sport === 'nfl') {
     p.append(text('Schedule: '), sourceLink('nflverse', 'https://www.nflverse.com/'),
       text(' · Crews: '), sourceLink('506 Sports', 'https://506sports.com'));
-    if (links.wikipedia) {
+    const mapMode = ctx.opts.wview === 'map';
+    if (links.wikipedia && mapMode) {
+      // Both Wikipedia uses keep a link: the networks article and the table of venue articles.
+      p.append(text(' · Networks and '), sourceLink('stadium locations', NFL_STADIUM_LIST_URL),
+        text(': '), sourceLink('Wikipedia', links.wikipedia), text(' (CC BY-SA 4.0)'));
+    } else if (links.wikipedia) {
       p.append(text(' · Networks: '), sourceLink('Wikipedia', links.wikipedia),
+        text(' (CC BY-SA 4.0)'));
+    } else if (mapMode) {
+      p.append(text(' · Stadium locations: '), sourceLink('Wikipedia', NFL_STADIUM_LIST_URL),
         text(' (CC BY-SA 4.0)'));
     }
   } else {
@@ -587,6 +629,8 @@ function buildDesktopBody(ctx, api) {
 // ---- Mount lifecycle (shared with the phone list) ----
 
 const MOUNTED = new WeakMap();
+/** Focus remembered from a view switch whose old instance was destroyed before the new mount. */
+const ORPHAN_FOCUS = new WeakMap();
 
 /**
  * What the clock changes in a render: every game's cell state, and the Now line's minute while
@@ -613,7 +657,8 @@ function clockKey(ctx, kind) {
  */
 export function mountWeekend(host, model, opts, buildBody, kind) {
   const previous = MOUNTED.get(host);
-  const carriedFocus = previous ? previous.activeId() : null;
+  const carriedFocus = previous ? previous.activeId() : (ORPHAN_FOCUS.get(host) ?? null);
+  ORPHAN_FOCUS.delete(host);
   previous?.destroy();
 
   const state = { day: model.day ?? null, width: opts.width ?? (host.clientWidth || FALLBACK_WIDTH),
@@ -717,6 +762,13 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
       stopTheme();
       for (const fn of disposers) fn();
       disposers = [];
+      // A host that destroys one view and mounts the next (Map to Timeline) leaves no previous
+      // instance to carry focus from, so a focused view switch is remembered for this tick.
+      const focused = activeId();
+      if (focused?.startsWith('wview:')) {
+        ORPHAN_FOCUS.set(host, focused);
+        queueMicrotask(() => ORPHAN_FOCUS.delete(host));
+      }
       host.replaceChildren();
       if (MOUNTED.get(host) === instance) MOUNTED.delete(host);
     },

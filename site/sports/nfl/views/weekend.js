@@ -10,6 +10,7 @@
  */
 import { renderWeekend } from '../../../modules/weekend-view.js';
 import { renderWeekendList } from '../../../modules/weekend-list.js';
+import { renderWeekendMap } from '../../../modules/weekend-map-view.js';
 import {
   dayLabel, dayTabs, dayToken, defaultDay, etParts, etWallMinutes, isUnplayedGame,
 } from '../../../modules/weekend.js';
@@ -17,7 +18,7 @@ import { PHONE_QUERY } from '../../../modules/breakpoints.js';
 import { nflWeekendGames, nflWeekendPasses } from '../weekend-data.js';
 import { weekendCurrentWeek, weekendWeeks } from '../state.js';
 
-const refs = { ctx: null, host: null, instance: null };
+const refs = { ctx: null, host: null, instance: null, kind: null };
 let current = null;
 
 function el(tag, className) {
@@ -86,6 +87,7 @@ export function mount(container, ctx) {
 export function deactivate() {
   refs.instance?.destroy();
   refs.instance = null;
+  refs.kind = null;
 }
 
 export function render(ctx) {
@@ -97,6 +99,8 @@ export function render(ctx) {
   // A fixed clock for tests: set before load with an init script, or on the test hooks.
   const fixedNow = window.__nflWeekendNow ?? (window.__nflTestHooks && window.__nflTestHooks.weekendNow);
   const opts = {
+    wview: state.wview,
+    onView: (v) => ctx.setState({ wview: v === 'map' ? 'map' : null }),
     passes: (g) => (hasPick(state) ? nflWeekendPasses(model, state, g) : null),
     onDay: (day) => ctx.setState({ day: dayToken(day) }),
     // The weekday carries over; canonicalNflState drops it when the new week has no such day.
@@ -119,7 +123,13 @@ export function render(ctx) {
   };
   if (fixedNow) opts.now = new Date(fixedNow);
   const phone = window.matchMedia(PHONE_QUERY).matches;
-  refs.instance = (phone ? renderWeekendList : renderWeekend)(refs.host, wk, opts);
+  const kind = state.wview === 'map' ? 'map' : 'timeline';
+  // Leaving the map purges its Plotly node; map to map re-renders in place (no destroy between).
+  if (refs.kind === 'map' && kind !== 'map') deactivate();
+  refs.instance = kind === 'map'
+    ? renderWeekendMap(refs.host, wk, opts)
+    : (phone ? renderWeekendList : renderWeekend)(refs.host, wk, opts);
+  refs.kind = kind;
   // The selection bar's summary counts the shown day's games, as the CFB host does
   // (18-UI-REVIEW item 6): every game dated that day or undated (so in every strip).
   const inDay = r.games.filter((g) => g.date === r.day || g.date == null);

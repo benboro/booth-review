@@ -394,7 +394,7 @@ def test_day_tabs_second_tablist_and_counts(wk_page: Page) -> None:
     ]
     _mount(wk_page, games)
     tabs = wk_page.locator("#wk-host [role=tablist][aria-label=Day] [role=tab]")
-    assert tabs.all_inner_texts() == ["Fri. Oct. 30", "Sat. Oct. 31"]
+    assert tabs.all_inner_texts() == ["Fri. Oct. 30 (1)", "Sat. Oct. 31 (1)"]
     assert tabs.nth(1).get_attribute("aria-selected") == "true"
     assert tabs.nth(0).get_attribute("aria-selected") == "false"
     _mount(wk_page, games, pass_keys=["f"])
@@ -936,7 +936,7 @@ def test_day_tabs_keep_their_width_under_a_pick(wk_page: Page) -> None:
     def live() -> list[str]:
         return [s.strip() for s in wk_page.locator("#wk-host .wk-day .wk-count").all_inner_texts()]
 
-    assert live() == ["", ""]
+    assert live() == ["(1)", "(2)"]  # no pick: each day's games (Phase 24 sign-off)
     _mount(wk_page, games, pass_keys=["s1"])
     picked = _widths(wk_page, "#wk-host .wk-day")
     assert picked == rest, (rest, picked)

@@ -461,7 +461,7 @@ function countryName(code) {
   }
 }
 
-function venueTitle(venue) {
+export function venueTitle(venue) {
   const abroad = venue.country != null && venue.country !== 'US';
   if (!venue.city) return venue.name;
   const where = abroad ? countryName(venue.country) : venue.state;

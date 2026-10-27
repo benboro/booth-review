@@ -55,9 +55,13 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
         guarded_page,
         site_url,
         """
+        // Phase 24: the light map deepens families under 3:1 on the land, so a map colour
+        // is the page colour or a darker mix of it (same hue, never lighter).
         const same = (t) => Object.keys(M.FAMILY_COLORS[t])
           .filter((k) => k !== 'conference')
-          .every((k) => M.MAP_FAMILY_COLORS[t][k] === M.FAMILY_COLORS[t][k]);
+          .every((k) => M.MAP_FAMILY_COLORS[t][k] === M.FAMILY_COLORS[t][k]
+            || M.contrastRatio(M.MAP_FAMILY_COLORS[t][k], '#000000')
+              < M.contrastRatio(M.FAMILY_COLORS[t][k], '#000000'));
         return {
           lc: M.MAP_FAMILY_COLORS.light.conference,
           dc: M.MAP_FAMILY_COLORS.dark.conference,

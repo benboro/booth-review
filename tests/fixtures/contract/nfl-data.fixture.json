@@ -2376,6 +2376,61 @@
    null,
    null
   ],
+  "place": [
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null,
+   2,
+   0,
+   0,
+   1,
+   null
+  ],
   "rr_url": [
    "https://example.com/rr/0",
    "https://example.com/rr/1",
@@ -3081,6 +3136,32 @@
     "short": "NFT"
    }
   ],
+  "venues": [
+   {
+    "city": "Faketown",
+    "country": "US",
+    "lat": 29.7,
+    "lon": -95.4,
+    "name": "Fixture Field",
+    "state": "TX"
+   },
+   {
+    "city": "Sampleville",
+    "country": "US",
+    "lat": 41.5,
+    "lon": -81.7,
+    "name": "Example Dome",
+    "state": "OH"
+   },
+   {
+    "city": "Londonish",
+    "country": "GB",
+    "lat": 51.5,
+    "lon": -0.1,
+    "name": "Test Park",
+    "state": null
+   }
+  ],
   "view_categories": [
    {
     "id": "agotw",
@@ -3144,7 +3225,7 @@
    }
   ]
  },
- "schema_version": "2.1.0",
+ "schema_version": "2.2.0",
  "season_weeks": {
   "cbs_ambiguous_weeks": [
    1,
@@ -3940,6 +4021,18 @@
    false,
    false,
    true
+  ],
+  "place": [
+   0,
+   1,
+   2,
+   null,
+   0,
+   1,
+   0,
+   null,
+   1,
+   2
   ],
   "season": [
    2026,

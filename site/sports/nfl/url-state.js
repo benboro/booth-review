@@ -24,6 +24,7 @@ export function encodeNflState(state, model) {
   if (s.view === 'weekend') {
     if (s.week != null) parts.push('week=' + s.week);
     if (s.day != null) parts.push('day=' + s.day);
+    if (s.wview === 'map') parts.push('wview=map');
   }
   if (s.seasons[0] !== d.seasons[0] || s.seasons[1] !== d.seasons[1]) {
     parts.push(`seasons=${s.seasons[0]}-${s.seasons[1]}`);
@@ -94,6 +95,7 @@ export function decodeNflState(search, model) {
       }
       case 'week': if (/^\d{1,2}$/.test(raw)) state.week = Number(raw); break;
       case 'day': if (DAY_TOKENS.includes(raw)) state.day = raw; break;
+      case 'wview': if (raw === 'map') state.wview = 'map'; break;
       case 'seasons': {
         const m = /^(\d{4})-(\d{4})$/.exec(raw);
         if (m) state.seasons = [Number(m[1]), Number(m[2])];

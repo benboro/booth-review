@@ -72,18 +72,29 @@ def test_version_matches_pyproject_and_lock() -> None:
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
 
 
-def test_workflow_has_nine_america_new_york_timezone_entries() -> None:
+def test_workflow_has_thirteen_america_new_york_timezone_entries() -> None:
     # 2 main slots (D-11) + 3 backup-slot groups (D-12: Sun afternoon/evening,
     # Wed late, Thu daytime) + the 4 Phase 18 schedule-only entries (Fri/Sat
-    # main and backup) -- every schedule entry uses the same timezone.
-    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 9
+    # main and backup) + the 4 Phase 24 reminder entries -- every schedule
+    # entry uses the same timezone.
+    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 13
 
 
-def test_workflow_schedule_has_exactly_nine_entries_all_america_new_york() -> None:
+def test_workflow_schedule_has_exactly_thirteen_entries_all_america_new_york() -> None:
     workflow = yaml.safe_load(WORKFLOW_TEXT)
     entries = workflow[True]["schedule"]
-    assert len(entries) == 9
+    assert len(entries) == 13
     assert all(entry["timezone"] == "America/New_York" for entry in entries)
+
+
+def test_workflow_has_the_phase_24_reminder_crons() -> None:
+    workflow = yaml.safe_load(WORKFLOW_TEXT)
+    crons = [entry["cron"] for entry in workflow[True]["schedule"]]
+    for cron in ("30 17,18 * * 1", "30 21,22 * * 2", "0 12,13 * * 3", "30 11,12 * * 5"):
+        assert crons.count(cron) == 1
+    # Thursday 12:00 and 14:00 already fire through the existing entry: no duplicate.
+    assert crons.count("0 6-16/2 * * 4") == 1
+    assert len(crons) == len(set(crons))
 
 
 def test_workflow_has_sunday_and_wednesday_main_slot_cron_entries() -> None:
@@ -504,9 +515,12 @@ def _fake_gh(tmp_path: Path) -> tuple[dict[str, str], Path]:
         'echo "$*" >> "$GH_LOG"\n'
         'case "$1 $2" in\n'
         '  "issue list") echo "${FAKE_ISSUE-7}" ;;\n'
+        '  "issue create") echo "https://example.invalid/owner/vault/issues/7" ;;\n'
         '  "issue view")\n'
         '    case "$*" in\n'
         '      *"--json body"*) cat "$FAKE_BODY" 2>/dev/null || true ;;\n'
+        '      *"--json comments"*"| last"*)\n'
+        '        cat "${FAKE_COMMENT_LAST:-$FAKE_COMMENT}" 2>/dev/null || true ;;\n'
         '      *"--json comments"*) cat "$FAKE_COMMENT" 2>/dev/null || true ;;\n'
         "    esac ;;\n"
         "esac\n",
@@ -1095,3 +1109,213 @@ def test_stale_only_run_comments_only_when_the_report_changed(
     assert not any(c.startswith(("issue close", "issue edit 7")) for c in calls)
     assert len(commented) == (1 if action == "comment" else 0)
     assert len(created) == (1 if action == "create" else 0)
+
+
+_REMINDER_LINE = (
+    "- reminder 2026 cfb week 10: save the aa college football schedule post "
+    "https://awfulannouncing.com/college-football/"
+)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+@pytest.mark.parametrize(
+    ("issue", "body", "comment", "report", "action"),
+    [
+        # A first reminder for the week: comment once.
+        ("7", "Counts only.", "", _REMINDER_LINE, "comment"),
+        # The backup slot an hour later repeats the same line: no second comment.
+        (
+            "7",
+            "Counts only.",
+            "Counts only.\n" + _REMINDER_LINE + "\n\nrun: https://example.invalid/r/2",
+            _REMINDER_LINE,
+            "none",
+        ),
+        # Next week's line differs by its week label: comment again.
+        (
+            "7",
+            "Counts only.",
+            "Counts only.\n" + _REMINDER_LINE + "\n\nrun: https://example.invalid/r/2",
+            _REMINDER_LINE.replace("week 10", "week 11"),
+            "comment",
+        ),
+        # No open issue: open one.
+        ("", "", "", _REMINDER_LINE, "create"),
+    ],
+    ids=["first", "repeat-same-week", "new-week", "no-issue"],
+)
+def test_reminder_only_run_comments_once_per_week(
+    issue: str, body: str, comment: str, report: str, action: str, tmp_path: Path
+) -> None:
+    env, log = _fake_gh(tmp_path)
+    (tmp_path / "issue-body.md").write_text(body, encoding="utf-8", newline="")
+    (tmp_path / "issue-comment.md").write_text(comment, encoding="utf-8", newline="")
+    (tmp_path / "attention.md").write_text(
+        "Counts only. Updated 2026-11-03 21:30 UTC\n" + report, encoding="utf-8"
+    )
+    env.update(
+        {
+            "FAKE_ISSUE": issue,
+            "FAKE_BODY": str(tmp_path / "issue-body.md"),
+            "FAKE_COMMENT": str(tmp_path / "issue-comment.md"),
+            "JOB_CODE": "4",
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": "true",
+        }
+    )
+    code, _outputs = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = log.read_text(encoding="utf-8").splitlines()
+    commented = [c for c in calls if c.startswith("issue comment ")]
+    created = [c for c in calls if c.startswith("issue create ")]
+    assert len(commented) == (1 if action == "comment" else 0)
+    assert len(created) == (1 if action == "create" else 0)
+
+
+# -- collect.yml: Phase 24 reminder comments (separate from the attention body) -------------------
+
+_RLINE = "- reminder 2026 cfb week 7: save the aa college football schedule post https://x/"
+
+
+def _reminder_env(tmp_path: Path, *, code: str, stale_only: str) -> tuple[dict[str, str], Path]:
+    env, log = _fake_gh(tmp_path)
+    env.update(
+        {
+            "JOB_CODE": code,
+            "DEPLOY_CODE": "",
+            "DEPLOY_EXPECTED": "false",
+            "STALE_ONLY": stale_only,
+            "FAKE_BODY": str(tmp_path / "fake-body"),
+            "FAKE_COMMENT": str(tmp_path / "fake-comment"),
+        }
+    )
+    (tmp_path / "reminders.md").write_text(f"Counts only. Updated now\n{_RLINE}", encoding="utf-8")
+    return env, log
+
+
+def _calls(log: Path) -> list[str]:
+    return log.read_text(encoding="utf-8").splitlines()
+
+
+def test_job_step_writes_reminders_to_their_own_file() -> None:
+    run = str(_step("job")["run"])
+    assert '--reminders-out "$RUNNER_TEMP/reminders.md"' in run
+    assert "reminders.md" in run.split("--reminders-out")[0]  # cleared before the run
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_clean_full_run_comments_the_reminder_and_leaves_the_issue_open(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="0", stale_only="false")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
+    assert not any(c.startswith(("issue close", "issue edit")) for c in calls)
+    assert not any("clean run" in c for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_problem_run_edits_the_body_and_still_comments_the_reminder(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="false")
+    (tmp_path / "attention.md").write_text("Counts only.\n- some real item", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    assert any(c.startswith("issue edit 7 ") for c in calls)
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_only_comment_run_posts_one_comment_and_no_fallback_body(
+    tmp_path: Path,
+) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    comments = [c for c in calls if c.startswith("issue comment")]
+    assert len(comments) == 1
+    assert "reminders.md" in comments[0]
+    assert not any(c.startswith("issue edit") for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_already_in_a_recent_comment_is_not_posted_again(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    (tmp_path / "fake-comment").write_text(f"Counts only.\n{_RLINE}\n", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert not any(c.startswith("issue comment") for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_in_the_issue_body_does_not_swallow_the_comment(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    (tmp_path / "fake-body").write_text(f"Counts only.\n{_RLINE}\n", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert any(c.startswith("issue comment 7 ") for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_opens_the_issue_when_none_exists(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="0", stale_only="false")
+    env["FAKE_ISSUE"] = ""
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    calls = _calls(log)
+    created = [c for c in calls if c.startswith("issue create")]
+    assert len(created) == 1
+    assert "reminders.md" not in created[0]  # the body is neutral, never the reminder
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in calls)
+    assert not any(c.startswith("issue close") for c in calls)
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_the_backup_slot_after_an_issue_creating_reminder_posts_nothing(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    env["FAKE_ISSUE"] = ""
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    first = _calls(log)
+    assert len([c for c in first if c.startswith("issue create")]) == 1
+    assert len([c for c in first if c.startswith("issue comment 7 ")]) == 1
+    posted = (tmp_path / "reminders.md").read_text(encoding="utf-8")
+
+    # An hour later: the issue now exists, holding a neutral body and the posted comment.
+    log.write_text("", encoding="utf-8")
+    (tmp_path / "fake-body").write_text("Hand-save reminders follow in the comments.\n")
+    (tmp_path / "fake-comment").write_text(posted, encoding="utf-8")
+    (tmp_path / "reminders.md").write_text(f"Counts only. Updated now\n{_RLINE}", encoding="utf-8")
+    env["FAKE_ISSUE"] = "7"
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert not any(c.startswith(("issue comment", "issue create")) for c in _calls(log))
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_reminder_comment_does_not_make_the_stale_only_check_repost_staleness(
+    tmp_path: Path,
+) -> None:
+    env, log = _reminder_env(tmp_path, code="4", stale_only="true")
+    stale = "- build is stale: last build 2026-10-01"
+    (tmp_path / "attention.md").write_text(f"Counts only.\n{stale}\n", encoding="utf-8")
+    # The staleness line sits in an earlier comment; the newest comment is another reminder.
+    (tmp_path / "fake-comment").write_text(f"Counts only.\n{stale}\n", encoding="utf-8")
+    (tmp_path / "last-comment").write_text("some other reminder comment\n", encoding="utf-8")
+    env["FAKE_COMMENT_LAST"] = str(tmp_path / "last-comment")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    comments = [c for c in _calls(log) if c.startswith("issue comment")]
+    assert len(comments) == 1  # the new reminder only
+    assert "reminders.md" in comments[0]
+
+
+@pytest.mark.skipif(_BASH is None, reason="bash not available")
+def test_a_failed_push_run_still_comments_the_reminder(tmp_path: Path) -> None:
+    env, log = _reminder_env(tmp_path, code="3", stale_only="false")
+    (tmp_path / "attention.md").write_text("Counts only.\n- vault push failed", encoding="utf-8")
+    code, _ = _run_step(_attention_step(), env, tmp_path)
+    assert code == 0
+    assert any(c.startswith("issue comment 7 ") and "reminders.md" in c for c in _calls(log))

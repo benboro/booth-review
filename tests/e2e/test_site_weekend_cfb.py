@@ -181,8 +181,8 @@ def test_opening_the_tab_makes_no_request(
 def test_day_tabs_and_default_day(wk: Callable[..., Page]) -> None:
     page = wk()
     tabs = page.locator(".wk-days .wk-day")
-    assert tabs.all_inner_texts() == ["Fri. Oct. 2", "Sat. Oct. 3"]
-    assert page.locator(".wk-day[aria-selected=true]").inner_text() == "Sat. Oct. 3"
+    assert tabs.all_inner_texts() == ["Fri. Oct. 2 (1)", "Sat. Oct. 3 (12)"]
+    assert page.locator(".wk-day[aria-selected=true]").inner_text() == "Sat. Oct. 3 (12)"
     page.locator(".wk-day", has_text="Fri.").click()
     assert _state(page)["day"] == "fri"
     assert _url(page) == "?view=weekend&day=fri"
@@ -700,3 +700,16 @@ def test_phone_has_no_dead_gap_above_the_day_tabs(wk_phone: Callable[..., Page])
     assert gap <= 16, gap
     page.locator("#tab-scatter").click()
     assert page.locator("#chart-tools").is_visible()
+
+
+def test_map_switch_round_trip(wk: Callable[..., Page]) -> None:
+    """Phase 24-09: the Map segment mounts the weekend map and sets wview=map; Timeline drops it."""
+    page = wk()
+    day = page.locator(".wk-day[aria-selected=true]").inner_text()
+    page.click('[data-wk-id="wview:map"]')
+    page.wait_for_function("location.search.includes('wview=map')")
+    assert page.locator(".wk-day[aria-selected=true]").inner_text() == day
+    page.click('[data-wk-id="wview:timeline"]')
+    page.wait_for_function("!location.search.includes('wview=map')")
+    page.wait_for_selector(".wk-row")
+    assert page.locator(".js-plotly-plot").count() == 0

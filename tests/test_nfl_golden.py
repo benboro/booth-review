@@ -71,7 +71,9 @@ _NFL_GOLDEN: dict[str, str] = {
     ),
     # Re-pinned at Phase 18 Plan 01: NFL contract 2.1.0 adds an empty upcoming block and a
     # null freshness.weekend; no game, crew or figure changed.
-    "processed/nfl-data.json": ("64fb3a6156e5170605486f39265c3b17368f8107a8b9a735b9ead71abcb48102"),
+    # Re-pinned at Phase 24 Plan 06: NFL contract 2.2.0 adds all-null place columns and an
+    # empty lookups.venues (the location table ships header-only); nothing else changed.
+    "processed/nfl-data.json": ("4992c116abf13de5d505cc20fb63ec46280bb0e41e886d998d156482fe8dab38"),
     "processed/nfl_games.parquet": (
         "8f49003959842fe8f30c4ff6427bd4c0c61815be6cbe53be6707ac90c23ea082"
     ),
