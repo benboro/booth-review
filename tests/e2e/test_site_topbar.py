@@ -132,7 +132,7 @@ def test_search_dale_harlow_shows_two_options_and_click_adds_chip(
         guarded_page.inner_text("#summary-count") == "2 rated of 3 games"
     )  # Dale Harlow: rated 0, 8 plus unrated 17
     # Unrated game 17 (Dale on the Conference Network) adds a second network.
-    expected_detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports, Conference Network"
+    expected_detail = f"2019{chr(0x2013)}2026, Alpha Sports, Conference Network"
     assert guarded_page.inner_text("#summary-detail") == expected_detail
 
 
@@ -522,7 +522,7 @@ def test_summary_reads_n_of_m_for_a_filter_alone(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """04.13 D-07: a filter alone reads 'N rated of M games'; Fade/Hide never changes it."""
-    detail = f"2019{chr(0x2013)}2026 {chr(0x00B7)} Alpha Sports"
+    detail = f"2019{chr(0x2013)}2026, Alpha Sports"
     for query in ("?networks=net-a", "?networks=net-a&dots=hide"):
         open_app(guarded_page, query)
         assert (
