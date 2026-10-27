@@ -1,6 +1,6 @@
 // Weekend map model (Phase 24): the window shape of each game, and (below) the dots, nudge
 // rows, edge markers, not-on-map list and splat input built from one day's WeekendGame list.
-// pure: model + geometry + env in, no DOM, no clock, no window.Plotly. No colour literal lives
+// pure: model + geometry + env in, no DOM, no clock, no Plotly global. No colour literal lives
 // here; colours come from palette.js through weekend-map-chart.js.
 
 import { MAP_HEIGHT, MAP_WIDTH, placeVenue } from './map-geo.js';

@@ -457,3 +457,198 @@ def test_edge_marker_boxes_never_intersect_at_390(map_page: Page) -> None:
         for b in boxes[i + 1 :]:
             apart = a[4] <= b[2] or b[4] <= a[2] or a[5] <= b[3] or b[5] <= a[3]
             assert apart, (a, b)
+
+
+# -- figure builder ------------------------------------------------------------------------
+
+_FIGURE_JS = """
+const C = await import('./modules/weekend-map-chart.js');
+const picked = new Set(arg.failKeys ?? []);
+const matched = new Set(arg.matchKeys ?? []);
+const passes = (g) => (picked.has(g.key) ? false : matched.has(g.key) ? true : null);
+const model = M.buildWeekendMapModel({
+  games: arg.games, day: '2026-10-31', passes, networksPicked: () => null,
+  theme: arg.theme ?? 'light', mobile: arg.mobile ?? false, plot: { w: 975, h: 610 },
+});
+const geometry = [{ id: 'x', rings: [[0, 0, 10, 0, 10, 10]] }];
+const fig = C.buildWeekendMapFigure(
+  model, geometry,
+  { theme: arg.theme ?? 'light', mobile: arg.mobile ?? false, splat: arg.splat ?? false,
+    hoverKey: arg.hoverKey ?? null },
+);
+"""
+
+
+def _figure(page: Page, body: str, games: list[dict[str, Any]], **env: Any) -> Any:
+    arg = {"games": games, **env}
+    return _run(page, _FIGURE_JS + body, arg)
+
+
+def _sample_games() -> list[dict[str, Any]]:
+    return [
+        _game("noon", ATHENS, kickoffMin=720),
+        _game("prime", TUSCALOOSA, kickoffMin=1200, networkId="abc", family="disney"),
+        _game("late", HONOLULU, kickoffMin=1380, networkId="espn", family="disney"),
+        _game("tba", ATHENS, kickoffMin=None),
+        _game("lon", LONDON, kickoffMin=900),
+    ]
+
+
+def test_figure_trace_order_and_event_names(map_page: Page) -> None:
+    out = _figure(
+        map_page,
+        """return {
+          names: fig.traces.map((t) => t.name), expected: [...C.WEEKEND_MAP_TRACE_NAMES],
+          hits: fig.traces.find((t) => t.name === 'venue-hits').customdata,
+          markers: fig.traces.find((t) => t.name === 'markers').customdata,
+          frozen: Object.isFrozen(C.WEEKEND_MAP_TRACE_NAMES),
+        };""",
+        _sample_games(),
+    )
+    assert (
+        out["names"]
+        == out["expected"]
+        == [
+            "outline",
+            "dots-faded",
+            "dots",
+            "dots-matched",
+            "ring-keyline",
+            "ring-ink",
+            "wk-hover",
+            "venue-hits",
+            "markers",
+        ]
+    )
+    assert out["frozen"] is True
+    assert sorted(out["hits"]) == sorted(g["key"] for g in _sample_games())
+    assert out["markers"] == ["lon"]
+
+
+def test_figure_symbols_come_from_the_one_table(map_page: Page) -> None:
+    out = _figure(
+        map_page,
+        """const dots = fig.traces.find((t) => t.name === 'dots');
+        const bySymbol = {};
+        dots.customdata.forEach((k, i) => { bySymbol[k] = dots.marker.symbol[i]; });
+        const mk = fig.traces.find((t) => t.name === 'markers');
+        const open = dots.customdata.indexOf('tba');
+        return {
+          bySymbol, marker: mk.marker.symbol[0],
+          expected: arg.games.map((g) => [g.key, M.symbolOf(g)]),
+          width: dots.marker.line.width, lineColor: dots.marker.line.color,
+          openIdx: open,
+          family: dots.marker.color, page: P.PAGE_BG.light,
+          famFox: P.MAP_FAMILY_COLORS.light.fox,
+        };""",
+        _sample_games(),
+    )
+    for key, symbol in out["expected"]:
+        if key == "lon":
+            assert out["marker"] == symbol
+        else:
+            assert out["bySymbol"][key] == symbol
+    assert out["bySymbol"]["noon"] == "circle"
+    assert out["bySymbol"]["prime"] == "diamond"
+    assert out["bySymbol"]["late"] == "triangle-up"
+    assert out["bySymbol"]["tba"] == "circle-open"
+    # Filled marks wear the 1.5 px page keyline; the open TBA mark is its own 2 px stroke.
+    i = out["openIdx"]
+    assert out["width"][i] == 2 and out["lineColor"][i] == out["famFox"]
+    other = 1 - i if i in (0, 1) else 0
+    assert out["width"][other] == 1.5 and out["lineColor"][other] == out["page"]
+
+
+def test_figure_fade_ring_and_hover_ring(map_page: Page) -> None:
+    out = _figure(
+        map_page,
+        """const t = (n) => fig.traces.find((x) => x.name === n);
+        return {
+          faded: t('dots-faded').customdata, fadedOpacity: t('dots-faded').marker.opacity,
+          normal: t('dots').customdata, matched: t('dots-matched').customdata,
+          matchedOpacity: t('dots-matched').marker.opacity,
+          keyline: t('ring-keyline').marker, ink: t('ring-ink').marker,
+          matchedSize: t('dots-matched').marker.size,
+          hover: t('wk-hover').marker, hoverX: t('wk-hover').x.length,
+          ink_color: P.INK.light, page: P.PAGE_BG.light, accent: P.ACCENT.light,
+          faded_const: P.MAP_OPACITY.faded,
+        };""",
+        _sample_games(),
+        failKeys=["tba"],
+        matchKeys=["noon"],
+        hoverKey="prime",
+    )
+    assert out["faded"] == ["tba"]
+    assert out["fadedOpacity"] == [out["faded_const"]] == [0.15]
+    assert out["matched"] == ["noon"] and out["matchedOpacity"] == [1]
+    assert "noon" not in out["normal"] and "tba" not in out["normal"]
+    size = out["matchedSize"][0]
+    assert out["keyline"]["symbol"] == "circle-open"
+    assert out["keyline"]["size"] == [size + 6]
+    assert out["keyline"]["line"] == {"width": 3, "color": out["page"]}
+    assert out["ink"]["size"] == [size + 10]
+    assert out["ink"]["line"] == {"width": 2, "color": out["ink_color"]}
+    assert out["hover"]["size"][0] == 14 + 8  # the prime diamond, 14 px, plus 8
+    assert out["hover"]["line"]["width"] == 1 and out["hoverX"] == 1
+
+
+def test_figure_layout_is_fixed_and_hit_twin_is_at_least_twelve_px(map_page: Page) -> None:
+    for mobile in (False, True):
+        out = _figure(
+            map_page,
+            """const hits = fig.traces.find((t) => t.name === 'venue-hits');
+            return {
+              x: fig.layout.xaxis.fixedrange, y: fig.layout.yaxis.fixedrange,
+              drag: fig.layout.dragmode, hover: fig.layout.hovermode,
+              sizes: hits.marker.size, hoverinfo: hits.hoverinfo,
+              modebar: fig.config.displayModeBar,
+            };""",
+            _sample_games(),
+            mobile=mobile,
+        )
+        assert out["x"] is True and out["y"] is True
+        assert out["drag"] is False and out["hover"] == "closest"
+        assert min(out["sizes"]) >= 12 and out["hoverinfo"] == "none"
+        assert out["modebar"] is False
+
+
+def test_figure_splat_toggles_the_land_fill(map_page: Page) -> None:
+    body = """const o = fig.traces[0];
+    return { fill: o.fill, color: o.fillcolor, land: P.MAP_LAND.light };"""
+    out_off = _figure(map_page, body, _sample_games(), splat=False)
+    out_on = _figure(map_page, body, _sample_games(), splat=True)
+    assert out_off["fill"] == "toself" and out_off["color"] == out_off["land"]
+    assert out_on["fill"] == "none"
+
+
+def test_figure_escapes_every_name(map_page: Page) -> None:
+    evil = {**MADRID, "city": "<b>Evil</b>"}
+    games = [
+        _game("m", ATHENS, home="<b>Home</b>"),
+        _game("e", evil, home="<i>Away</i>"),
+    ]
+    out = _figure(
+        map_page,
+        """const text = [];
+        for (const t of fig.traces) {
+          for (const k of ['text', 'hovertext']) {
+            if (Array.isArray(t[k])) text.push(...t[k].filter((s) => s));
+          }
+        }
+        return text;""",
+        games,
+    )
+    assert out, "expected labels and hover text"
+    assert all("<" not in s and ">" not in s for s in out), out
+    assert any("&lt;b&gt;Evil&lt;/b&gt;" in s for s in out)
+    assert any("&lt;b&gt;Home&lt;/b&gt;" in s for s in out)
+
+
+def test_key_and_figure_share_the_symbol_table(map_page: Page) -> None:
+    out = _run(
+        map_page,
+        """const C = await import('./modules/weekend-map-chart.js');
+        const noon = { sport: 'cfb', kickoffMin: 700 };
+        return [M.WINDOW_SYMBOL.cfb[M.windowOf(noon)], M.symbolOf(noon)];""",
+    )
+    assert out[0] == out[1] == "circle"
