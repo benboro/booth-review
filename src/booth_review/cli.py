@@ -55,7 +55,7 @@ from booth_review.errors import (
     SiteBuildError,
     UnknownHostError,
 )
-from booth_review.job.attention import build_attention_body
+from booth_review.job.attention import build_attention_body, split_reminders
 from booth_review.job.runner import (
     EXIT_NOTHING_DUE,
     JOB_CFBD_MAX_CALLS,
@@ -478,6 +478,12 @@ def build_parser() -> argparse.ArgumentParser:
         "CFBD games/media and the nflverse schedule; rebuild collects nothing (D-17)",
     )
     job_run.add_argument("--attention-out", type=Path, default=None)
+    job_run.add_argument(
+        "--reminders-out",
+        type=Path,
+        default=None,
+        help="hand-save reminder lines, written apart so the workflow comments them",
+    )
     job_run.add_argument("--dry-run", action="store_true")
     job_run.add_argument("--no-commit", action="store_true")
     job_run.add_argument(
@@ -1927,9 +1933,18 @@ def _write_job_outputs(args: argparse.Namespace, result: JobRunResult) -> None:
     written atomically (a temp sibling, then a rename), so a run killed at
     any point leaves either the earlier complete file or the new one."""
     if args.attention_out is not None:
-        body = build_attention_body(result.items, generated_at=datetime.now(UTC))
+        body = build_attention_body(
+            split_reminders(result.items)[0], generated_at=datetime.now(UTC)
+        )
         if body is not None:
             atomic_write_bytes(args.attention_out, body.encode("utf-8"))
+
+    if args.reminders_out is not None:
+        reminder_body = build_attention_body(
+            split_reminders(result.items)[1], generated_at=datetime.now(UTC)
+        )
+        if reminder_body is not None:
+            atomic_write_bytes(args.reminders_out, reminder_body.encode("utf-8"))
 
     if args.result_out is not None:
         atomic_write_bytes(

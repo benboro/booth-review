@@ -22,8 +22,9 @@ from booth_review import cli
 from booth_review.cli import main
 from booth_review.config import CFBD_FLOOR_DEFAULT
 from booth_review.errors import VaultCommitError, VaultStateError
+from booth_review.job import runner as runner_module
 from booth_review.job.catchup import JobState, load_state, save_state
-from booth_review.job.gaps506 import find_506_gaps
+from booth_review.job.gaps506 import Gaps506, find_506_gaps
 from booth_review.job.runner import (
     JOB_CFBD_MAX_CALLS,
     JOB_CFBD_SCHEDULE_MAX_CALLS,
@@ -2312,4 +2313,55 @@ def test_a_schedule_run_at_a_reminder_time_adds_the_due_reminders_to_its_items(
     ).run()
 
     assert [item.kind for item in result.items].count("reminder_aa_cfb") == 1
-    assert result.exit_code == 4
+    # A reminder is not attention: this schedule run is clean, so it exits 0.
+    assert result.exit_code == 0
+
+
+def test_a_clean_full_run_keeps_exit_0_ok_and_zero_attention_with_a_reminder_due(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    """The reminder lines still come out for commenting but change nothing about the run."""
+    paths = git_vault
+    monkeypatch.setattr(
+        runner_module,
+        "find_506_gaps",
+        lambda *_a, **_k: Gaps506(season=2026, missing=[], stale=[], judged=0),
+    )
+    _seed_required_state(paths, cfbd_month="2026-10")
+    page = paths.raw / "espnpr" / "2026" / "commentators" / "wk-7.html"
+    page.parent.mkdir(parents=True, exist_ok=True)
+    page.write_bytes(b"<html>synthetic</html>")
+
+    handle = mock_transport_factory(_espnpr_responses())
+    result = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE).run()
+
+    assert [i.kind for i in result.items].count("reminder_aa_cfb") == 1
+    assert not [i for i in result.items if i.severity == "attention"]
+    assert result.exit_code == 0
+    assert load_state(paths.job_state).last_status == "ok"
+    report = (paths.ledger / "run_reports.jsonl").read_text(encoding="utf-8").splitlines()[-1]
+    assert json.loads(report)["attention"] == 0
+
+
+def test_reminders_go_to_their_own_output_file_and_never_the_attention_body(tmp_path) -> None:
+    from types import SimpleNamespace
+
+    from booth_review.job.attention import reminder_aa_cfb, sports506_missing
+    from booth_review.job.runner import JobRunResult
+
+    args = SimpleNamespace(
+        attention_out=tmp_path / "attention.md",
+        reminders_out=tmp_path / "reminders.md",
+        result_out=None,
+    )
+    items = [sports506_missing(2026, ["2"]), reminder_aa_cfb(2026, "7")]
+    cli._write_job_outputs(args, JobRunResult(exit_code=4, items=items, counts={}, window=None))
+    assert "reminder 2026" not in args.attention_out.read_text(encoding="utf-8")
+    assert "reminder 2026" in args.reminders_out.read_text(encoding="utf-8")
+
+    only = SimpleNamespace(
+        attention_out=tmp_path / "a2.md", reminders_out=tmp_path / "r2.md", result_out=None
+    )
+    cli._write_job_outputs(only, JobRunResult(exit_code=0, items=items[1:], counts={}, window=None))
+    assert not only.attention_out.exists()
+    assert only.reminders_out.exists()

@@ -89,8 +89,11 @@ on:
       timezone: "America/New_York"
     - cron: "0 9,10 * * 6" # Saturday 09:00, 10:00 (schedule-only backup slots, before noon kickoffs)
       timezone: "America/New_York"
-    # Phase 24 hand-save reminders (D-12, D-13): comment-only runs that fetch nothing. Each
-    # fires at the slot and an hour later; the stale_only comment step below posts a line once.
+    # Phase 24 hand-save reminders (D-12, D-13). Each fires at the slot and an hour later; the
+    # reminder step below comments each line once. With nothing else due the run is comment-only
+    # (fetches nothing), but resolve_mode may turn a reminder cron into a catch-up or retry
+    # full run (retry_pending, or a missed main slot), which collects, builds and deploys
+    # as usual and still posts its reminder lines as their own comment.
     - cron: "30 17,18 * * 1" # Monday 17:30, 18:30 (ESPN Press Room, Phase 24 D-13)
       timezone: "America/New_York"
     - cron: "30 21,22 * * 2" # Tuesday 21:30, 22:30 (Awful Announcing CFB, Phase 24 D-13)
@@ -193,7 +196,7 @@ jobs:
           NFL_SITE_ENABLED: ${{ vars.NFL_SITE_ENABLED }}
         run: |
           set +e
-          rm -f "$RUNNER_TEMP/result.txt" "$RUNNER_TEMP/attention.md"
+          rm -f "$RUNNER_TEMP/result.txt" "$RUNNER_TEMP/attention.md" "$RUNNER_TEMP/reminders.md"
           trigger=manual
           if [ "$EVENT_NAME" = "schedule" ]; then
             trigger=schedule
@@ -213,7 +216,8 @@ jobs:
           uv run booth-review job run --trigger "$trigger" --mode "$mode" --update \
             --site-out "$RUNNER_TEMP/site" \
             --result-out "$RUNNER_TEMP/result.txt" \
-            --attention-out "$RUNNER_TEMP/attention.md"
+            --attention-out "$RUNNER_TEMP/attention.md" \
+            --reminders-out "$RUNNER_TEMP/reminders.md"
           code=$?
           echo "code=$code" >> "$GITHUB_OUTPUT"
           # Never echo the env or the key; only the count-only exit code above.
@@ -296,17 +300,57 @@ jobs:
           if [ "$JOB_CODE" != "0" ]; then problem=true; fi
           if [ -n "$DEPLOY_CODE" ] && [ "$DEPLOY_CODE" != "0" ]; then problem=true; fi
 
+          # Phase 24: hand-save reminder lines never count as attention (exit code,
+          # last_status and the attention count ignore them). They post as their own
+          # comment on the needs-attention issue, opened here if need be, whatever the
+          # run itself does. WR-07 for them reads the last three comments, never the
+          # body, so a body edit cannot swallow a reminder. An issue that holds a
+          # reminder is left open by a clean run, as on the comment-only path.
+          reminders_file="$RUNNER_TEMP/reminders.md"
+          reminders_posted=false
+          if [ -f "$reminders_file" ]; then
+            reminders_posted=true
+            new_reminders=true
+            if [ -n "$number" ]; then
+              rseen="$RUNNER_TEMP/reminders-seen"
+              mkdir -p "$rseen"
+              grep '^- ' "$reminders_file" > "$rseen/items.md" || true
+              gh issue view "$number" --repo "$GITHUB_REPOSITORY" --json comments \
+                --jq '[.comments[-3:][].body] | join("\n")' | tr -d '\r' > "$rseen/recent.md"
+              if [ -s "$rseen/items.md" ] && ! grep -Fxv -f "$rseen/recent.md" "$rseen/items.md" > /dev/null; then
+                new_reminders=false
+              fi
+            fi
+            if [ "$new_reminders" = "true" ]; then
+              echo "" >> "$reminders_file"
+              echo "$run_link" >> "$reminders_file"
+              if [ -n "$number" ]; then
+                gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body-file "$reminders_file"
+              else
+                created=$(gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+                  --label booth-review-job --body-file "$reminders_file")
+                number="${created##*/}"
+              fi
+            else
+              echo "reminders unchanged since the last comments; no new reminder comment"
+            fi
+          fi
+
           body_file="$RUNNER_TEMP/attention-body.md"
           if [ -f "$RUNNER_TEMP/attention.md" ]; then
             cp "$RUNNER_TEMP/attention.md" "$body_file"
+          elif [ "$STALE_ONLY" = "true" ]; then
+            : > "$body_file"
           elif [ "$JOB_OUTCOME" = "failure" ]; then
             echo "job run hit its step timeout without an attention report" > "$body_file"
           else
             echo "job run exited $JOB_CODE without an attention report" > "$body_file"
           fi
 
-          if [ "$STALE_ONLY" = "true" ]; then
-            # stale_only now means any comment-only run: staleness or a Phase 24 reminder.
+          if [ "$STALE_ONLY" = "true" ] && [ ! -f "$RUNNER_TEMP/attention.md" ]; then
+            echo "comment-only run with reminders only; nothing else to report"
+          elif [ "$STALE_ONLY" = "true" ]; then
+            # stale_only is any comment-only run (staleness and/or Phase 24 reminders).
             # WR-07: D-14 checks staleness at every backup slot, but its items
             # rarely change between main runs. Comment only when some item line
             # is missing from the issue's current body or from its last comment,
@@ -364,7 +408,7 @@ jobs:
               gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
                 --label booth-review-job --body-file "$body_file"
             fi
-          elif [ -n "$number" ]; then
+          elif [ -n "$number" ] && [ "$reminders_posted" != "true" ]; then
             gh issue comment "$number" --repo "$GITHUB_REPOSITORY" --body "clean run
           $run_link"
             gh issue close "$number" --repo "$GITHUB_REPOSITORY"

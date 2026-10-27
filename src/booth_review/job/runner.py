@@ -108,6 +108,7 @@ from booth_review.job.attention import (
     espnpr_week_unsaved,
     failed_attempts,
     has_attention,
+    has_reminders,
     missed_runs,
     nfl_506_missing,
     nfl_506_stale,
@@ -416,7 +417,7 @@ class ScheduledJob:
             if self._update:
                 self._staleness_step(quiet_items, state.last_build_at, now, season)
             quiet_items.extend(due_reminders(paths, now))
-            if has_attention(quiet_items):
+            if has_attention(quiet_items) or has_reminders(quiet_items):
                 return JobRunResult(
                     exit_code=4,
                     items=quiet_items,

@@ -426,7 +426,7 @@ def _passes(item: AttentionItem) -> None:
 def test_reminder_espnpr_line() -> None:
     item = reminder_espnpr(2026, "10")
     assert item.kind == "reminder_espnpr"
-    assert item.severity == "attention"
+    assert item.severity == "reminder"
     assert item.line == (
         "reminder 2026 cfb week 10: save the espn pr commentators release "
         f"{REMINDER_ESPNPR_CFB_URL}, then booth-review import espnpr"

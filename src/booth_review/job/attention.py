@@ -36,7 +36,9 @@ _MAX_LINES = 60
 _MAX_LINE_LEN = 200
 _TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
-Severity = Literal["attention", "info"]
+# "reminder" is a hand-save nudge (Phase 24): posted as its own issue comment, never counted
+# as attention, so it cannot change a run's exit code, last_status or attention count.
+Severity = Literal["attention", "info", "reminder"]
 
 
 @dataclass(frozen=True)
@@ -256,7 +258,7 @@ def _require_nfl_week(label: str) -> None:
 
 
 def _reminder(kind: str, line: str) -> AttentionItem:
-    return AttentionItem(kind=kind, line=line, severity="attention")
+    return AttentionItem(kind=kind, line=line, severity="reminder")
 
 
 def reminder_espnpr(season: int, label: str) -> AttentionItem:
@@ -590,6 +592,21 @@ def nfl_schedule_drift(n: int) -> AttentionItem:
 def has_attention(items: Sequence[AttentionItem]) -> bool:
     """Whether any item is severity "attention" (vs. purely informational)."""
     return any(item.severity == "attention" for item in items)
+
+
+def has_reminders(items: Sequence[AttentionItem]) -> bool:
+    """Whether any item is a hand-save reminder."""
+    return any(item.severity == "reminder" for item in items)
+
+
+def split_reminders(
+    items: Sequence[AttentionItem],
+) -> tuple[list[AttentionItem], list[AttentionItem]]:
+    """(everything but reminders, the reminders): the two files the workflow posts apart."""
+    return (
+        [item for item in items if item.severity != "reminder"],
+        [item for item in items if item.severity == "reminder"],
+    )
 
 
 def build_attention_body(items: Sequence[AttentionItem], *, generated_at: datetime) -> str | None:
