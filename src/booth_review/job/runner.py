@@ -525,6 +525,9 @@ class ScheduledJob:
                     items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
             print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
         except VaultCommitError:
+            # A failed push still posts this slot's reminders (severity "reminder", so the
+            # exit code stays 3); the +1h backup may itself be a failing retry.
+            items.extend(due_reminders(paths, now))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak
@@ -704,6 +707,7 @@ class ScheduledJob:
                     items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
             print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
         except VaultCommitError:
+            items.extend(due_reminders(self._runtime.paths, now))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak

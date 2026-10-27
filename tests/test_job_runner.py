@@ -2365,3 +2365,46 @@ def test_reminders_go_to_their_own_output_file_and_never_the_attention_body(tmp_
     cli._write_job_outputs(only, JobRunResult(exit_code=0, items=items[1:], counts={}, window=None))
     assert not only.attention_out.exists()
     assert only.reminders_out.exists()
+
+
+# -- a failed push still carries the slot's due reminders (panel F9) -------------------------------
+
+
+def test_a_full_run_that_fails_its_push_still_carries_the_due_reminders(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_espnpr_responses())
+    job = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE)
+
+    def _raise_commit(*args, **kwargs):
+        raise VaultCommitError("git subcommand push exited 1")
+
+    monkeypatch.setattr(job._runtime.vault, "commit_batch", _raise_commit)
+    result = job.run()
+
+    assert result.exit_code == 3
+    assert [i.kind for i in result.items].count("reminder_aa_cfb") == 1
+    assert all(i.severity == "reminder" for i in result.items if i.kind == "reminder_aa_cfb")
+
+
+def test_a_schedule_run_that_fails_its_push_still_carries_the_due_reminders(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_espnpr_responses())
+    runtime = _runtime(paths, handle, now=lambda: _REMINDER_TUE, fake_clock=fake_clock)
+
+    def _boom(*args, **kwargs):
+        raise VaultCommitError("git subcommand push exited 1")
+
+    monkeypatch.setattr(runtime.vault, "commit_batch", _boom)
+    monkeypatch.setattr(runner_module, "run_build", _boom, raising=False)
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: _REMINDER_TUE, trigger="manual", mode="schedule"
+    ).run()
+
+    assert result.exit_code == 3
+    assert [i.kind for i in result.items].count("reminder_aa_cfb") == 1
