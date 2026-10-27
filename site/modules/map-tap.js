@@ -16,9 +16,13 @@ export const BACKGROUND_TAP_DELAY_MS = 120;
  *   onShowCard: (key: string, ev: object) => void,
  *   onOpen: (key: string, ev: object) => void,
  *   onClear: () => void,
- *   isReady?: () => boolean}} opts
+ *   isReady?: () => boolean,
+ *   isInsideCard?: (target: EventTarget|null) => boolean}} opts - `isInsideCard`: a pointer-down
+ *   on the map's own card (its Open game button) is neither a background tap nor an outside tap.
  */
-export function createTapController({ container, isTouchOnly, onShowCard, onOpen, onClear, isReady }) {
+export function createTapController({
+  container, isTouchOnly, onShowCard, onOpen, onClear, isReady, isInsideCard,
+}) {
   let pendingTapKey = null;
   /** Venue dot / marker clicks seen so far; a tap that leaves it unchanged hit the background. */
   let clickCount = 0;
@@ -59,6 +63,10 @@ export function createTapController({ container, isTouchOnly, onShowCard, onOpen
     // its background check before this tap, or a tap inside the wait would find the old
     // venue still armed and open it.
     settleBackground?.();
+    if (isInsideCard?.(ev.target)) {
+      down = null;
+      return;
+    }
     if (!container.contains(ev.target)) {
       down = null;
       if (pendingTapKey != null) {

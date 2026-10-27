@@ -137,12 +137,27 @@ export function createSplatLayer(gd, { imageSpec, landFill, onFail }) {
     });
   }
 
-  /** Revokes the live object URL and invalidates in-flight paints. */
+  /**
+   * Invalidates in-flight paints, then (through the serial chain, after any layout change already
+   * queued) removes the live raster from the layout before revoking its blob URL, so a later
+   * Plotly redraw of the div never shows a dead blob. Resolves once the layout is clean.
+   */
   function destroy() {
     token += 1;
-    if (currentImageUrl) URL.revokeObjectURL(currentImageUrl);
+    const url = currentImageUrl;
     currentImageUrl = null;
     currentSpec = null;
+    if (!url) return Promise.resolve();
+    return serialLayout(async () => {
+      try {
+        // A purged div has no layout left to clean.
+        if (gd._fullLayout) await window.Plotly.relayout(gd, { images: [] });
+      } catch {
+        // The URL is revoked either way.
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    });
   }
 
   return {

@@ -6776,6 +6776,7 @@ tr.is-matched > :first-child {
 .wk-view-seg {
   position: relative;
   min-width: 80px;
+  min-height: 0;
   height: 100%;
   padding: 0 var(--space-md);
   box-sizing: border-box;
@@ -6832,9 +6833,9 @@ tr.is-matched > :first-child {
 
 .wk-map-key {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-sm) var(--space-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-sm);
   margin: var(--space-sm) 0 var(--space-lg);
   font: var(--font-body);
   color: var(--muted);
@@ -6963,9 +6964,6 @@ tr.is-matched > :first-child {
   }
 
   .wk-map-key {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-sm);
     margin-bottom: var(--space-md);
   }
 }
