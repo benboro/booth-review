@@ -97,9 +97,9 @@ def test_style_and_gradient_paints_are_rewritten() -> None:
         f'<path style="fill:#111212;stroke:none" d="M0 0"/></svg>'
     ).encode()
     out = dark_variant(src).decode()
-    assert "fill:#ECE7DF}" in out
+    assert "fill:#E5EAE8}" in out
     assert 'stop-color="#F94536"' in out or 'stop-color="#FA4737"' in out
-    assert "fill:#ECE7DF;stroke:none" in out
+    assert "fill:#E5EAE8;stroke:none" in out
 
 
 @pytest.mark.parametrize("paint", ["rgb(0,0,0)", "hsl(0,0%,0%)", "red", "navy"])
