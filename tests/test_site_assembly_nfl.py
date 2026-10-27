@@ -67,7 +67,7 @@ _SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad4
 # Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
 # Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
-# Re-pinned at Phase 26 Plan 05: footer credit blocks, spaced nav, semicolon freshness, hyphen title.
+# Re-pinned at Phase 26 Plan 05: footer credit blocks, spaced nav, semicolon freshness, title.
 _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58eeec"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
