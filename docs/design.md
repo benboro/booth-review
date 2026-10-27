@@ -116,7 +116,11 @@ records only where the site settles or applies them.
   URL `wview=map`), one segmented control left of the week stepper (32px visually, a 44px
   tap area on a phone). The map shows one dot per placed game in its network-family colour
   with a 1.5px keyline in the page colour; the colour comes from the CFB Map's family
-  palette, deepened toward black where a family falls under 3:1 on the land. The kickoff
+  palette, deepened toward black where a family falls under 3:1 on the land. The deepening
+  lives in the shared `MAP_FAMILY_COLORS`, so the CFB Map's light-theme family colours (dots,
+  splat, tooltip, legend) shifted slightly on purpose for that 3:1 rule (fox #009E73 to
+  #009B71, cbs #B77F00 to #B57E00, nbc #C972A2 to #C16D9C, cw #1D96DB to #1C90D2, other
+  #8B8B8B to #888888); dark is unchanged. The kickoff
   window is the shape: CFB circle (noon), square (afternoon), diamond (prime), triangle
   (late); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
   game is an open ring in its family colour, still listed in the Time TBA strip. Games at
