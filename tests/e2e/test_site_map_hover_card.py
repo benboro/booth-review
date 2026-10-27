@@ -467,23 +467,82 @@ def test_phone_late_compatibility_click_does_not_filter(
     assert tip["hint"] == "Tap again to list these games"
 
 
-def test_phone_mouse_click_after_a_tap_still_counts(mobile_page: Page, open_app: OpenApp) -> None:
-    """A mouse paired with a phone sends no touch pointerdown, so the tap sequence must not
-    swallow its click: a finger tap shows the card, then a mouse click on the same dot
-    lists its games."""
-    mobile_page.set_viewport_size({"width": 360, "height": 800})
-    _open_map(mobile_page, open_app)
-    mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
-    dot = _model(mobile_page)["venueDots"][0]
-    px, py = _pixel(mobile_page, dot["x"], dot["y"])
+def _phone_dot(page: Page, open_app: OpenApp) -> tuple[float, float]:
+    page.set_viewport_size({"width": 360, "height": 800})
+    _open_map(page, open_app)
+    page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
+    dot = _model(page)["venueDots"][0]
+    return _pixel(page, dot["x"], dot["y"])
+
+
+_COUNT_CLICKS = """() => { window.__mapClicks = [];
+  document.getElementById('map-chart').on('plotly_click',
+    (e) => window.__mapClicks.push(e.event && e.event.type)); }"""
+
+
+def test_phone_tap_reaches_plotly_once(mobile_page: Page, open_app: OpenApp) -> None:
+    """The touch pointerdown is cancelled, so the browser sends no compatibility mouse click:
+    one tap is one plotly_click, and no queue order or delay can make it count twice."""
+    px, py = _phone_dot(mobile_page, open_app)
+    mobile_page.evaluate(_COUNT_CLICKS)
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => window.__mapClicks.length > 0")
+    mobile_page.wait_for_timeout(600)
+    assert mobile_page.evaluate("() => window.__mapClicks") == ["touchstart"]
+
+
+_REPLAY_CLICK = """([x, y]) => {
+  const gd = document.getElementById('map-chart');
+  const first = window.__firstClick;
+  gd.emit('plotly_click', { points: first.points,
+    event: { type: 'touchstart', changedTouches: [{ clientX: x, clientY: y }] } });
+}"""
+
+
+@pytest.mark.parametrize("on_dot", [False, True], ids=["background", "dot"])
+def test_phone_stale_plotly_point_is_judged_by_the_touch(
+    mobile_page: Page, open_app: OpenApp, on_dot: bool
+) -> None:
+    """Plotly skips its hover pass for a touch within 50 ms of the last and then clicks the
+    previous point, so a quick background tap reported the dot tapped before it and filtered
+    (the CI flake on PR #84). Replaying that click deterministically: with the touch on the
+    background it must not filter; with the touch on the dot it is the second tap and does."""
+    px, py = _phone_dot(mobile_page, open_app)
+    box = mobile_page.locator("#map-chart").bounding_box()
+    assert box is not None
+    mobile_page.evaluate(
+        """() => document.getElementById('map-chart').on('plotly_click', (e) => {
+             window.__firstClick ??= e; })"""
+    )
+    mobile_page.touchscreen.tap(px, py)
+    mobile_page.wait_for_function("() => window.__firstClick != null")
+    at = [px, py] if on_dot else [box["x"] + 8, box["y"] + 8]
+    mobile_page.evaluate(_REPLAY_CLICK, at)
+    search = mobile_page.evaluate("() => location.search")
+    assert ("venue=" in search) is on_dot
+
+
+def test_phone_mouse_click_right_after_a_tap_counts(mobile_page: Page, open_app: OpenApp) -> None:
+    """A mouse paired with a phone is not held back by any time window: a finger tap shows
+    the card, and a mouse click on the same dot straight after lists its games."""
+    px, py = _phone_dot(mobile_page, open_app)
     mobile_page.touchscreen.tap(px, py)
     mobile_page.wait_for_function(
         "() => { const e = document.getElementById('chart-tooltip'); return e && !e.hidden; }"
     )
     assert "venue=" not in mobile_page.evaluate("() => location.search")
-    mobile_page.wait_for_timeout(500)
     mobile_page.mouse.click(px, py)
     mobile_page.wait_for_function("() => location.search.includes('venue=')")
+
+
+def test_phone_two_quick_mouse_clicks_list_the_games(mobile_page: Page, open_app: OpenApp) -> None:
+    """Two real mouse clicks on a phone, back to back, are the card then the list."""
+    px, py = _phone_dot(mobile_page, open_app)
+    mobile_page.evaluate(_COUNT_CLICKS)
+    mobile_page.mouse.click(px, py)
+    mobile_page.mouse.click(px, py)
+    mobile_page.wait_for_function("() => location.search.includes('venue=')")
+    assert mobile_page.evaluate("() => window.__mapClicks") == ["mousedown", "mousedown"]
 
 
 # -- Phase 17.1 D-16: an invisible 12px hit target under every small dot ----------------------

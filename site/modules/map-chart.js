@@ -375,6 +375,29 @@ export function renderMap(gd, figure) {
   return window.Plotly.react(gd, figure.traces, figure.layout, figure.config);
 }
 
+/** Plotly's own default reach when the layout sets no hoverdistance. */
+const DEFAULT_HOVER_DISTANCE = 20;
+
+/**
+ * Whether the clicked point lies within Plotly's hit reach of where the pointer landed.
+ * Plotly skips the hover pass for a touch within 50 ms of the last one and then reports
+ * the previous point, so a quick tap on the background would otherwise click the dot
+ * tapped just before. A click without pointer coordinates is trusted.
+ */
+function underPointer(gd, ev) {
+  const src = ev?.event;
+  const at = src?.changedTouches?.[0] ?? src?.touches?.[0] ?? src;
+  const p = ev?.points?.[0];
+  if (at?.clientX == null || !p?.xaxis || !p?.yaxis) return true;
+  const box = gd.getBoundingClientRect();
+  const px = box.left + p.xaxis._offset + p.xaxis.c2p(p.x);
+  const py = box.top + p.yaxis._offset + p.yaxis.c2p(p.y);
+  const size = p.data?.marker?.size;
+  const radius = (Array.isArray(size) ? size[p.pointNumber] : size ?? 0) / 2;
+  const reach = radius + (gd._fullLayout?.hoverdistance ?? DEFAULT_HOVER_DISTANCE) + 1;
+  return Math.hypot(at.clientX - px, at.clientY - py) <= reach;
+}
+
 function venueOf(ev) {
   const p = ev.points && ev.points[0];
   if (!p || p.customdata == null) return null;
@@ -393,7 +416,7 @@ export function bindMapEvents(gd, handlers = {}) {
   const { onVenueClick, onVenueHover, onVenueUnhover } = handlers;
   gd.on('plotly_click', (ev) => {
     const hit = venueOf(ev);
-    if (hit) onVenueClick?.(hit.key, ev);
+    if (hit && underPointer(gd, ev)) onVenueClick?.(hit.key, ev);
   });
   gd.on('plotly_hover', (ev) => {
     const hit = venueOf(ev);
