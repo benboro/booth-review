@@ -57,14 +57,18 @@ _TYPE_LINE = (
     "used under the SIL Open Font License 1.1."
 )
 
-_RT05_TEXT = (
+# One block per source (checker gap 2); the Retrosheet line stays verbatim.
+_RT05_ITEMS = [
     "The information used here was obtained free of charge from and is copyrighted by "
-    "Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org · "
+    "Retrosheet. Interested parties may contact Retrosheet at www.retrosheet.org",
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with crew and "
-    "game data · Postseason outlets and some crews: Wikipedia (CC BY-SA 4.0) · "
-    "Crews and networks: 506 Sports · Some 2026 crews: relayed from a fan schedule blog, "
-    "each linked in the game panel with the press page it cites"
-)
+    "game data",
+    "Postseason outlets and some crews: Wikipedia (CC BY-SA 4.0)",
+    "Crews and networks: 506 Sports",
+    "Some 2026 crews: relayed from a fan schedule blog, "
+    "each linked in the game panel with the press page it cites",
+]
+_RT05_TEXT = " ".join(_RT05_ITEMS)
 
 _RT05_LINKS = [
     ("www.retrosheet.org", "https://www.retrosheet.org"),
@@ -103,6 +107,7 @@ def test_footer_credits_and_restore(
     _wait_mlb(page)
     credit = page.locator("#site-footer .credit-line")
     assert _norm(credit.inner_text()) == _RT05_TEXT
+    assert [_norm(t) for t in credit.locator(".credit-item").all_inner_texts()] == _RT05_ITEMS
     assert RETROSHEET in _norm(credit.inner_text())
     anchors = credit.locator("a")
     assert anchors.evaluate_all("els => els.map(e => [e.textContent, e.getAttribute('href')])") == [

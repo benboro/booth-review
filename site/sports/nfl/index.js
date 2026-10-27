@@ -173,30 +173,45 @@ function freshnessText() {
     ? `Schedules and scores through Week ${f.through_week}`
     : 'Schedules and scores: not yet available this season';
   const view = f.viewership_through_week
-    ? `Viewership through Week ${f.viewership_through_week}`
-    : 'Viewership: not yet available this season';
-  return `${sched} · ${view}`;
+    ? `viewership through Week ${f.viewership_through_week}`
+    : 'viewership: not yet available this season';
+  return `${sched}; ${view}`;
 }
 
+/** One block per source (CSS puts each on its own line); a "\n" text node sits between them. */
 function creditNodes() {
-  const t = (s) => document.createTextNode(s);
   const BY = 'https://creativecommons.org/licenses/by/4.0/';
-  return [
-    t('Viewership: '),
-    link('RatingsReference.com', 'https://ratingsreference.com'),
-    t(' ('),
-    link('CC BY 4.0', BY),
-    t('), modified: filtered and joined with crew and game data · Schedules and win-probability measures: '),
-    link('nflverse', 'https://nflverse.com'),
-    t(' ('),
-    link('CC BY 4.0', BY),
-    t('), modified: derived and joined with crew and viewership data · Scheduling changes: '),
-    link('Wikipedia', 'https://www.wikipedia.org'),
-    t(' ('),
-    link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
-    t(') · Crews and networks: '),
-    link('506 Sports', 'https://506sports.com'),
+  const item = (...kids) => {
+    const span = el('span', 'credit-item');
+    span.append(...kids);
+    return span;
+  };
+  const t = (s) => document.createTextNode(s);
+  const items = [
+    item(
+      t('Viewership: '),
+      link('RatingsReference.com', 'https://ratingsreference.com'),
+      t(' ('),
+      link('CC BY 4.0', BY),
+      t('), modified: filtered and joined with crew and game data'),
+    ),
+    item(
+      t('Schedules and win-probability measures: '),
+      link('nflverse', 'https://nflverse.com'),
+      t(' ('),
+      link('CC BY 4.0', BY),
+      t('), modified: derived and joined with crew and viewership data'),
+    ),
+    item(
+      t('Scheduling changes: '),
+      link('Wikipedia', 'https://www.wikipedia.org'),
+      t(' ('),
+      link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
+      t(')'),
+    ),
+    item(t('Crews and networks: '), link('506 Sports', 'https://506sports.com')),
   ];
+  return items.flatMap((node, i) => (i ? [t('\n'), node] : [node]));
 }
 
 function swapFooter(footerEl) {
@@ -302,7 +317,7 @@ function renderSelectionBar() {
   }
 }
 
-/** '{N} games · {first}–{last}' for the active Seasons range and filters. */
+/** '{N} games, {first}–{last}' for the active Seasons range and filters. */
 function renderHeadline() {
   const n = model.cols.season.length;
   let count = 0;
@@ -313,7 +328,7 @@ function renderHeadline() {
     regions.headline.textContent = TAB_LABELS[state.view];
     return;
   }
-  regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'} · ${span}`;
+  regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'}, ${span}`;
 }
 
 function renderTable() {

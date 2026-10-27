@@ -51,6 +51,7 @@ RT01_ITEMS = [
     "Crews: 506 Sports",
     "Data provided by CollegeFootballData.com",
 ]
+RT01_TEXT = " ".join(RT01_ITEMS)
 RT01_HREFS = [
     "https://ratingsreference.com",
     "https://creativecommons.org/licenses/by/4.0/",
@@ -190,7 +191,7 @@ def test_rt01_credit_line_and_links(built: Path, page: str) -> None:
     items = credit[0].find("span", "credit-item")
     assert [i.text for i in items] == RT01_ITEMS
     assert credit[0].find("br") == []
-    assert credit[0].text == " ".join(RT01_ITEMS)
+    assert credit[0].text == RT01_TEXT
     anchors = credit[0].links()
     assert [a.attrs.get("href") for a in anchors] == RT01_HREFS
     assert all(a.attrs.get("rel") == "noopener noreferrer" for a in anchors)
