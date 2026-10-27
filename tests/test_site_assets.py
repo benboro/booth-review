@@ -15,6 +15,9 @@ FONT_SHA256 = {
     "crimson-text-latin-600-normal.woff2": (
         "e2ca4f57a77f4db70d61c4d16e748545ce2000e0252be1f67fa1c964040f9b9b"
     ),
+    "lm-roman-demi-latin-600-normal.woff2": (
+        "667737468c8b2a50e4b0b2c07ed5a426f88e27655205fe17bc8e4cb3996da2c1"
+    ),
     "roboto-latin-400-normal.woff2": (
         "425c0713a8176f92273d378599c7eac57de7fafabd4bd0ed457b70eb8f80d371"
     ),
@@ -31,6 +34,12 @@ OFL_COPYRIGHT = {
     "OFL-roboto.txt": "Copyright 2011 The Roboto Project Authors",
     "OFL-roboto-condensed.txt": "Copyright 2011 Google Inc.",
 }
+
+GUST_LICENCE = {
+    "GUST-FONT-LICENSE.txt": "This is version 1.0, dated 22 June 2009, of the GUST Font License",
+}
+GUST_LICENCE_SHA256 = "5eb61bb836bb1845ef668717cb15b382e997748ce2629e4388cc5e4c3fa4e433"
+LM_SUBSET_MAX_BYTES = 30720
 
 
 @pytest.mark.parametrize("name", sorted(FONT_SHA256))
@@ -60,4 +69,16 @@ def test_ofl_text_present_with_copyright_line(name: str) -> None:
 
 def test_font_dir_holds_exactly_the_approved_files() -> None:
     found = {path.name for path in FONT_DIR.iterdir()}
-    assert found == set(FONT_SHA256) | set(OFL_COPYRIGHT)
+    assert found == set(FONT_SHA256) | set(OFL_COPYRIGHT) | set(GUST_LICENCE)
+
+
+@pytest.mark.parametrize("name", sorted(GUST_LICENCE))
+def test_gust_licence_present_and_pinned(name: str) -> None:
+    raw = (FONT_DIR / name).read_bytes()
+    assert GUST_LICENCE[name] in raw.decode("utf-8")
+    assert hashlib.sha256(raw).hexdigest() == GUST_LICENCE_SHA256
+
+
+def test_lm_subset_size_ceiling() -> None:
+    size = (FONT_DIR / "lm-roman-demi-latin-600-normal.woff2").stat().st_size
+    assert size <= LM_SUBSET_MAX_BYTES
