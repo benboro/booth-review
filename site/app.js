@@ -410,7 +410,12 @@ function render() {
     hideBandInfo();
     if (crewsPanelEl) {
       crewsPanelEl.hidden = false;
-      const crewsModel = buildCrewRows(data, view, { mode: state.cmode, perSeason: perSeasonApplies(data, state) });
+      const crewsModel = buildCrewRows(data, view, {
+        mode: state.cmode,
+        perSeason: perSeasonApplies(data, state),
+        // A crew pick narrows the table to the crew, as NFL Booths does (user rule 2026-10-27).
+        crew: view.hasCrewSelection ? state.crew : null,
+      });
       renderCrewsPanel(crewsPanelEl, crewsModel, {
         data,
         state,

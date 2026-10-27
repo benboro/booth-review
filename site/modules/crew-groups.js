@@ -472,17 +472,23 @@ const defaultOf = (rows) => (rows.length && rows[0].season != null ? seasonDefau
 
 /**
  * Build the Crews rows from the games that pass the master filters.
+ *
+ * A crew pick narrows the table to that crew, as an NFL Booths pick narrows the NFL Crews
+ * table (user rule 2026-10-27, todo 2026-10-23-cfb-crews-row-click-narrows): Crew mode keeps
+ * the crew's own rows, PBP and Analyst modes keep the rows of the crew's people. The left-out
+ * count still describes the mode's telecasts with no crew or voice, not the narrowed-out ones.
  * @param {object} data - a `prepareData` result.
  * @param {{passesFilters: Uint8Array}} view - a `computeView` result.
- * @param {{mode?: 'crew'|'pbp'|'analyst', perSeason?: boolean}} [opts]
+ * @param {{mode?: 'crew'|'pbp'|'analyst', perSeason?: boolean, crew?: string|null}} [opts]
  * @returns {{mode: string, perSeason: boolean, rows: Array<object>, leftOut: number,
  *   totalRows: number}}
  */
-export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } = {}) {
+export function buildCrewRows(data, view, { mode = 'crew', perSeason = false, crew = null } = {}) {
   const { t } = data;
   const index = crewIndex(data);
   const buckets = new Map();
   let leftOut = 0;
+  const pickedPeople = crew != null ? new Set(index.crews.get(crew)?.people ?? []) : null;
   const add = (rowKey, meta, i) => {
     let b = buckets.get(rowKey);
     if (!b) {
@@ -501,12 +507,14 @@ export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } =
         leftOut += 1;
         continue;
       }
+      if (crew != null && pg.key !== crew) continue;
       add(pg.key + suffix(i), { crewKey: pg.key }, i);
     } else if (mode === 'pbp') {
       if (pg.pbp === null) {
         leftOut += 1;
         continue;
       }
+      if (pickedPeople && !pickedPeople.has(pg.pbp)) continue;
       add(`pbp:${pg.pbp}${suffix(i)}`, { slug: pg.pbp }, i);
     } else {
       const analysts = mainSlugs(data, i, 'analyst');
@@ -514,7 +522,10 @@ export function buildCrewRows(data, view, { mode = 'crew', perSeason = false } =
         leftOut += 1;
         continue;
       }
-      for (const slug of new Set(analysts)) add(`analyst:${slug}${suffix(i)}`, { slug }, i);
+      for (const slug of new Set(analysts)) {
+        if (pickedPeople && !pickedPeople.has(slug)) continue;
+        add(`analyst:${slug}${suffix(i)}`, { slug }, i);
+      }
     }
   }
 
