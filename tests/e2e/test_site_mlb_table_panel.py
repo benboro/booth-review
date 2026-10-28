@@ -404,7 +404,7 @@ def test_game_figure_reads_as_that_games_viewers_not_its_label(
     assert "Viewers: 5.5MM (whole broadcast window, not this game alone)" in _panel(page)
     assert "window-level:" not in _panel(page)
     _open(page, 7)
-    assert "Viewers: 12.0MM (several telecasts combined)" in _panel(page)
+    assert "Viewers: 12MM (several telecasts combined)" in _panel(page)
 
 
 def test_panel_says_retrosheet_not_loaded_without_retrosheet(

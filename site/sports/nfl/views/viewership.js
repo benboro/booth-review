@@ -23,7 +23,7 @@ import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
 import { initBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
-import { escapeHover, formatMillions, MILLIONS, MINUS } from '../../../modules/format.js';
+import { escapeHover, formatMillions, formatMillionsProse, MILLIONS, MINUS } from '../../../modules/format.js';
 import { mountViewTools } from '../tools.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
 
@@ -101,10 +101,11 @@ function niceStep(range, target) {
   return (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
 }
 
-function millions(v, signed) {
+/** Table cells keep the even `formatMillions` form; hovers (`prose`) trim it ("400K", "1.1MM"). */
+function millions(v, signed, prose = false) {
   const r = Math.round(v);
   if (r === 0) return '0';
-  const body = formatMillions(Math.abs(r));
+  const body = prose ? formatMillionsProse(Math.abs(r)) : formatMillions(Math.abs(r));
   if (r < 0) return MINUS + body;
   return signed ? `+${body}` : body;
 }
@@ -204,9 +205,9 @@ function pick(item) {
   });
 }
 
-function valueText(eff, v) {
+function valueText(eff, v, prose = false) {
   if (v == null) return 'not available';
-  return millions(v, eff === 'resid');
+  return millions(v, eff === 'resid', prose);
 }
 
 function hoverLines(item) {
@@ -216,7 +217,7 @@ function hoverLines(item) {
   const lines = [
     { text: `${item.label}${item.windowLevel ? ', window-level' : ''}`, kind: 'title' },
     { text: `${p.season}, ${model.eras[p.era].label}`, kind: 'body' },
-    { text: `${resid ? 'Residual' : 'Viewers'}: ${valueText(current.eff, item.y)}`, kind: 'body' },
+    { text: `${resid ? 'Residual' : 'Viewers'}: ${valueText(current.eff, item.y, true)}`, kind: 'body' },
   ];
   if (resid && item.y != null && item.err == null) {
     lines.push({ text: '±1.96 standard errors: not available', kind: 'body' });

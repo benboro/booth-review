@@ -18,7 +18,7 @@ import {
   flagLabels,
   scoreText,
   slotLabel,
-  viewersText,
+  viewersProseText,
 } from './game-format.js';
 
 const WINDOW_NOTE = '; window-level figure (all Sunday afternoon games).';
@@ -51,7 +51,7 @@ function crewSection(row) {
 
 function viewersNodes(row) {
   if (row.unplayed) return [el('p', 'panel-unplayed', 'Not played yet.')];
-  const v = viewersText(row);
+  const v = viewersProseText(row);
   if (v == null) return [el('p', null, `Viewers: not available (${causeCopy(row).panel})`)];
   const nodes = [el('p', null, `Viewers: ${v}${row.scope === 'window' ? WINDOW_NOTE : ''}`)];
   if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));

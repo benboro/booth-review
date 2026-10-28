@@ -315,6 +315,18 @@ export function formatViewers(n) {
 }
 
 /**
+ * A viewer count in a tooltip, panel or other prose: unit shorthand with at most one decimal and
+ * no trailing zero ("220K", "1.1MM", never "220.0K" or "1.10MM"; sign-off 2026-10-27). Tables
+ * use `formatViewers`, which keeps one even decimal.
+ * @param {number|null} n
+ * @returns {string} e.g. "220K", "1.1MM", or the no-rating label for null.
+ */
+export function formatViewersProse(n) {
+  if (n == null) return NO_RATING_LABEL;
+  return formatAudienceShort(n);
+}
+
+/**
  * The one unit for a viewer figure in millions, site-wide (CFB, NFL and MLB): "MM", the
  * user's choice on 2026-10-24. Thousands stay "K". Every viewer figure in millions goes
  * through `MILLIONS` or a helper below, never a hand-written suffix.
@@ -330,6 +342,18 @@ export const MILLIONS = 'MM';
  */
 export function formatMillions(n, digits = 1) {
   return `${(n / 1e6).toFixed(digits)}${MILLIONS}`;
+}
+
+/**
+ * A viewer count in prose for the NFL and MLB, whose tables write millions with `formatMillions`
+ * ("12.0MM"): the same rounding as that table cell, with the trailing zero dropped ("12MM"), and
+ * thousands as "K" ("220K") so a hover never disagrees with its table row.
+ * @param {number} n
+ * @returns {string} e.g. "220K", "1.1MM", "12MM".
+ */
+export function formatMillionsProse(n) {
+  if (n < 1e6) return formatAudienceShort(n);
+  return formatMillions(n).replace('.0', '');
 }
 
 /**

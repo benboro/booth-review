@@ -62,6 +62,9 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
         snf: F.slotLabel('SNF'), other: F.slotLabel('Thanksgiving'),
         flags: F.flagLabels(mk({ flexed: true, agotw: true, standalone: true })),
         v: F.viewersText(base), nv: F.viewersText(mk({ viewers: null })),
+        tbl: F.viewersText(mk({ viewers: 220000 })),
+        prose: [220000, 1100000, 1000000, 12300000].map((n) => F.viewersProseText(mk({ viewers: n }))),
+        nprose: F.viewersProseText(mk({ viewers: null })),
         ko: F.kickoffText(base), long: F.dateLongText(base),
         cause: F.CAUSE_COPY.regional.panel,
       };
@@ -75,6 +78,10 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
     assert got["flags"] == ["Solo slot", "Fox AGOTW", "Flexed"]
     assert got["v"] == "12.3MM"
     assert got["nv"] is None
+    # Tables keep the millions form; prose trims it (sign-off 2026-10-27).
+    assert got["tbl"] == "0.2MM"
+    assert got["prose"] == ["220K", "1.1MM", "1MM", "12.3MM"]
+    assert got["nprose"] is None
     assert got["ko"] == "1:00 PM ET"
     assert got["long"] == "Sunday, Sep 7, 2025"
     assert got["cause"] == "Ratings Reference does not compile regional games"

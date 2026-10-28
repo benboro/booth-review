@@ -1208,3 +1208,28 @@ def test_tooltip_model_and_hover_text_for_unrated_games(
     assert lines["rated"].startswith("Viewers: ")
     if lines["hover"] is not None:
         assert "No public rating; Stream Plus games are rarely rated" in lines["hover"]
+
+
+def test_panel_and_tooltip_trim_the_viewer_zero_while_the_table_keeps_it(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Sign-off 2026-10-27: prose writes 970K and the table cell still reads 970.0K."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+    assert "970.0K" in " ".join(_row_texts(guarded_page))
+    i = guarded_page.evaluate(
+        "() => window.__testHooks.data.t.viewers.findIndex((v) => v === 970000)"
+    )
+    assert i >= 0
+    guarded_page.evaluate(f"window.__testHooks.openPanel({i})")
+    body = guarded_page.inner_text("#panel-body")
+    assert "Viewers: 970K" in body and "970.0K" not in body
+    line = guarded_page.evaluate(
+        """async (i) => {
+          const T = await import(new URL('./modules/tooltip.js', location.href).href);
+          return T.tooltipModel(window.__testHooks.data, i, { axis: 'spread' }).viewersLine;
+        }""",
+        i,
+    )
+    assert line == "Viewers: 970K"

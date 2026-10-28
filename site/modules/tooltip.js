@@ -24,7 +24,7 @@ import {
   boothLabel,
   formatAudienceShort,
   formatMatchup,
-  formatViewers,
+  formatViewersProse,
   namedGameInfo,
   noRatingLine,
   stripNetworkNote,
@@ -101,7 +101,7 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[roleKey(entry.role)]})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
-  const viewersLine = data.rated[i] ? `Viewers: ${formatViewers(t.viewers[i])}` : noRatingLine(data, i);
+  const viewersLine = data.rated[i] ? `Viewers: ${formatViewersProse(t.viewers[i])}` : noRatingLine(data, i);
   // D-17: on Spread x with Excitement y the line shows both plotted measures,
   // the same form as the Date line. Excitement x cannot pair with Excitement y
   // (the D-11 swap), and Viewers y is unchanged.

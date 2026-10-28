@@ -1472,3 +1472,33 @@ def test_viewer_millions_read_mm_everywhere(guarded_page: Page, site_url: str) -
     assert r["log"] == ["500K", "1MM", "2MM", "5MM"]
     assert r["short"] == ["900K", "50.6MM"]
     assert r["table"] == ["523.4K", "2.0MM"]
+
+
+def test_viewer_prose_trims_the_trailing_zero_and_tables_do_not(
+    guarded_page: Page, site_url: str
+) -> None:
+    """Sign-off 2026-10-27: tooltips, panels and prose write a viewer count with no trailing
+    zero and at most one decimal ("220K", "1.1MM"); tables keep their even one-decimal form."""
+    _load(guarded_page, site_url)
+    r = guarded_page.evaluate(
+        """
+        async () => {
+          const F = await import('./modules/format.js');
+          const values = [220000, 1100000, 1000000, 1250000, 523400, 12345678];
+          return {
+            prose: values.map((v) => F.formatViewersProse(v)),
+            table: values.map((v) => F.formatViewers(v)),
+            none: [F.formatViewersProse(null), F.formatViewers(null)],
+            // NFL and MLB tables write millions with formatMillions; their prose drops the zero.
+            millionsProse: values.map((v) => F.formatMillionsProse(v)),
+            millionsTable: values.map((v) => F.formatMillions(v)),
+          };
+        }
+        """
+    )
+    # Rounding is the existing formatAudienceShort's: half up at one decimal (1.25MM is 1.3MM).
+    assert r["prose"] == ["220K", "1.1MM", "1MM", "1.3MM", "523.4K", "12.3MM"]
+    assert r["table"] == ["220.0K", "1.1MM", "1.0MM", "1.3MM", "523.4K", "12.3MM"]
+    assert r["none"] == ["No public rating", "No public rating"]
+    assert r["millionsProse"] == ["220K", "1.1MM", "1MM", "1.3MM", "523.4K", "12.3MM"]
+    assert r["millionsTable"] == ["0.2MM", "1.1MM", "1.0MM", "1.3MM", "0.5MM", "12.3MM"]

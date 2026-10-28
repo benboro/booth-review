@@ -24,7 +24,7 @@ import {
   axisValueText,
   boothLabel,
   formatMatchup,
-  formatViewers,
+  formatViewersProse,
   gameTypeInfo,
   rivalryName,
   measurementLabel,
@@ -123,7 +123,7 @@ function buildViewersParagraph(data, i) {
     return p;
   }
   if (t.measurement_type[i] === 'nielsen_adobe') {
-    p.appendChild(document.createTextNode(`Viewers: ${formatViewers(t.viewers[i])}, `));
+    p.appendChild(document.createTextNode(`Viewers: ${formatViewersProse(t.viewers[i])}, `));
     const flag = flagOfKind(data, i, 'measurement');
     const badge =
       (flag && externalLink(flag.source_url, 'Nielsen + Adobe (streaming)')) ??
@@ -134,7 +134,7 @@ function buildViewersParagraph(data, i) {
   } else {
     p.appendChild(
       document.createTextNode(
-        `Viewers: ${formatViewers(t.viewers[i])}, ${measurementLabel(t.measurement_type[i])}`,
+        `Viewers: ${formatViewersProse(t.viewers[i])}, ${measurementLabel(t.measurement_type[i])}`,
       ),
     );
   }

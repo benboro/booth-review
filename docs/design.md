@@ -144,6 +144,12 @@ records only where the site settles or applies them.
 
 ## Chart marks
 
+- Viewer counts in tooltips, panels and other prose carry at most one decimal and no trailing
+  zero ("220K", "1.1MM", "1MM"); tables keep their even one-decimal form ("220.0K"). The
+  CFB prose form is `formatViewersProse` (`formatAudienceShort`); NFL and MLB use
+  `formatMillionsProse`, which rounds exactly as their tables do and then drops the zero
+  (26-10 sign-off).
+
 - The CFB Bars and the NFL Special games bars have no value column at the right: the end
   markers carry each total, and the hover repeats it (notes 15; CFB Bars at the 26-10 sign-off). The bars rank by their bright part: the categories the chips
   show and the Category filter keeps in focus, or the matched games under a pick.

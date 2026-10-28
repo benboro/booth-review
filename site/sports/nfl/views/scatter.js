@@ -21,7 +21,7 @@ import { EXCLUSIVE_CATEGORIES } from '../state.js';
 import { computePicks } from '../picks.js';
 import { gameRow } from '../data.js';
 import { categoryColor } from '../palette.js';
-import { CAUSE_COPY, slotLabel, flagLabels, viewersText, dateShortText } from '../game-format.js';
+import { CAUSE_COPY, slotLabel, flagLabels, viewersText, viewersProseText, dateShortText } from '../game-format.js';
 import { apKickoff } from '../../../modules/weekend.js';
 import { ACCENT, DOT_OUTLINE, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { frameConfig, frameLayout } from '../../../modules/chart-frame.js';
@@ -212,7 +212,7 @@ function hoverLines(model, i, state) {
   if (entries.length > 0) lines.push({ kind: 'crew', entries });
   if (row.viewers != null) {
     lines.push({
-      text: `Viewers: ${viewersText(row)}${row.scope === 'window' ? ', window-level' : ''}`,
+      text: `Viewers: ${viewersProseText(row)}${row.scope === 'window' ? ', window-level' : ''}`,
       kind: 'body',
     });
   } else {
