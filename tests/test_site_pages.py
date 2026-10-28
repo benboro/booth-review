@@ -420,7 +420,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 26 Plan 09: the methodology's "No public rating" line shows the semicolon
 # the site uses.
 # Re-pinned at Phase 26 Plan 10 (critique): each Markdown table sits in a .table-scroll box.
-_METHODOLOGY_FLAG_OFF_SHA256 = "b5c5b605a6b4deaa81ce9b6fca18d43a29434caf16efd19def7b202850d936d4"
+# Re-pinned at Phase 26 Plan 10 (sign-off): the 27 em-dashes in methodology.md and the
+# known-gaps text it splices in become commas, colons, semicolons and parentheses.
+_METHODOLOGY_FLAG_OFF_SHA256 = "df103651c6763b56cca877531068fb15a4397c07c8e95f6791d642cfd140d024"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
@@ -449,6 +451,15 @@ def test_methodology_flag_off_digest_is_pinned() -> None:
 
     rendered = render_methodology(_DOCS, _fixture_site())
     assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == _METHODOLOGY_FLAG_OFF_SHA256
+
+
+def test_methodology_prose_has_no_em_dash() -> None:
+    """Sign-off 2026-10-27: no em-dash in the methodology source, the known-gaps text it
+    splices in, or the rendered page. En-dash ranges (2014\u20132026) are fine."""
+    em_dash = "\u2014"
+    assert em_dash not in (_DOCS / "methodology.md").read_text(encoding="utf-8")
+    assert em_dash not in (_DOCS / "known-gaps.md").read_text(encoding="utf-8")
+    assert em_dash not in render_methodology(_DOCS, _fixture_site())
 
 
 def test_methodology_states_the_backend_modal_exception() -> None:

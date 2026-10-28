@@ -4,7 +4,7 @@ This page describes, in our own words and with counts only, where this
 project's coverage of 2014–2025 college football telecasts is thin or
 uneven. It exists so a reader of the chart understands what "every rated
 telecast" actually means before comparing two seasons, two networks, or two
-announcers. No specific game, crew, or figure is named here — see
+announcers. No specific game, crew, or figure is named here; see
 `docs/sources/506.md`, `docs/sources/ratings-reference.md`,
 `docs/sources/smw.md`, `docs/sources/tvrg.md`, `docs/sources/aa.md`, `docs/sources/espnpr.md`, and `docs/sources/cfbd.md` for source-level detail, and `docs/site-data.md` for
 how these tables reach the chart.
@@ -12,7 +12,7 @@ how these tables reach the chart.
 ## Scope
 
 The chart covers games from the 2014 season onward where at least one team
-was FBS that season (JOIN-07) — a rated FBS-vs-FCS opener counts, two
+was FBS that season (JOIN-07): a rated FBS-vs-FCS opener counts, two
 non-FBS teams playing each other does not. Only **rated** telecasts (a
 telecast with a Ratings Reference viewership figure or, for 2021–2024, one
 from a second source such as Sports Media Watch) appear as dots; unrated games are not shown in v1, though the data behind
@@ -93,17 +93,17 @@ These games now appear in the 'No public rating' strip, and the counts read 'N r
 ## 506 Sports: hand-saved pages and a small number of empty weeks
 
 506sports.com blocks this project's automated, correctly-identified,
-robots-respecting client, so every 506 page in this project's vault —
-2014–2024 backfill and the 2025 season alike — was saved by hand in a
+robots-respecting client, so every 506 page in this project's vault
+(2014–2024 backfill and the 2025 season alike) was saved by hand in a
 browser and imported, never fetched live (`docs/sources/506.md`,
 `AGENTS.md`). Ten season-level cells, spanning 2014–2023, were waived at the
 2014–2025 freeze because the season's own saved pages show the site had no
-games to list that week (a structurally empty page, not a bad save) — the
+games to list that week (a structurally empty page, not a bad save). The
 freeze recorded exactly which ten and why, and no other 506 gap was waived.
 Separately, a small share of 506 listings carry no announcing crew at all
 (mostly smaller-audience and streaming-only games); those telecasts, when
-otherwise rated, are counted as coverage gaps rather than silently dropped
-— see the crew-match rate below. During the season, crews for the newest
+otherwise rated, are counted as coverage gaps rather than silently dropped;
+see the crew-match rate below. During the season, crews for the newest
 week appear once its 506 pages are saved by hand and imported. Until then those
 dots read "Crew not listed", and the "crews through week N" stamp shows how
 far crews reach.
@@ -180,7 +180,7 @@ after this review; they remain documented disagreements.
 
 Ratings Reference's schema has fields (`composite_of`, `carrier_network`)
 meant to mark a figure that combines viewership across simulcast feeds (a
-MegaCast or a title game with alt-casts) — but across every claim in this
+MegaCast or a title game with alt-casts), but across every claim in this
 project's 2014–2025 range, neither field was ever populated. A combined
 figure is real (a title game's audience genuinely spans a main network and
 one or more alt-casts), it just isn't self-declared in the source data. This
@@ -200,7 +200,7 @@ Ratings Reference tags each claim with one of three `era_id` values across
 this project's range, coarser than the five dated measurement eras this
 project tracks (Nielsen panel-only, panel-plus-out-of-home, the February
 2025 out-of-home expansion, Nielsen's Big Data + Panel switch, and the
-planned 2026 co-viewing addition) — two of this project's five eras share
+planned 2026 co-viewing addition): two of this project's five eras share
 one `era_id` value because Ratings Reference doesn't distinguish them, and a
 handful of claims carry an `era_id` that looks like it reflects when the
 figure was reported or revised rather than when the game aired. Because of
@@ -213,7 +213,7 @@ Ratings Reference does not mark every record with a current-figure pick:
 roughly 18% of records in this project's range carry no such marker at all
 (no "peers" block to compare claims against), so this project's own
 headline-figure-vs-Ratings-Reference-current-pick agreement check is not
-comparable for that share of records — it is skipped, not counted as either
+comparable for that share of records; it is skipped, not counted as either
 agreement or disagreement.
 
 ## CFBD: excitement, the 2025 model change, media rows, and rankings
@@ -226,7 +226,7 @@ win-probability model partway through the 2025 season without backfilling
 earlier seasons, so this project flags every 2025-and-later telecast rather
 than treating excitement as directly comparable across the whole 2014–2025
 span (`FLAG-04`). CFBD's own media rows don't cover every game a network
-actually carried — 506 Sports, not CFBD, is this project's source for which
+actually carried; 506 Sports, not CFBD, is this project's source for which
 network aired a game. Postseason games take their rank from the last
 regular-season poll available, not a postseason "final" poll CFBD only
 publishes after the bowls are already played (so it was never the ranking
