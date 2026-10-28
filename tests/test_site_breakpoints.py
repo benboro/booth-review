@@ -62,8 +62,6 @@ def test_js_max_width_reads_use_phone_query() -> None:
             continue
         for line in p.read_text(encoding="utf-8").splitlines():
             if "matchMedia" in line and "max-width" in line:
-                if p.name == "toolbar-fit.js" and "'(max-width: 480px)'" in line:
-                    continue
                 offenders.append(f"{p.relative_to(SITE)}: {line.strip()}")
     assert not offenders, offenders
 

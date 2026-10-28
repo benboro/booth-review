@@ -80,7 +80,7 @@ _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58
 # Re-pinned after the Phase 13 checkpoint: the Viewers head carries class="num" so it aligns
 # right like its cells (1 changed line).
 # Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
-# Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
+# Re-pinned for the toolbar measuring script's preload in <head> (1 added line).
 # Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
 # Re-pinned at Phase 17 Plan 06: theme-init.js head script and #theme-toggle button markup.
 # Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
@@ -96,7 +96,9 @@ _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58
 # Re-pinned at Phase 26 Plan 06: the ten CFB filter triggers move into three .fgroup wrappers.
 # Re-pinned at Phase 26 Plan 07: the selection row goes, #summary gains .sum-left and .sum-right,
 # and the phone changed-filter chips move into the Filters sheet.
-_INDEX_PRE_PHASE_SHA256 = "0ca8ce28ef3ccc5d2e8f078ffe5c514e977ff76ac861b53d1538d284a153a3e2"
+# Re-pinned at Phase 26 Plan 08: the retired toolbar measuring script's preload and script tag
+# removed (2 removed lines).
+_INDEX_PRE_PHASE_SHA256 = "eb60f97cc32febf4e5f1f81457628dd5710e3a94152ee6b08498f9481975bdbb"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

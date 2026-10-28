@@ -2,8 +2,8 @@
 
 SITE-20 (toggling a filter moves nothing) and Phase 26 Round 3b: above 480px the bar is three
 fixed-width groups of boxless entries, so its row count depends only on the viewport width
-(toolbar-fit.js no longer measures it). A long pick truncates inside its own entry, and every
-entry carries its full text in `title` and `aria-label`.
+(the retired toolbar measuring script no longer measures it). A long pick truncates inside its
+own entry, and every entry carries its full text in `title` and `aria-label`.
 """
 
 from __future__ import annotations
