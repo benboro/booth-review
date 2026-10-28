@@ -319,6 +319,34 @@ def test_nfl_seasons_chip_never_collapses_to_a_count(
     assert people.get_attribute("data-count") == "3"
 
 
+def test_nfl_scatter_tooltip_date_matches_the_panel(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """Phase 26 panel F5: the tooltip writes the date as the panel does (AP form with the year)."""
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    open_nfl_app(page, "?sport=nfl&view=scatter")
+    page.wait_for_selector("#nfl-view-scatter .js-plotly-plot")
+    lines: list[str] = page.evaluate(
+        """() => {
+          const gd = document.querySelector('#nfl-view-scatter .js-plotly-plot');
+          const seen = new Set();
+          for (const tr of gd.data) {
+            for (const k of tr.customdata ?? []) {
+              if (!Number.isInteger(k)) continue;
+              gd.emit('plotly_hover', { points: [{ customdata: k }], event: { clientX: 300, clientY: 200 } });
+              const tip = document.getElementById('chart-tooltip');
+              if (!tip || tip.hidden) continue;
+              for (const c of tip.children) if (/, Week \\d+$/.test(c.textContent)) seen.add(c.textContent);
+            }
+          }
+          return [...seen];
+        }"""
+    )
+    assert "Sun. Sept. 8, 2024, 1:00 pm ET, Week 1" in lines, lines
+    assert all(" PM " not in line and not line.startswith("Sep ") for line in lines)
+
+
 def test_nfl_clicking_a_chip_keeps_the_sheet_open_and_reaches_its_section(
     nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:

@@ -21,7 +21,8 @@ import { EXCLUSIVE_CATEGORIES } from '../state.js';
 import { computePicks } from '../picks.js';
 import { gameRow } from '../data.js';
 import { categoryColor } from '../palette.js';
-import { CAUSE_COPY, slotLabel, flagLabels, viewersText, kickoffText, dateShortText } from '../game-format.js';
+import { CAUSE_COPY, slotLabel, flagLabels, viewersText, dateShortText } from '../game-format.js';
+import { apKickoff } from '../../../modules/weekend.js';
 import { ACCENT, DOT_OUTLINE, MUTED, PAGE_BG, DIVIDER, ZERO_LINE } from '../../../modules/palette.js';
 import { frameConfig, frameLayout } from '../../../modules/chart-frame.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
@@ -190,9 +191,10 @@ function pickGame(i, fromTable = false) {
 function hoverLines(model, i, state) {
   const row = gameRow(model, i);
   const lines = [{ text: `${row.away} at ${row.home}`, kind: 'title' }];
-  const kick = kickoffText(row);
+  // The date reads as the detail panel writes it: Sun. Sept. 8, 2024, 1:00 pm ET.
+  const noTime = row.unplayed ? 'Time TBA' : 'kickoff time not recorded';
   lines.push({
-    text: `${dateShortText(row)}${kick ? `, ${kick}` : ''}, Week ${row.week}`,
+    text: `${apKickoff(row.date, row.kickoff, noTime, { year: true })}, Week ${row.week}`,
     kind: 'body',
   });
   lines.push({ text: [slotLabel(row.slot), ...flagLabels(row)].join(', '), kind: 'body' });
