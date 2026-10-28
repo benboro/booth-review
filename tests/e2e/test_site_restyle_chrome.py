@@ -18,9 +18,8 @@ pytestmark = pytest.mark.e2e
 THEMES = ["light", "dark"]
 
 
-# Chromium snaps a border to whole CSS pixels (a 1.5px border reads back as 1px at any device
-# scale), so a 1.5px rule is checked two ways: the stylesheet declares 1.5px, and the computed
-# width is a solid 1px or 1.5px in the ink colour (what Safari and Firefox render at scale 2).
+# Ink rules are 2px (Chromium draws a 1.5px border as 1px, which read too light beside the 1px
+# module rules), so the stylesheet declares 2px and the computed width is exactly 2px.
 _DECLARED_JS = """(args) => {
   const [selector, prop] = args;
   const el = document.querySelector(selector);
@@ -72,11 +71,11 @@ def declared(page: Page, selector: str, prop: str) -> str | None:
 
 
 def assert_rule(page: Page, selector: str, side: str) -> None:
-    """The element carries a solid 1.5px ink rule on `side` (top or bottom)."""
+    """The element carries a solid 2px ink rule on `side` (top or bottom)."""
     width = style(page, selector, f"border-{side}-width")[f"border-{side}-width"]
-    assert width in ("1px", "1.5px"), (selector, width)
+    assert width == "2px", (selector, width)
     # A shorthand with var() leaves its longhands empty, so read the shorthand's text.
-    assert (declared(page, selector, f"border-{side}") or "").startswith("1.5px solid"), (
+    assert (declared(page, selector, f"border-{side}") or "").startswith("2px solid"), (
         selector,
         side,
     )

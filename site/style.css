@@ -202,9 +202,9 @@ h1, h2, h3 {
   align-items: baseline;
   min-height: 64px;
   padding: var(--space-md) var(--space-lg);
-  /* T3 "Frame + recede": no band; the 1.5px ink rule marks where the record starts. */
+  /* T3 "Frame + recede": no band; the 2px ink rule marks where the record starts. */
   background: transparent;
-  border-bottom: 1.5px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
 }
 
 .site-title {
@@ -3004,14 +3004,14 @@ html:has(#mlb-detail-panel[open]) {
 }
 
 /* T3: every modal dialog (the CFB #detail-panel, which also hosts This weekend and the weekend
-   map, and the NFL and MLB hosts) sits on the page colour with a 1.5px ink top rule. */
+   map, and the NFL and MLB hosts) sits on the page colour with a 2px ink top rule. */
 #detail-panel,
 #nfl-detail-panel,
 #mlb-detail-panel,
 dialog.detail-panel {
   padding: 0;
   border: 1px solid var(--rule);
-  border-top: 1.5px solid var(--ink);
+  border-top: 2px solid var(--ink);
   border-radius: 4px;
   background: var(--bg);
   color: var(--ink);
@@ -3103,7 +3103,7 @@ dialog.detail-panel {
     height: 55vh;
     max-height: 55vh;
     border-radius: 4px 4px 0 0;
-    border-width: 1.5px 0 0 0;
+    border-width: 2px 0 0 0;
   }
 }
 
@@ -3177,7 +3177,7 @@ dialog.detail-panel {
 
 .site-footer {
   background: var(--bg);
-  border-top: 1.5px solid var(--ink);
+  border-top: 2px solid var(--ink);
   margin-top: var(--space-2xl);
   padding: var(--space-lg);
   font: var(--font-caption);
