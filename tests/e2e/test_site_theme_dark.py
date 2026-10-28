@@ -13,8 +13,12 @@ from playwright.sync_api import Browser, Page
 pytestmark = pytest.mark.e2e
 
 _SPORT_PAGES = ("cfb", "nfl", "mlb")
-_DARK_BG = "rgb(29, 27, 24)"
-_LIGHT_BG = "rgb(251, 249, 245)"
+# Phase 26 green-gray tokens: --bg #191D1C dark and #F5F7F6 light; --ink #E5EAE8 dark and
+# #1E2321 light.
+_DARK_BG = "rgb(25, 29, 28)"
+_LIGHT_BG = "rgb(245, 247, 246)"
+_DARK_INK = "rgb(229, 234, 232)"
+_LIGHT_INK = "rgb(30, 35, 33)"
 
 _RECORD_JS = """
 (() => {
@@ -273,7 +277,7 @@ def test_dark_theme_prints_with_the_light_tokens(guarded_page: Page, site_url: s
     page.context.add_init_script("localStorage.setItem('bl-theme', 'dark');")
     page.goto(f"{site_url}/methodology.html")
     assert _state(page)["theme"] == "dark"
-    assert page.evaluate("getComputedStyle(document.body).color") == "rgb(236, 231, 223)"
+    assert page.evaluate("getComputedStyle(document.body).color") == _DARK_INK
     page.emulate_media(media="print")
     got = page.evaluate(
         """() => ({
@@ -283,4 +287,4 @@ def test_dark_theme_prints_with_the_light_tokens(guarded_page: Page, site_url: s
           theme: document.documentElement.dataset.theme,
         })"""
     )
-    assert got == {"ink": "rgb(35, 32, 27)", "bg": _LIGHT_BG, "scheme": "light", "theme": "dark"}
+    assert got == {"ink": _LIGHT_INK, "bg": _LIGHT_BG, "scheme": "light", "theme": "dark"}
