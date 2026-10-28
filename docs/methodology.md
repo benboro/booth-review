@@ -111,7 +111,7 @@ Besides the rated games the chart plots, the site lists the games that have no p
 3. "no figure found in our 2021–24 sources": the game is from a season in that range, Ratings Reference compiled few figures for those seasons, and the second sources listed under Sources and credits did not cover the game (see Known gaps).
 4. "no figure was published": anything else. This also covers the rare game whose only figure is for an alternate feed.
 
-On the site each game reads "No public rating · {cause}".
+On the site each game reads "No public rating; {cause}".
 
 **Counts.** "N rated of M games" counts the games that pass the current filters or selection: N is how many have a figure, M is all of them, rated or not. Filter counts count every game.
 

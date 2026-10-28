@@ -414,7 +414,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
 # Re-pinned at Phase 26 Plan 05: title takes a hyphen; footer credit blocks, spaced nav, semicolon
 # freshness.
-_METHODOLOGY_FLAG_OFF_SHA256 = "b09450bb7bd1bbfa1ba96a040e0cb640f741a434e2457f22131c010ab8762f9b"
+# Re-pinned at Phase 26 Plan 09: the methodology's "No public rating" line shows the semicolon
+# the site uses.
+_METHODOLOGY_FLAG_OFF_SHA256 = "cb61644539b18373870882a987d15e30029ec969c774343621a243ca43a26750"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
