@@ -126,6 +126,9 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     assert 'href="known-gaps.md"' not in result
     assert "<h3" in result
     assert "<table" in result
+    # A wide table scrolls inside its own box on a phone, never the whole page (26-10 critique).
+    assert result.count("<table>") == result.count('<div class="table-scroll"><table>') > 0
+    assert result.count("</table></div>") == result.count("<table>")
     assert result.count("<script") == 1
     assert "script-src 'sha256-" in result
     assert 'href="style.css"' in result
@@ -416,7 +419,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # freshness.
 # Re-pinned at Phase 26 Plan 09: the methodology's "No public rating" line shows the semicolon
 # the site uses.
-_METHODOLOGY_FLAG_OFF_SHA256 = "cb61644539b18373870882a987d15e30029ec969c774343621a243ca43a26750"
+# Re-pinned at Phase 26 Plan 10 (critique): each Markdown table sits in a .table-scroll box.
+_METHODOLOGY_FLAG_OFF_SHA256 = "b5c5b605a6b4deaa81ce9b6fca18d43a29434caf16efd19def7b202850d936d4"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

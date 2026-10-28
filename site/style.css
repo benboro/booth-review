@@ -3458,6 +3458,8 @@ dialog.detail-panel {
   max-width: 72ch;
   margin: var(--space-3xl) auto;
   padding: 0 var(--space-md);
+  /* A long unbroken string (a file path in code) wraps instead of widening a phone page. */
+  overflow-wrap: break-word;
 }
 
 .page h1 {

@@ -210,3 +210,21 @@ def test_index_meta_description_names_games_and_public_viewer_counts(
     content = guarded_page.get_attribute("meta[name=description]", "content") or ""
     assert "college football games and their public viewer counts" in content
     assert "rated college football broadcasts" not in content
+
+
+@pytest.mark.parametrize("width", (390, 600))
+def test_methodology_tables_scroll_in_their_box_not_the_page(
+    guarded_page: Page, site_url: str, width: int
+) -> None:
+    """26-10 critique: the Markdown tables widened the methodology page past a phone screen, so
+    the whole page scrolled sideways. Each sits in a .table-scroll box now."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    guarded_page.goto(f"{site_url}/methodology.html")
+    overflow = guarded_page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    assert overflow <= 0
+    assert (
+        guarded_page.locator(".page table").count()
+        == guarded_page.locator(".page .table-scroll > table").count()
+    )

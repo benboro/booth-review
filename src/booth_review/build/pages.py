@@ -215,6 +215,14 @@ def _known_gaps_body(text: str) -> str:
     return _demote_headings("\n".join(lines))
 
 
+def _wrap_tables(rendered_html: str) -> str:
+    """Put each rendered Markdown table in a `.table-scroll` box, as the coverage tables are,
+    so a wide table scrolls inside its box on a phone instead of widening the whole page."""
+    return rendered_html.replace("<table>", '<div class="table-scroll"><table>').replace(
+        "</table>", "</table></div>"
+    )
+
+
 def _rewrite_relative_md_links(rendered_html: str) -> str:
     """Point the rendered methodology's relative `.md` links somewhere that
     exists on the site (WR-08).
@@ -319,7 +327,7 @@ def render_methodology(
 
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
-    body_html = _rewrite_relative_md_links(renderer.convert(combined))
+    body_html = _wrap_tables(_rewrite_relative_md_links(renderer.convert(combined)))
     return page_html(
         "Methodology - The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
     )
