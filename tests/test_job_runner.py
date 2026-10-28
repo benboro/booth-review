@@ -13,7 +13,7 @@ import json
 import shutil
 import subprocess
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -31,6 +31,12 @@ from booth_review.job.runner import (
     ScheduledJob,
 )
 from booth_review.runtime import Runtime
+from booth_review.sources.aa.feed import (
+    AA_FEED_CANDIDATES,
+    FeedWatchState,
+    load_feed_state,
+    save_feed_state,
+)
 from booth_review.sources.ratingsref.collector import SITEMAP_URL
 from booth_review.transport.budget import CfbdBudget
 from booth_review.transport.cache import FreezeGuard, RawCache
@@ -2278,6 +2284,181 @@ def test_reminder_and_staleness_items_merge_into_one_result(
     assert not (tmp_path / "site-out").exists()
 
 
+# -- Phase 25: the AA feed watch at the Tue slot (D-02, D-05, D-06, D-12) --------------------------
+
+_AA_FEED_URL = AA_FEED_CANDIDATES["schedules"]
+_AA_POST = "https://awfulannouncing.com/schedules/your-2026-week-10-college-football-announcing-schedule.html"
+_REMINDER_TUE_LATE = datetime(2026, 10, 14, 2, 30, tzinfo=UTC)  # Tue 22:30 EDT
+_AA_FEED = (
+    Path(__file__)
+    .parent.joinpath("fixtures", "aa", "feed_schedules_synthetic.xml")
+    .read_text(encoding="utf-8")
+    .replace("Tue, 03 Nov 2026", "Tue, 13 Oct 2026")
+    .replace("Tue, 27 Oct 2026", "Tue, 06 Oct 2026")
+    .replace("-0500", "-0400")
+    .encode("utf-8")
+)
+
+
+def _seed_aa_ready(paths, *, weeks: dict[str, str] | None = None) -> None:
+    """A fresh AA policy line and a verified feed, as the Phase 25 job needs them."""
+    checked = (_REMINDER_TUE - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    row = {
+        "source": "aa",
+        "checked_at": checked,
+        "robots_ok": True,
+        "crawl_delay": None,
+        "terms_ok": True,
+    }
+    paths.ledger.mkdir(parents=True, exist_ok=True)
+    with (paths.ledger / "policy_checks.jsonl").open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row) + "\n")
+    save_feed_state(
+        paths,
+        FeedWatchState(_AA_FEED_URL, None, None, None, None, dict(weeks or {}), []),
+    )
+
+
+def _aa_responses(base: dict | None = None) -> dict:
+    responses = dict(base or {})
+    responses["https://awfulannouncing.com/robots.txt"] = (
+        200,
+        b"User-agent: *\nAllow: /\n",
+        {},
+    )
+    responses[_AA_FEED_URL] = (200, _AA_FEED, {})
+    return responses
+
+
+def _aa_requests(handle) -> list[str]:
+    return [r.url for r in handle.requests if "awfulannouncing" in r.url]
+
+
+def _comment_only_tue(paths, handle, fake_clock, when, *, dry_run=False):
+    runtime = _runtime(paths, handle, now=lambda: when, fake_clock=fake_clock)
+    return ScheduledJob(
+        runtime, token="test-token", now=lambda: when, trigger="schedule", dry_run=dry_run
+    ).run()
+
+
+def _seeded_reminder_vault(paths, *, weeks: dict[str, str] | None = None) -> None:
+    _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    _seed_aa_ready(paths, weeks=weeks)
+    _git(paths, "add", "-A")
+    _git(paths, "commit", "-q", "-m", "test: aa ready")
+
+
+def test_comment_only_tue_run_polls_once_and_posts_the_link_line(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seeded_reminder_vault(paths)
+    state_bytes = paths.job_state.read_bytes()
+    budget_bytes = paths.cfbd_ledger.read_bytes()
+    handle = mock_transport_factory(_aa_responses())
+
+    result = _comment_only_tue(paths, handle, fake_clock, _REMINDER_TUE)
+
+    assert result.exit_code == 4
+    assert result.stale_only is True
+    link = [i for i in result.items if i.kind == "reminder_aa_cfb_link"]
+    assert len(link) == 1
+    assert _AA_POST in link[0].line
+    assert _aa_requests(handle).count(_AA_FEED_URL) == 1
+    assert "reminder_aa_cfb" not in _kinds(result)
+    # No job state, budget or build writes; the only vault write is the feed-watch commit.
+    assert paths.job_state.read_bytes() == state_bytes
+    assert paths.cfbd_ledger.read_bytes() == budget_bytes
+    assert load_feed_state(paths).weeks["2026-7"] == _AA_POST
+    assert _git(paths, "status", "--porcelain") == ""
+    changed = _git(paths, "show", "--name-only", "--format=", "HEAD").split()
+    assert "ledger/aa_feed_watch.json" in changed
+    assert "ledger/job_state.json" not in changed
+    assert "ledger/cfbd_ledger.jsonl" not in changed
+
+
+def test_dry_run_tue_makes_no_aa_request_and_keeps_the_blind_line(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seeded_reminder_vault(paths)
+    head = _git(paths, "rev-parse", "HEAD")
+    handle = mock_transport_factory(_aa_responses())
+
+    result = _comment_only_tue(paths, handle, fake_clock, _REMINDER_TUE, dry_run=True)
+
+    assert _aa_requests(handle) == []
+    assert "reminder_aa_cfb" in _kinds(result)
+    assert "reminder_aa_cfb_link" not in _kinds(result)
+    assert _git(paths, "rev-parse", "HEAD") == head
+
+
+def test_late_run_with_the_week_in_the_ledger_makes_no_aa_request(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seeded_reminder_vault(paths, weeks={"2026-7": _AA_POST})
+    handle = mock_transport_factory(_aa_responses())
+
+    result = _comment_only_tue(paths, handle, fake_clock, _REMINDER_TUE_LATE)
+
+    assert _aa_requests(handle) == []
+    link = [i for i in result.items if i.kind == "reminder_aa_cfb_link"]
+    assert len(link) == 1
+    assert _AA_POST in link[0].line
+
+
+def test_full_run_at_the_tue_slot_without_a_policy_ledger_makes_no_aa_request(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_espnpr_responses())
+
+    result = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE).run()
+
+    assert _aa_requests(handle) == []
+    assert {"reminder_aa_cfb", "aa_feed_policy_stale"} <= set(_kinds(result))
+
+
+def test_schedule_run_at_the_tue_slot_polls_once_and_posts_the_link_line(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    _seed_aa_ready(paths)
+    handle = mock_transport_factory(_aa_responses(_espnpr_responses()))
+    runtime = _runtime(paths, handle, now=lambda: _REMINDER_TUE, fake_clock=fake_clock)
+
+    result = ScheduledJob(
+        runtime, token="test-token", now=lambda: _REMINDER_TUE, trigger="manual", mode="schedule"
+    ).run()
+
+    assert _aa_requests(handle).count(_AA_FEED_URL) == 1
+    assert [i.kind for i in result.items].count("reminder_aa_cfb_link") == 1
+
+
+def test_a_run_outside_the_tue_window_makes_no_aa_request(
+    git_vault, mock_transport_factory, fake_clock
+) -> None:
+    paths = git_vault
+    _seeded_reminder_vault(paths)
+    handle = mock_transport_factory(_aa_responses())
+
+    result = _comment_only_tue(paths, handle, fake_clock, datetime(2026, 10, 12, 18, 0, tzinfo=UTC))
+
+    assert _aa_requests(handle) == []
+    assert result.items == []
+
+
+def test_every_due_reminders_call_receives_the_resolver() -> None:
+    import re
+
+    calls = re.findall(r"due_reminders\([^\n]*\)", RUNNER_SRC)
+    assert len(calls) >= 5
+    assert all("aa_cfb=self._aa_cfb_resolver()" in call for call in calls)
+
+
 def test_a_full_run_at_a_reminder_time_adds_the_due_reminders_to_its_items(
     git_vault, mock_transport_factory, fake_clock
 ) -> None:
@@ -2312,9 +2493,13 @@ def test_a_schedule_run_at_a_reminder_time_adds_the_due_reminders_to_its_items(
         mode="schedule",
     ).run()
 
-    assert [item.kind for item in result.items].count("reminder_aa_cfb") == 1
-    # A reminder is not attention: this schedule run is clean, so it exits 0.
-    assert result.exit_code == 0
+    kinds = [item.kind for item in result.items]
+    assert kinds.count("reminder_aa_cfb") == 1
+    # Phase 25: with no AA policy ledger the resolver gates (no request) and adds one
+    # attention line, so this schedule run now exits 4 instead of 0.
+    assert kinds.count("aa_feed_policy_stale") == 1
+    assert result.exit_code == 4
+    assert all("awfulannouncing" not in request.url for request in handle.requests)
 
 
 def test_a_clean_full_run_keeps_exit_0_ok_and_zero_attention_with_a_reminder_due(
@@ -2332,10 +2517,12 @@ def test_a_clean_full_run_keeps_exit_0_ok_and_zero_attention_with_a_reminder_due
     page.parent.mkdir(parents=True, exist_ok=True)
     page.write_bytes(b"<html>synthetic</html>")
 
-    handle = mock_transport_factory(_espnpr_responses())
+    # Phase 25: a fresh AA policy check and a verified feed keep the Tue slot clean.
+    _seed_aa_ready(paths)
+    handle = mock_transport_factory(_aa_responses(_espnpr_responses()))
     result = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE).run()
 
-    assert [i.kind for i in result.items].count("reminder_aa_cfb") == 1
+    assert [i.kind for i in result.items].count("reminder_aa_cfb_link") == 1
     assert not [i for i in result.items if i.severity == "attention"]
     assert result.exit_code == 0
     assert load_state(paths.job_state).last_status == "ok"

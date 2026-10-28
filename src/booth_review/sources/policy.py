@@ -16,7 +16,7 @@ than the host's ``min_interval_s`` fails the check rather than slowing down.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from html.parser import HTMLParser
@@ -371,9 +371,31 @@ TARGETS: Final[dict[PolicySource, PolicyTarget]] = {
         pages=(("disclaimer", f"https://{AA_HOST}/disclaimer"),),
         planned_samples=(
             f"https://{AA_HOST}/college-football/2023-college-football-week-1-viewership-sample.html",
+            f"https://{AA_HOST}/schedules/feed/",
+            f"https://{AA_HOST}/feed/",
         ),
     ),
 }
+
+
+def robots_guard(source: PolicySource) -> Callable[[str, FetchResponse], None]:
+    """Stop a data pass when the robots.txt the client reads now disallows
+    everything or asks for a longer Crawl-delay than our pacing (D-10).
+
+    Shared by the CLI and the scheduled job's feed poll.
+    """
+    host = TARGETS[source].host
+
+    def _check(seen_host: str, resp: FetchResponse) -> None:
+        if seen_host != host:
+            return
+        verdict = evaluate_robots(
+            resp.status_code, resp.content, host=host, planned_urls=TARGETS[source].planned_samples
+        )
+        if not verdict.ok:
+            raise PolicyRobotsError(verdict)
+
+    return _check
 
 
 def tvrg_archive_url(year: int, month: int) -> str:

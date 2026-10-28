@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE rss [
+	<!ENTITY boom "invented">
+]>
+<rss version="2.0"><channel><item><title>&boom;</title><link>https://awfulannouncing.com/schedules/x.html</link></item></channel></rss>

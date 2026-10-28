@@ -56,6 +56,7 @@ from booth_review.errors import (
     UnknownHostError,
 )
 from booth_review.job.attention import build_attention_body, split_reminders
+from booth_review.job.reminders import current_cfb_week
 from booth_review.job.runner import (
     EXIT_NOTHING_DUE,
     JOB_CFBD_MAX_CALLS,
@@ -84,6 +85,15 @@ from booth_review.resolve import network_diagnose
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.aa.collector import AaCollector
+from booth_review.sources.aa.feed import (
+    AA_FEED_CANDIDATES,
+    FeedNotVerifiedError,
+    FeedStatusError,
+    check_week,
+    load_feed_state,
+    verify_feed,
+    week_key,
+)
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
@@ -102,15 +112,14 @@ from booth_review.sources.known_disagreements import (
 from booth_review.sources.nflverse.collector import NflverseCollector
 from booth_review.sources.policy import (
     POLICY_LEDGER,
-    TARGETS,
     PolicyCheck,
     PolicyChecker,
     PolicyRobotsError,
     PolicySource,
     append_policy_check,
-    evaluate_robots,
     policy_fresh,
     robots_fresh,
+    robots_guard,
 )
 from booth_review.sources.ratingsref.collector import (
     FIRST_SEASON,
@@ -349,6 +358,20 @@ def build_parser() -> argparse.ArgumentParser:
             "they allow collection (run alone, after a robots-ok check from the last 30 days)",
         )
         psecond.add_argument("--no-commit", action="store_true")
+        if key == "aa":
+            psecond.add_argument(
+                "--feed",
+                action="store_true",
+                help="Phase 25: check AA's schedules feed for this week's CFB "
+                "announcing-schedule post link (link only)",
+            )
+            psecond.add_argument(
+                "--verify",
+                choices=sorted(AA_FEED_CANDIDATES),
+                help="with --feed: one request to verify that candidate feed carries the posts",
+            )
+        else:
+            psecond.set_defaults(feed=False, verify=None)
 
     pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
     cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
@@ -1167,7 +1190,112 @@ def _confirm_terms_only(source: PolicySource, args: argparse.Namespace) -> int:
     return 0
 
 
+def _feed_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _collect_aa_feed(args: argparse.Namespace) -> int:
+    """Phase 25: one verify request, or the job's week check, link-only output."""
+    paths = DataPaths.from_env()
+    now = _feed_now()
+    if not policy_fresh(paths, "aa", now):
+        print(
+            "error: policy check older than 30 days or not approved; run --policy-check",
+            file=sys.stderr,
+        )
+        return 4
+    verify: str | None = args.verify
+    week: tuple[int, str] | None = None
+    if verify is None:
+        state = load_feed_state(paths)
+        if state.verified_feed_url is None:
+            print("error: no verified feed; run --feed --verify schedules", file=sys.stderr)
+            return 4
+        week = current_cfb_week(paths, now)
+        if week is None:
+            print("aa feed: no current cfb week, nothing to check")
+            return 0
+        key = week_key(*week)
+        if key in state.weeks:
+            print(f"aa feed week {week[1]}: already linked {state.weeks[key]}")
+            return 0
+        if key in state.blind_weeks:
+            print(f"aa feed week {week[1]}: plain reminder already sent, not polled")
+            return 0
+        if args.dry_run:
+            print(f"aa feed: planned 1 request {state.verified_feed_url}")
+            return 0
+    elif args.dry_run:
+        print(f"aa feed: planned 1 request {AA_FEED_CANDIDATES[verify]}")
+        return 0
+
+    runtime = build_runtime(with_budget=False)
+    try:
+        runtime.client.add_robots_listener(robots_guard("aa"))
+        requests = 1
+        try:
+            if verify is not None:
+                result = verify_feed(runtime.client, paths, verify, now)
+                print(
+                    f"aa feed {verify}: status {result.status}, entries {result.entries}, "
+                    f"cfb schedule posts {len(result.cfb_links)}"
+                )
+                for url in result.cfb_links:
+                    print(f"  {url}")
+                for url in result.other_schedule_links:
+                    print(f"  other {url}")
+                if result.verified:
+                    print(f"verified {result.feed_url}")
+                else:
+                    print("not verified; try --verify site")
+                code = 0 if result.verified else 4
+            else:
+                assert week is not None
+                check = check_week(runtime.client, paths, season=week[0], label=week[1], now=now)
+                requests = 1 if check.requested else 0
+                matched = check.url if check.url is not None else "none"
+                print(f"aa feed week {week[1]}: status {check.status}, matched {matched}")
+                code = 0
+        except (
+            PolicyRobotsError,
+            RobotsDisallowedError,
+            RobotsUnavailableError,
+            UnknownHostError,
+            FeedNotVerifiedError,
+        ) as exc:
+            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            return 4
+        except BoothReviewError as exc:
+            # A fetch, parse or status failure: the request was made and its audit row
+            # was appended, so it is committed under this command's own message.
+            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            code = 4
+        except FeedStatusError as exc:
+            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            code = 4
+        if not args.no_commit:
+            runtime.vault.commit_batch(
+                batch_message("collect", "aa", "feed", {"requests": requests}),
+                paths=[
+                    "ledger/aa_feed_watch.json",
+                    "ledger/requests.jsonl",
+                    "raw/_robots/awfulannouncing.com",
+                ],
+            )
+        return code
+    finally:
+        runtime.client.close()
+
+
 def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    if getattr(args, "feed", False):
+        if args.season or args.policy_check or args.confirm_terms:
+            print("error: --feed runs on its own", file=sys.stderr)
+            return 2
+        return _collect_aa_feed(args)
+    if getattr(args, "verify", None):
+        print("error: --verify needs --feed", file=sys.stderr)
+        return 2
     if args.policy_check and args.confirm_terms:
         # WR-04 (D-10): the confirmation stands for terms the user has read, so it
         # can't be recorded in the run that fetches them.
@@ -1212,20 +1340,8 @@ def _second_source_gaps(
 
 
 def _robots_guard(source: PolicySource) -> Callable[[str, FetchResponse], None]:
-    """Stop a data pass when the robots.txt the client reads now disallows
-    everything or asks for a longer Crawl-delay than our pacing (D-10)."""
-    host = TARGETS[source].host
-
-    def _check(seen_host: str, resp: FetchResponse) -> None:
-        if seen_host != host:
-            return
-        verdict = evaluate_robots(
-            resp.status_code, resp.content, host=host, planned_urls=TARGETS[source].planned_samples
-        )
-        if not verdict.ok:
-            raise PolicyRobotsError(verdict)
-
-    return _check
+    """One guard for the CLI data pass and the job's feed poll (policy.robots_guard)."""
+    return robots_guard(source)
 
 
 def _collect_gap_pass(args: argparse.Namespace, source: PolicySource) -> int:

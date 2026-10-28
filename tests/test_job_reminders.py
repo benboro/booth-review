@@ -23,9 +23,11 @@ from booth_review.job.attention import (
     REMINDER_AA_NFL_URL,
     REMINDER_ESPNPR_CFB_URL,
     REMINDER_FOX_CFB_URL,
+    AttentionItem,
     build_attention_body,
+    reminder_aa_cfb,
 )
-from booth_review.job.reminders import REMINDER_SLOTS, due_reminders, in_window
+from booth_review.job.reminders import REMINDER_SLOTS, current_cfb_week, due_reminders, in_window
 from booth_review.nfl.gaps import NflGaps
 from booth_review.nfl.layout import NFLVERSE_SCHEDULES_PATH, nfl_506_path
 
@@ -344,3 +346,70 @@ def test_nfl_reminders_stop_once_the_last_week_is_played(vault_paths: DataPaths)
 def test_a_naive_now_is_rejected(vault_paths: DataPaths) -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         due_reminders(vault_paths, datetime(2026, 10, 29, 12, 0))  # noqa: DTZ001
+
+
+# -- Phase 25 resolver seam ---------------------------------------------------------------
+
+
+def _calls_recorder(result: list[AttentionItem]):
+    calls: list[tuple[int, str, datetime]] = []
+
+    def fake(season: int, label: str, now: datetime) -> list[AttentionItem]:
+        calls.append((season, label, now))
+        return result
+
+    return fake, calls
+
+
+def test_no_resolver_keeps_the_blind_line(vault_paths: DataPaths) -> None:
+    _write_cfb_games(vault_paths)
+    _save_espnpr(vault_paths, "10")
+    assert due_reminders(vault_paths, TUE_2130) == [reminder_aa_cfb(2026, "10")]
+
+
+def test_resolver_called_once_and_its_items_used(vault_paths: DataPaths) -> None:
+    _write_cfb_games(vault_paths)
+    _save_espnpr(vault_paths, "10")
+    marker = AttentionItem("reminder_aa_cfb_link", "reminder 2026 cfb week 10: x", "reminder")
+    fake, calls = _calls_recorder([marker])
+    assert due_reminders(vault_paths, TUE_2130, aa_cfb=fake) == [marker]
+    assert calls == [(2026, "10", TUE_2130)]
+
+
+def test_resolver_returning_nothing_yields_no_aa_line(vault_paths: DataPaths) -> None:
+    _write_cfb_games(vault_paths)
+    _save_espnpr(vault_paths, "10")
+    fake, _ = _calls_recorder([])
+    assert due_reminders(vault_paths, TUE_2130, aa_cfb=fake) == []
+
+
+def test_resolver_failure_falls_back_to_blind_and_keeps_other_lines(
+    vault_paths: DataPaths,
+) -> None:
+    _write_cfb_games(vault_paths)
+
+    def boom(season: int, label: str, now: datetime) -> list[AttentionItem]:
+        raise RuntimeError("x")
+
+    items = due_reminders(vault_paths, TUE_2130, aa_cfb=boom)
+    assert _kinds(items) == ["reminder_aa_cfb"]
+    # Monday's espnpr slot is unaffected by a resolver that is never called.
+    mon = due_reminders(vault_paths, MON_EST, aa_cfb=boom)
+    assert _kinds(mon) == ["reminder_espnpr"]
+
+
+def test_resolver_not_called_outside_the_tue_window_or_without_a_week(
+    vault_paths: DataPaths,
+) -> None:
+    _write_cfb_games(vault_paths)
+    fake, calls = _calls_recorder([])
+    due_reminders(vault_paths, MON_EST, aa_cfb=fake)
+    due_reminders(vault_paths, datetime(2026, 11, 3, 18, 0, tzinfo=ET), aa_cfb=fake)
+    due_reminders(vault_paths, datetime(2026, 11, 4, 21, 30, tzinfo=ET), aa_cfb=fake)
+    assert calls == []
+
+
+def test_current_cfb_week(vault_paths: DataPaths) -> None:
+    assert current_cfb_week(vault_paths, TUE_2130) is None
+    _write_cfb_games(vault_paths)
+    assert current_cfb_week(vault_paths, TUE_2130) == (2026, "10")

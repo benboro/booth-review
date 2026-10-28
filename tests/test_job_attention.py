@@ -20,6 +20,9 @@ from booth_review.job.attention import (
     REMINDER_ESPNPR_CFB_URL,
     REMINDER_FOX_CFB_URL,
     AttentionItem,
+    aa_feed_blocked,
+    aa_feed_policy_stale,
+    aa_feed_unverified,
     build_attention_body,
     cfbd_failed,
     cfbd_remaining,
@@ -34,6 +37,7 @@ from booth_review.job.attention import (
     reminder_506_nfl,
     reminder_506_nfl_played,
     reminder_aa_cfb,
+    reminder_aa_cfb_link,
     reminder_aa_nfl,
     reminder_espnpr,
     reminder_fox_cfb,
@@ -502,3 +506,53 @@ def test_reminder_builders_reject_bad_input() -> None:
         reminder_506_nfl_played(2026, "9", "missing", ["19"])
     with pytest.raises(ValueError):
         reminder_506_nfl_played(2026, "19", "missing", ["3"])
+
+
+AA_POST = (
+    "https://awfulannouncing.com/schedules/week-10-college-football-announcing-schedule-2026.html"
+)
+
+
+def test_reminder_aa_cfb_points_at_the_schedules_page() -> None:
+    assert reminder_aa_cfb(2026, "10").line.endswith("https://awfulannouncing.com/schedules/")
+
+
+def test_reminder_aa_cfb_link_line() -> None:
+    item = reminder_aa_cfb_link(2026, "10", AA_POST)
+    assert item.kind == "reminder_aa_cfb_link"
+    assert item.severity == "reminder"
+    assert item.line.startswith("reminder 2026 cfb week 10: ")
+    assert AA_POST in item.line
+    _passes(item)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/schedules/x.html",
+        AA_POST + "?utm=1",
+        AA_POST.replace("https", "http"),
+        AA_POST + "#frag",
+        "https://awfulannouncing.com/schedules/a b.html",
+        "https://awfulannouncing.com/schedules/" + "a" * 200,
+    ],
+)
+def test_reminder_aa_cfb_link_rejects_bad_urls(url: str) -> None:
+    with pytest.raises(ValueError):
+        reminder_aa_cfb_link(2026, "10", url)
+
+
+@pytest.mark.parametrize(
+    ("builder", "needle"),
+    [
+        (aa_feed_policy_stale, "--confirm-terms"),
+        (aa_feed_unverified, "--feed --verify schedules"),
+        (aa_feed_blocked, "--policy-check"),
+    ],
+)
+def test_aa_feed_attention_lines(builder, needle: str) -> None:
+    item = builder()
+    assert item.severity == "attention"
+    assert needle in item.line
+    assert "booth-review collect aa" in item.line
+    _passes(item)
