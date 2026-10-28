@@ -7,9 +7,35 @@ records only where the site settles or applies them.
 ## Fonts
 
 - The CSP forbids external font loading, so fonts are self-hosted from `site/fonts/`:
-  Crimson Text 600 for headings, Roboto 400/600 for body and UI, and Roboto Condensed
-  400 for plot-area text (picked 2026-10-21, Phase 12). Adding any other font file
-  needs the owner's sign-off.
+  Latin Modern Roman Demi 10 at weight 600 for every heading, Roboto 400/600 for body and
+  UI, and Roboto Condensed 400 for plot-area text. Roboto and Roboto Condensed were picked
+  2026-10-21 (Phase 12). Adding any other font file needs the owner's sign-off.
+- The serif is Latin Modern Roman Demi 10, picked by the owner on 2026-10-27 (Phase 26
+  sketch round 1b; CMU Serif Bold Non-extended was the runner-up). It replaces the earlier
+  serif in every heading slot. Headings are 22px, the display title is 27px, and the phone
+  site title is 20px, the sanctioned fifth size beside 12, 14, 22 and 27 (the earlier
+  headings sat one step lower).
+- Source: GUST's own `lm2.004otf.zip`
+  (https://www.gust.org.pl/projects/e-foundry/latin-modern/download/lm2.004otf.zip),
+  SHA-256 `5b0236051d3728be6616f1b274e3b910473875b5a3ef9382f0ef00384ddb161b`; the OTF
+  inside (`lmromandemi10-regular.otf`) is
+  `63b6f9528e6117c5b0c0b1992517696ae09d05e7ca3711df0e0409d9db6df32c`.
+- Licence: GUST Font License 1.0, shipped beside the font as
+  `site/fonts/GUST-FONT-LICENSE.txt` (SHA-256
+  `5eb61bb836bb1845ef668717cb15b382e997748ce2629e4388cc5e4c3fa4e433`, stored with its
+  published CRLF line endings). The footer credits Latin Modern under it.
+- The shipped file is a subset: ASCII, U+00A0-017F, the en and em dashes, curly quotes,
+  the ellipsis and U+02BB (323 codepoints, 23,560 bytes, SHA-256
+  `667737468c8b2a50e4b0b2c07ed5a426f88e27655205fe17bc8e4cb3996da2c1`). Because the GUST
+  licence asks that modified files be renamed, the family is "Latin Modern Demi Subset"
+  inside the file; CSS calls it "Latin Modern Demi".
+- Latin Modern has no okina (U+02BB, as in Hawaiʻi), so the subset aliases U+02BB to the
+  U+2018 glyph. Four other codepoints (U+0138, U+0149, U+0166, U+0167) have no glyph in
+  the source either; no team or person name uses them.
+- `font-synthesis: none` is set, so a missing weight is never faked. The recipe that builds
+  the subset is committed at `ops/fonts/` (offline; dev-only fonttools and brotli), and the
+  data build checks every serif-slot name against the subset's glyphs and fails when one
+  would fall back to another face.
 
 ## Layout
 
@@ -26,12 +52,58 @@ records only where the site settles or applies them.
   collapsible Time TBA strip, the CFB ESPN+ and regional table, and a source line that
   credits only the sources the sport uses. Below 480px the grid becomes a list grouped by
   kickoff (Phase 18).
+- Ground (Phase 26, owner's pick 2026-10-27, option c, green-gray): light page `#F5F7F6`,
+  surface `#EBEFED`, rules `#DAE0DD` and `#C0C9C5`, land `#E8EDEA`, ink `#1E2321`, muted
+  `#5A6460`, disabled `#8E9894`. The teal accent `#1B4F5C` stays. Dark is derived from the
+  same hue: page `#191D1C`, surface `#212625`, ink `#E5EAE8`, muted `#9EA8A4`, rules `#333A38`
+  and `#434B48`, accent `#68BACB`. The "no games" legend label has its own token,
+  `--legend-none` (`#687270` light, 4.6:1; `#87918D` dark, 5.2:1). A dark page prints with the
+  light tokens.
+- Chrome is "Frame + recede" (the T3 sketch, picked 2026-10-27): an ink rule only under the
+  title row, over the footer and on the top of panels, drawn at 2px (the owner's call: a
+  1.5px border draws as 1px in Chromium); module borders, chips and segmented controls use
+  the lightest 1px rule; a selected segment is a light fill with a 2px ink underline;
+  panels and tooltips sit on the page colour with a 4px radius. Modules pad 20/24px (16px
+  at 480px and under) with 32px between modules.
+- Spacing and size exceptions the owner confirmed in the sketches: an 18px column gap in the
+  legend, 10px legend marks, a 5px filter caret, and 2px lines.
 - The six view tabs stay on one row and scroll sideways inside their bar when the window is
   narrow, so the page never scrolls; the tab focus ring sits inside the tab so the bar does
   not clip it (Phase 18).
 
 ## Filters
 
+- The CFB filter bar is a ledger (Phase 26, owner's pick 2026-10-27: the ledger line combined
+  with grouped boxes). Entries are boxless: a small label over the value, in three groups
+  with small sentence-case labels and a 1px column rule between them: Broadcast (Announcers,
+  Networks, Booth, Role), Matchup (Conference, School, Game) and Calendar (Seasons, Kickoff,
+  Bowls/Playoffs). Group widths are fixed at 40/30/30%, so the bar is one 82px row from
+  1280px, two rows from 768px, three rows from 481px, and gone at 480px and under (the
+  phone panel replaces it). A long pick truncates inside its entry and never moves a rule.
+- Entry states: neutral (default word in ink), changed (the pick in the accent at 600 with a
+  2px accent line), open (2px ink line), and greyed (`--disabled`, not-allowed). On This
+  weekend the Calendar group and Game grey out. The value line reads a default word ("All",
+  "Any"), the pick itself, the first pick plus a count ("Big Ten +1"), or "N people" in
+  compare mode; the Seasons entry shows a range. The Networks entry lists the checked
+  network names, not a count. The old reserved fit-measuring script (`toolbar-fit.js`) is
+  retired because no bar is measured any more.
+- The count line replaces the Phase 12 selection row, which is gone. It is one fixed-height
+  band (32px from 1104px, two 32px rows below, one 24px line on a phone) with the count and
+  its detail on the left and the actions on the right; "Clear all filters" is always last and
+  anchored right, so nothing shifts. Person chips (shape key, name and ×) appear on the count
+  line only in compare mode. With four or more people the toggles switch to short labels:
+  Compare, Together and "Clear people"; the long accessible names are unchanged. The long
+  labels show only from 1280px with three people or fewer.
+- Legend chips are a colour mark plus a label with no outline: on is filled, off is an empty
+  ring, no games is a dotted ring. The off and no-games labels reach 4.5:1.
+- Phone: one "Filters (N changed)" button, a fixed one-line summary, and a Filters panel
+  grouped Broadcast, Matchup and Calendar like the bar, so picks never push the page down.
+  The people strip (chips, then Compare people, Called together and Clear selection) sits
+  under the Announcers heading, and the changed-filter chips live in the panel as a fixed
+  strip. A chip reads "Announcers: A, B" when it fits and "Announcers (2)", the filter name
+  plus the count, when it would truncate or wrap; it never carries a middle dot.
+- The sketch rounds were picked on 2026-10-27: round 3 chose the ledger line with grouping,
+  and round 3b confirmed the 40/30/30 widths, the no-game label colours and the phone panel.
 - A filter control takes the accent only once it differs from its default. With
   Announcer and School both picked, both controls are accented; untouched controls stay
   neutral (Phase 12).
@@ -39,6 +111,20 @@ records only where the site settles or applies them.
 - The NFL bar is the same ledger: Broadcast (Announcers 250px, Booths), Matchup (Team, Category)
   and Calendar (Seasons), 148px entries, one row from 1024px, and the same count line, square chips
   and phone panel; MLB has no bar and takes the count line's chip shape (Phase 26).
+
+## Copy
+
+- No middle-dot meta strings (Phase 26, owner's call 2026-10-27). Lists join with commas,
+  and a second clause follows a semicolon in lowercase (`Schedule: nflverse; crews: 506
+  Sports; networks: Wikipedia (CC BY-SA 4.0)`). The footer links are spaced, the freshness
+  line uses a semicolon, each credit sits on its own line, and page titles separate with a
+  colon or hyphen.
+- The one kept dot is the crew pair in a booth ("Fowler · Herbstreit"). Exactly three code
+  spots use it (the crew separator, the booth line and the read-aloud replace), and a test
+  fails on any other middle dot in site code or built pages.
+- Dates in tooltips and panels follow AP style (`Sept.`, lowercase `pm`, no dot between
+  parts). View code builds the page with `createElement` and `textContent`; a test fails on
+  any `innerHTML`.
 
 ## Tables
 
@@ -100,10 +186,11 @@ records only where the site settles or applies them.
   under the map. So the 04.18 D-09 "nothing moves between Scatter and Map" rule holds in
   full on desktop only; on a phone the panel top moves up by that row and the filter row
   still never moves (v2.1 todo 2026-10-25-phone-map-blank-bands).
-- A panel opened from a This weekend cell writes its kickoff as the view does (`Sat. Oct.
-  31, 12:00 pm ET`, AP style) and credits the crew as `Crew from 506 Sports ↗` in both
-  sports; the same game opened from the Matched games table keeps the site's long date
-  form (18-UI-REVIEW 8).
+- A panel opened from a This weekend cell writes its kickoff in AP style (`Sat. Oct. 31,
+  12:00 pm ET`) and credits the crew as `Crew from 506 Sports ↗` in both sports. Since Phase
+  26 the Matched games table panel and the tooltip use the same AP form with the year
+  (`Sun. Sept. 7, 2025, 1:00 pm ET`, no dot), which supersedes the long date form of the
+  18-UI-REVIEW 8 note.
 - Cell states: a known crew is a solid network-family fill, deepened toward black until
   white text on it reaches 7:1 (the mid-tone fills read poorly with black text; user
   sign-off 2026-10-26); Crew TBA and not-listed
@@ -125,7 +212,9 @@ records only where the site settles or applies them.
   lives in the shared `MAP_FAMILY_COLORS`, so the CFB Map's light-theme family colours (dots,
   splat, tooltip, legend) shifted slightly on purpose for that 3:1 rule (fox #009E73 to
   #009B71, cbs #B77F00 to #B57E00, nbc #C972A2 to #C16D9C, cw #1D96DB to #1C90D2, other
-  #8B8B8B to #888888); dark is unchanged. The kickoff
+  #8B8B8B to #888888); dark is unchanged. Phase 26 then re-derived the light set against the
+  green-gray land by the same deepen rule: fox #009970, cbs #B37C00, nbc #BF6C9A, cw #1C8FD0,
+  other #878787 (disney, wbd and conference are unchanged). The kickoff
   window is the shape: CFB circle (noon), square (afternoon), diamond (prime), triangle
   (late); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
   game is an open ring in its family colour, still listed in the Time TBA strip. Games at

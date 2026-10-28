@@ -85,7 +85,7 @@ def test_no_crimson_left() -> None:
     since it carries the CSS colour name)."""
     needle = "crim" + "son"  # split so this file does not match itself
     offenders: list[str] = []
-    for top in ("site", "src", "tests"):
+    for top in ("site", "src", "tests", "docs"):
         for path in (REPO_ROOT / top).rglob("*"):
             if (
                 path == Path(__file__)
