@@ -555,7 +555,7 @@ def test_nfl_upcoming_panel_branches(nfl_run: Callable[[str], Any]) -> None:
     crew = got["crew"]
     assert crew["title"].count(" at ") == 1 and "Not played yet." in crew["text"]
     assert "Final score" not in crew["text"] and "Viewers" not in crew["text"]
-    assert "1:00 PM ET" in crew["text"]
+    assert "1:00 pm ET" in crew["text"]
     assert ["Crew from 506 Sports ↗", "https://example.com/lineup"] in crew["anchors"]
     assert "Crew TBA." in got["crewless"]["text"]
     assert "Network follows the slot" in got["slot"]["text"]

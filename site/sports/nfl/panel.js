@@ -154,7 +154,7 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
     // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
     const dateP = el('p', null, row.weekend
       ? apKickoff(row.date, row.kickoff, noTime)
-      : apKickoff(row.date, row.kickoff, noTime.toLowerCase(), { year: true }));
+      : apKickoff(row.date, row.kickoff, row.unplayed ? noTime : noTime.toLowerCase(), { year: true }));
     const noNetwork = row.unplayed ? 'Network TBA' : 'Network not recorded.';
     const network = row.network == null
       ? el('p', null, noNetwork)
