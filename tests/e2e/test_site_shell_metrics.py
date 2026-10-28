@@ -63,8 +63,8 @@ NFL = Sport(
     "#nfl-chart-tabs",
     "#nfl-chart-area .nfl-chart-module",
     "#nfl-toolbar",
-    "#nfl-selection-row",
-    "#nfl-selection-row",
+    "#nfl-selection-bar",
+    "#nfl-selection-bar",
     "#nfl-summary",
 )
 MLB = Sport(
@@ -161,7 +161,8 @@ def test_band_is_64px_with_zero_one_and_four_people(
         # CFB shows person chips on the count line only in compare mode (two or more here).
         shown = count if sport_key != "cfb" or count > 1 else 0
         assert page.locator(chip_sel).count() == shown
-    expected = (32 if width >= 1104 else 72) if sport_key == "cfb" else 64
+    # NFL's count line is the 32px band under an 8px lead-in, at every width and pick count.
+    expected = (32 if width >= 1104 else 72) if sport_key == "cfb" else 40
     assert _band_height(page, sport) == pytest.approx(expected, abs=0.5)
 
 
@@ -377,18 +378,9 @@ def test_no_overlap_between_shell_regions_and_no_horizontal_scroll(
     sport = SPORT_BY_KEY[sport_key]
     page.set_viewport_size({"width": width, "height": 900})
     _open(page, both_site_url, sport)
-    if sport.key in ("mlb", "cfb"):
-        # CFB's selection bar wraps its count line, so only the line itself is compared.
-        regions = ["#topbar", sport.bar, sport.summary, sport.tab_row, sport.module]
-    else:
-        regions = [
-            "#topbar",
-            sport.bar,
-            sport.below_bar,
-            sport.summary,
-            sport.tab_row,
-            sport.module,
-        ]
+    # The selection bar wraps its count line (NFL's bar is the count line's parent too), so only
+    # the line itself is compared.
+    regions = ["#topbar", sport.bar, sport.summary, sport.tab_row, sport.module]
     for i in range(len(sport.tabs)):
         _select_tab(page, sport, i)
         boxes: list[dict[str, Any]] = page.evaluate(_BOXES, regions)

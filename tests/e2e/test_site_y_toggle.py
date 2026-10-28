@@ -51,23 +51,23 @@ def test_y_toggle_markup_and_default(guarded_page: Page, open_app: OpenApp) -> N
     ]
 
 
-def test_y_toggle_lives_in_module_tools_and_pressed_fills_ink(
+def test_y_toggle_lives_in_module_tools_and_pressed_fills_surface(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
     """13-UI-SPEC "Module header tools": the Y group sits in #chart-tools, and the pressed
-    button fills --ink (rgb(35, 32, 27)) with --bg text (rgb(251, 249, 245))."""
+    button takes the T3 surface fill (rgb(235, 239, 237)) with ink text (rgb(30, 35, 33))."""
     open_app(guarded_page, "")
     assert guarded_page.locator("#chart-tools #y-toggle").count() == 1
     styles = guarded_page.eval_on_selector(
         '#y-toggle button[aria-pressed="true"]',
         "el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color]",
     )
-    assert styles == ["rgb(35, 32, 27)", "rgb(251, 249, 245)"]
+    assert styles == ["rgb(235, 239, 237)", "rgb(30, 35, 33)"]
     idle = guarded_page.eval_on_selector(
         '#y-toggle button[aria-pressed="false"]',
         "el => getComputedStyle(el).backgroundColor",
     )
-    assert idle != "rgb(35, 32, 27)"
+    assert idle != "rgb(235, 239, 237)"
 
 
 _Y_FIT_JS = """() => {
