@@ -221,23 +221,25 @@ def test_nfl_clear_all_filters_is_last_and_never_moves(
     assert abs(box["x"] + box["width"] - (right["x"] + right["width"])) <= 1
 
 
-def test_nfl_count_line_height_is_fixed_and_chips_are_square(
+def test_nfl_desktop_count_line_shows_no_person_or_booth_chips(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
+    """Answer 8: the pick already shows its name, and NFL has no compare mode (CFB rule)."""
     page = nfl_guarded_page
     _open(page, open_nfl_app, 1440)
     assert _snap(page)["summary_h"] == 32
+    base = _snap(page)
     _set(page, PICK)
-    chip = page.evaluate(
-        """() => { const c = document.querySelector('#nfl-chips > .chip');
-          const s = getComputedStyle(c);
-          return [s.borderTopLeftRadius, s.borderTopWidth, s.backgroundColor,
-                  c.getBoundingClientRect().height]; }"""
-    )
-    assert chip == ["3px", "1px", "rgba(0, 0, 0, 0)", 28]
+    assert page.locator("#nfl-summary-band #nfl-chips").is_hidden()
+    assert (
+        page.locator("#nfl-summary-band #nfl-chips .chip").count() == 1
+    )  # kept for the phone strip
+    assert page.locator("#nfl-clear-filters").is_visible()
+    assert _snap(page) == base  # zero layout shift, Clear all filters keeps its x
     page.set_viewport_size({"width": 1024, "height": 900})
     page.evaluate(WAIT_TWO_FRAMES)
     assert _snap(page)["summary_h"] == 72
+    assert page.locator("#nfl-chips").is_hidden()
 
 
 # ---- NFL phone ----

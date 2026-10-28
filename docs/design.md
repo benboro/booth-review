@@ -115,8 +115,9 @@ records only where the site settles or applies them.
   neutral (Phase 12).
 
 - The NFL bar is the same ledger: Broadcast (Announcers 250px, Booths), Matchup (Team, Category)
-  and Calendar (Seasons), 148px entries, one row from 1024px, and the same count line, square chips
-  and phone panel; MLB has no bar and takes the count line's chip shape (Phase 26).
+  and Calendar (Seasons), 148px entries, one row from 1024px, and the same count line and phone
+  panel. NFL has no compare mode, so its count line never shows person or booth chips on desktop
+  (the pick already shows its name); the phone Filters sheet keeps them in its people strip; MLB has no bar and takes the count line's chip shape (Phase 26).
 
 ## Copy
 

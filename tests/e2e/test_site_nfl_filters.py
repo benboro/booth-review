@@ -135,7 +135,8 @@ def test_announcers_search_pick_chip_and_remove(app: Page, nfl_site_dist: Path) 
     assert chip.count() == 1
     assert "Ada Quill" in chip.inner_text()
     assert app.get_attribute("#nfl-trigger-announcers", "data-active") == "true"
-    app.click('#nfl-chips button[aria-label="Remove Ada Quill"]')
+    # Desktop hides the chips (answer 8); the remove button is the phone strip's, so click it directly.
+    app.locator('#nfl-chips button[aria-label="Remove Ada Quill"]').dispatch_event("click")
     assert _search(app) == "?sport=nfl"
     assert app.locator("#nfl-chips .chip").count() == 0
 

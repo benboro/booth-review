@@ -682,6 +682,12 @@ li[role="option"][aria-selected="true"] .option-check::after {
   overflow: hidden;
 }
 
+/* NFL has no compare mode, so the count line never repeats a picked name as a chip (the pick
+   already shows it, as on CFB). The chips stay in the DOM for the phone sheet's people strip. */
+#nfl-summary-band #nfl-chips {
+  display: none;
+}
+
 #summary #chips > .chip,
 #nfl-summary-band #nfl-chips > .chip {
   box-sizing: border-box;

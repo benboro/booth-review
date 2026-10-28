@@ -400,7 +400,8 @@ def test_booth_chip_caption_and_empty(
     assert f"No games match the current filters for {label}." in empty
     # The remove button clears the booth.
     page.evaluate("window.__nflTestHooks.setState({ seasons: [2024, 2026] })")
-    page.locator("#nfl-chips .chip-remove").click()
+    # Desktop hides the chips (answer 8); the remove button is the phone strip's, so click it directly.
+    page.locator("#nfl-chips .chip-remove").dispatch_event("click")
     assert page.locator("#nfl-chips .chip").count() == 0
     assert page.evaluate("window.__nflTestHooks.getState().booths") == []
 
