@@ -144,6 +144,22 @@ model, and build phases; read the relevant section before starting a phase.
   `--max-requests` (default 150); check the count with `--dry-run` first. Credit
   every figure with a link to the exact post it came from, and take a site's figures
   down if it objects.
+- Awful Announcing feed watch (2026 college football season only): the Tuesday evening
+  reminder run (21:30 ET and its 22:30 ET backup) may check AA's feed once per run for
+  that week's college football announcing-schedule post, with the same feed check as
+  `booth-review collect aa --feed` (project user agent, robots.txt, pacing, and
+  conditional requests with ETag / Last-Modified). It reads only each entry's title,
+  link, date and categories, keeps only the post link, and never parses or stores a
+  post body or crew data; the response is never cached, and `ledger/aa_feed_watch.json`
+  holds only the feed validators, the verified feed URL, and each week's post link or a
+  mark that its plain reminder went out (after which that week is not checked again, so
+  it gets one comment). The feed is the `/schedules/feed/` category feed, or the site
+  feed if a first `booth-review collect aa --feed --verify` request shows the category
+  feed lacks the posts. It needs an AA policy check from the last 30 days with
+  confirmed terms; when that is stale, or robots.txt now refuses the feed, the job
+  skips the request, posts the plain reminder and asks for `--policy-check` and
+  `--confirm-terms`. If robots.txt or the terms ban automated access, stop. It ends
+  with the 2026 season.
 - ESPN Press Room: never collect with scripts; Disney's Terms of Use ban automated
   access. Save its pages by hand in a browser (any filename) into
   `data/incoming/espnpr/`, or copy them there with `cp -p` to keep each file's save

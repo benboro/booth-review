@@ -13,6 +13,11 @@ decides what a due reminder does: a run with nothing else due posts it through
 the comment-only path (no state, budget, build or deploy, D-16); a full or
 schedule run adds the lines to its own attention items.
 
+Phase 25 (D-02): D-15 still holds for this module. The Tuesday AA slot may
+receive a caller-supplied resolver (`aa_cfb`, built in `job/aa_watch.py`) that
+makes the one feed request; this module imports no transport or network code.
+Without a resolver the slot yields the plain Phase 24 line.
+
 Each slot is a local America/New_York time plus a three hour window, so the
 cron's backup entry an hour later (the "17,18" hour pair, in ET) is still
 inside it and posts only if the first run's line did not already land (the
@@ -62,6 +67,8 @@ EASTERN = ZoneInfo("America/New_York")
 
 _LOG = logging.getLogger(__name__)
 
+AaCfbResolver = Callable[[int, str, datetime], list[AttentionItem]]
+
 _LAST_NFL_WEEK = 18
 
 
@@ -99,7 +106,31 @@ def in_window(now: datetime, slot: ReminderSlot) -> bool:
     return start <= local < start + slot.grace
 
 
-def _cfb_items(paths: DataPaths, now: datetime) -> list[AttentionItem]:
+def current_cfb_week(paths: DataPaths, now: datetime) -> tuple[int, str] | None:
+    """(season, label) when a numbered CFB week is current at `now`, else None."""
+    season = collectable_season(now.astimezone(EASTERN).date())
+    if season is None:
+        return None
+    games = _read_games(paths, season)
+    if games is None:
+        return None
+    label = espnpr_page_week(games, season, now)
+    return None if label is None else (season, label)
+
+
+def _read_games(paths: DataPaths, season: int) -> list[CfbdGame] | None:
+    games_path = paths.raw / "cfbd" / "games" / f"{season}.json"
+    if not games_path.is_file():
+        return None
+    try:
+        return parse_games(games_path.read_bytes())
+    except ParseError:
+        return None
+
+
+def _cfb_items(
+    paths: DataPaths, now: datetime, aa_cfb: AaCfbResolver | None
+) -> list[AttentionItem]:
     open_slots = [
         kind for kind in ("espnpr", "aa_cfb", "fox_cfb") if in_window(now, REMINDER_SLOTS[kind])
     ]
@@ -108,12 +139,8 @@ def _cfb_items(paths: DataPaths, now: datetime) -> list[AttentionItem]:
     season = collectable_season(now.astimezone(EASTERN).date())
     if season is None:
         return []
-    games_path = paths.raw / "cfbd" / "games" / f"{season}.json"
-    if not games_path.is_file():
-        return []
-    try:
-        games: list[CfbdGame] = parse_games(games_path.read_bytes())
-    except ParseError:
+    games = _read_games(paths, season)
+    if games is None:
         return []
     label = espnpr_page_week(games, season, now)
     if label is None:
@@ -124,7 +151,14 @@ def _cfb_items(paths: DataPaths, now: datetime) -> list[AttentionItem]:
             if find_espnpr_gap(paths, season, games, now) is not None:
                 items.append(reminder_espnpr(season, label))
         elif kind == "aa_cfb":
-            items.append(reminder_aa_cfb(season, label))
+            if aa_cfb is None:
+                items.append(reminder_aa_cfb(season, label))
+            else:
+                try:
+                    items.extend(aa_cfb(season, label, now))
+                except Exception as exc:
+                    _LOG.warning("aa resolver failed: %s", type(exc).__name__)
+                    items.append(reminder_aa_cfb(season, label))
         else:
             items.append(reminder_fox_cfb(season, label))
     return items
@@ -206,10 +240,12 @@ def _guarded(name: str, step: Callable[[], list[AttentionItem]]) -> list[Attenti
         return []
 
 
-def due_reminders(paths: DataPaths, now: datetime) -> list[AttentionItem]:
+def due_reminders(
+    paths: DataPaths, now: datetime, *, aa_cfb: AaCfbResolver | None = None
+) -> list[AttentionItem]:
     """The reminder lines due at `now`: the open slots whose saved checks say a page is needed."""
     _require_aware(now, "now")
     return [
-        *_guarded("cfb", lambda: _cfb_items(paths, now)),
+        *_guarded("cfb", lambda: _cfb_items(paths, now, aa_cfb)),
         *_guarded("nfl", lambda: _nfl_items(paths, now)),
     ]

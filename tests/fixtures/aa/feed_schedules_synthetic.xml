@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Invented feed; every title, slug and date is made up. -->
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+	<channel>
+		<title>Invented Schedules Feed</title>
+		<link>https://awfulannouncing.com/schedules/</link>
+		<item>
+			<title>Your 2026 Week 10 College Football Announcing Schedule</title>
+			<link>https://awfulannouncing.com/schedules/your-2026-week-10-college-football-announcing-schedule.html</link>
+			<pubDate>Tue, 03 Nov 2026 19:10:00 -0500</pubDate>
+			<category><![CDATA[Schedules]]></category>
+			<category><![CDATA[College Football]]></category>
+		</item>
+		<item>
+			<title>Your 2026 Week 9 NFL Announcing Schedule</title>
+			<link>https://awfulannouncing.com/schedules/nfl-week-9-announcing-schedule.html</link>
+			<pubDate>Tue, 03 Nov 2026 18:00:00 -0500</pubDate>
+			<category><![CDATA[Schedules]]></category>
+			<category><![CDATA[NFL]]></category>
+		</item>
+		<item>
+			<title>Invented coach says something about the playoff</title>
+			<link>https://awfulannouncing.com/college-football/invented-coach-says-something.html</link>
+			<pubDate>Tue, 03 Nov 2026 17:00:00 -0500</pubDate>
+			<category><![CDATA[College Football]]></category>
+		</item>
+		<item>
+			<title>Your 2026 Week 9 College Football Announcing Schedule</title>
+			<link>https://awfulannouncing.com/schedules/your-2026-week-9-college-football-announcing-schedule.html</link>
+			<pubDate>Tue, 27 Oct 2026 19:00:00 -0400</pubDate>
+			<category><![CDATA[Schedules]]></category>
+			<category><![CDATA[College Football]]></category>
+		</item>
+		<item>
+			<title>Your 2026 Week 10 College Football Announcing Schedule</title>
+			<link>https://example.com/schedules/your-2026-week-10-college-football-announcing-schedule.html</link>
+			<pubDate>Tue, 03 Nov 2026 19:30:00 -0500</pubDate>
+			<category><![CDATA[Schedules]]></category>
+		</item>
+		<item>
+			<title>Invented post with a body</title>
+			<link>https://awfulannouncing.com/media/invented-post-with-a-body.html</link>
+			<pubDate>Tue, 03 Nov 2026 16:00:00 -0500</pubDate>
+			<category><![CDATA[Media]]></category>
+			<description><![CDATA[SENTINEL-DESC-7f3a]]></description>
+			<content:encoded><![CDATA[<p>SENTINEL-BODY-7f3a</p>]]></content:encoded>
+		</item>
+	</channel>
+</rss>

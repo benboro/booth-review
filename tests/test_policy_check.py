@@ -367,3 +367,53 @@ def test_confirm_terms_is_refused_in_the_run_that_fetches_the_terms(
     assert handle.requests == []
     assert _ledger(git_vault) == []
     assert "then --confirm-terms on its own" in capsys.readouterr().err
+
+
+# -- shared robots guard -------------------------------------------------------------------
+
+
+def _robots_response(body: bytes, status: int = 200):
+    from booth_review.transport.types import FetchResponse
+
+    return FetchResponse(
+        status_code=status,
+        content=body,
+        etag=None,
+        last_modified=None,
+        call_limit_remaining=None,
+        final_url="https://awfulannouncing.com/robots.txt",
+        fetched_at=datetime(2026, 11, 3, tzinfo=UTC),
+    )
+
+
+def test_aa_planned_samples_include_both_feed_urls() -> None:
+    from booth_review.sources.policy import TARGETS
+
+    samples = TARGETS["aa"].planned_samples
+    assert "https://awfulannouncing.com/schedules/feed/" in samples
+    assert "https://awfulannouncing.com/feed/" in samples
+    assert any("viewership-sample" in url for url in samples)
+
+
+def test_robots_guard_raises_on_a_disallowed_feed_path() -> None:
+    from booth_review.sources.policy import PolicyRobotsError, robots_guard
+
+    guard = robots_guard("aa")
+    with pytest.raises(PolicyRobotsError):
+        guard("awfulannouncing.com", _robots_response(b"User-agent: *\nDisallow: /schedules/\n"))
+
+
+def test_robots_guard_raises_on_a_long_crawl_delay() -> None:
+    from booth_review.sources.policy import PolicyRobotsError, robots_guard
+
+    guard = robots_guard("aa")
+    with pytest.raises(PolicyRobotsError):
+        guard("awfulannouncing.com", _robots_response(b"User-agent: *\nCrawl-delay: 30\n"))
+
+
+def test_robots_guard_passes_a_permissive_body_and_ignores_other_hosts() -> None:
+    from booth_review.sources.policy import robots_guard
+
+    guard = robots_guard("aa")
+    assert guard("awfulannouncing.com", _robots_response(b"User-agent: *\nAllow: /\n")) is None
+    assert guard("example.com", _robots_response(b"User-agent: *\nDisallow: /\n")) is None

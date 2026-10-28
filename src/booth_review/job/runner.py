@@ -97,6 +97,7 @@ from booth_review.errors import (
     VaultCommitError,
     VaultStateError,
 )
+from booth_review.job.aa_watch import make_aa_cfb_resolver
 from booth_review.job.attention import (
     AttentionItem,
     bowls_missing,
@@ -147,7 +148,7 @@ from booth_review.job.catchup import (
 )
 from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.gaps_espnpr import espnpr_page_week, find_espnpr_gap
-from booth_review.job.reminders import due_reminders
+from booth_review.job.reminders import AaCfbResolver, due_reminders
 from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
 from booth_review.nfl.freeze import schedule_drift
 from booth_review.nfl.gaps import find_nfl_506_gaps
@@ -387,11 +388,20 @@ class ScheduledJob:
         self._github_token = github_token
         self._dry_run = dry_run
         self._commit_enabled = commit
+        self._aa_resolver: AaCfbResolver | None = None
         self._on_cfb_result = on_cfb_result
         self._nfl_site = nfl_site
         self._mode = mode
         self._schedule_max_calls = schedule_max_calls
         self._nfl_carry_items: list[AttentionItem] = []
+
+    def _aa_cfb_resolver(self) -> AaCfbResolver | None:
+        """The shared AA feed resolver, built once per run; none in a dry run."""
+        if self._dry_run:
+            return None
+        if self._aa_resolver is None:
+            self._aa_resolver = make_aa_cfb_resolver(self._runtime, commit=self._commit_enabled)
+        return self._aa_resolver
 
     # -- public entry point ------------------------------------------------
 
@@ -410,13 +420,15 @@ class ScheduledJob:
 
         mode = resolve_mode(state, now, self._trigger, self._mode)
         if mode is None:
-            # Phase 24 D-12..D-16: hand-save reminders (vault reads only, no request) on the
-            # comment-only path, ahead of every budget, CFBD, vault-commit, state, build and
-            # deploy line, so a reminder slot is never a missed or failed collection run.
+            # Phase 24 D-12..D-16: hand-save reminders on the comment-only path, ahead of
+            # every budget, CFBD, vault-commit, state, build and deploy line, so a reminder
+            # slot is never a missed or failed collection run. Phase 25 D-02/D-12: the AA
+            # Tue slot may make one feed request and commit ledger/aa_feed_watch.json;
+            # nothing else on this path writes.
             quiet_items: list[AttentionItem] = []
             if self._update:
                 self._staleness_step(quiet_items, state.last_build_at, now, season)
-            quiet_items.extend(due_reminders(paths, now))
+            quiet_items.extend(due_reminders(paths, now, aa_cfb=self._aa_cfb_resolver()))
             if has_attention(quiet_items) or has_reminders(quiet_items):
                 return JobRunResult(
                     exit_code=4,
@@ -527,11 +539,13 @@ class ScheduledJob:
         except VaultCommitError:
             # A failed push still posts this slot's reminders (severity "reminder", so the
             # exit code stays 3); the +1h backup may itself be a failing retry.
-            items.extend(due_reminders(paths, now))
+            items.extend(due_reminders(paths, now, aa_cfb=self._aa_cfb_resolver()))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak
-        items.extend(due_reminders(paths, now))  # a due reminder joins the run's comment
+        items.extend(
+            due_reminders(paths, now, aa_cfb=self._aa_cfb_resolver())
+        )  # a due reminder joins the run's comment
         status = "attention" if has_attention(items) else "ok"
 
         if not self._dry_run:
@@ -707,11 +721,11 @@ class ScheduledJob:
                     items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
             print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
         except VaultCommitError:
-            items.extend(due_reminders(self._runtime.paths, now))
+            items.extend(due_reminders(self._runtime.paths, now, aa_cfb=self._aa_cfb_resolver()))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
         deploy_ready = deploy_ready and not key_leak
-        items.extend(due_reminders(self._runtime.paths, now))
+        items.extend(due_reminders(self._runtime.paths, now, aa_cfb=self._aa_cfb_resolver()))
         if not self._dry_run:
             # 18-13 F11: only a schedule run that pulled and built cleanly marks its slot done;
             # a failed pull or a rebuild leaves it, so the next backup slot still pulls.

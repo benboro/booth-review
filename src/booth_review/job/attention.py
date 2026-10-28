@@ -238,8 +238,9 @@ def espnpr_week_unsaved(season: int, label: str) -> AttentionItem:
 
 # Phase 24 hand-save reminder links (fixed public pages; the job never fetches them).
 # The user approved these on 2026-10-26 and may change them later: each is one line.
+# The AA link is the Schedules category page (Phase 25 D-10, approved 2026-10-28).
 REMINDER_ESPNPR_CFB_URL = "https://espnpressroom.com/press-release-category/college-football/"
-REMINDER_AA_CFB_URL = "https://awfulannouncing.com/college-football/"
+REMINDER_AA_CFB_URL = "https://awfulannouncing.com/schedules/"
 REMINDER_AA_NFL_URL = "https://awfulannouncing.com/nfl/"
 REMINDER_FOX_CFB_URL = "https://www.foxsports.com/presspass"
 # Path only: 506's week URL (nfl.php?yr=..&wk=..) holds "?", "=" and "&", which the
@@ -278,6 +279,61 @@ def reminder_aa_cfb(season: int, label: str) -> AttentionItem:
         "reminder_aa_cfb",
         f"reminder {season} cfb week {label}: save the aa college football schedule post "
         f"{REMINDER_AA_CFB_URL}",
+    )
+
+
+_AA_HOST_PREFIX = "https://awfulannouncing.com/"
+_AA_PATH_RE = re.compile(r"^/[a-z0-9/._-]+$")
+_AA_URL_FORBIDDEN = ("?", "#", "=", "&", "@")
+
+
+def reminder_aa_cfb_link(season: int, label: str, url: str) -> AttentionItem:
+    """Phase 25 D-01/D-06: the exact AA schedule post for CFB week `label` (from the feed)."""
+    _require_cfb_week(label)
+    if not url.startswith(_AA_HOST_PREFIX) or any(ch in url for ch in _AA_URL_FORBIDDEN):
+        raise ValueError("aa post url is off-host or carries a forbidden character")
+    if _AA_PATH_RE.fullmatch(url.removeprefix("https://awfulannouncing.com")) is None:
+        raise ValueError("aa post url path has a forbidden character")
+    line = (
+        f"reminder {season} cfb week {label}: aa posted the college football "
+        f"announcing schedule, save it {url}"
+    )
+    if len(line) > _MAX_LINE_LEN or _LINE_RE.fullmatch(line) is None:
+        raise ValueError("aa post link line is too long or off the whitelist")
+    return _reminder("reminder_aa_cfb_link", line)
+
+
+def aa_feed_policy_stale() -> AttentionItem:
+    """Phase 25 D-07: the job never runs the policy check; the user must."""
+    return AttentionItem(
+        kind="aa_feed_policy_stale",
+        line=(
+            "aa feed watch skipped: aa policy check older than 30 days or terms not "
+            "confirmed, run booth-review collect aa --policy-check then --confirm-terms"
+        ),
+        severity="attention",
+    )
+
+
+def aa_feed_unverified() -> AttentionItem:
+    return AttentionItem(
+        kind="aa_feed_unverified",
+        line=(
+            "aa feed watch skipped: no verified feed, "
+            "run booth-review collect aa --feed --verify schedules"
+        ),
+        severity="attention",
+    )
+
+
+def aa_feed_blocked() -> AttentionItem:
+    return AttentionItem(
+        kind="aa_feed_blocked",
+        line=(
+            "aa feed watch stopped: robots.txt refused the feed or asks for a longer "
+            "crawl delay, run booth-review collect aa --policy-check, a ban ends the watch"
+        ),
+        severity="attention",
     )
 
 
