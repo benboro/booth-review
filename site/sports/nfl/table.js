@@ -91,7 +91,7 @@ function buildRow(row, onOpen) {
   button.addEventListener('click', () => onOpen?.(row.i, button));
   matchupTd.appendChild(button);
   // The category line is secondary text under the matchup, like the time under the date.
-  matchupTd.appendChild(el('span', 'games-sub', [row.slot, ...flagLabels(row)].join(' · ')));
+  matchupTd.appendChild(el('span', 'games-sub', [row.slot, ...flagLabels(row)].join(', ')));
   tr.appendChild(matchupTd);
 
   // NFL-only column: the table shows the final score; CFB shows it only in the panel.
@@ -128,8 +128,8 @@ function buildRow(row, onOpen) {
 function summaryText(rows) {
   const seasons = rows.map((r) => r.season);
   const rated = rows.filter((r) => r.viewers != null).length;
-  let text = `${rows.length} ${rows.length === 1 ? 'game' : 'games'} · ${Math.min(...seasons)}–${Math.max(...seasons)}`;
-  if (rated > 0) text += ` · ${rated} rated`;
+  let text = `${rows.length} ${rows.length === 1 ? 'game' : 'games'}, ${Math.min(...seasons)}–${Math.max(...seasons)}`;
+  if (rated > 0) text += `, ${rated} rated`;
   return text;
 }
 

@@ -43,10 +43,15 @@ MLB_FIXTURE = CONTRACT / "mlb-data.fixture.json"
 
 PAGES = ("index.html", "methodology.html", "coverage.html")
 
-RT01_TEXT = (
+# The credit line holds exactly three span.credit-item blocks, separated in the source by a
+# single "\n" and no <br> (checker gap 1); CSS puts each on its own line.
+RT01_ITEMS = [
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with "
-    "crew and game data · Crews: 506 Sports · Data provided by CollegeFootballData.com"
-)
+    "crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
+]
+RT01_TEXT = " ".join(RT01_ITEMS)
 RT01_HREFS = [
     "https://ratingsreference.com",
     "https://creativecommons.org/licenses/by/4.0/",
@@ -67,12 +72,13 @@ RT23_TEXT = (
     "Their use does not imply endorsement, and they are not covered by this site's MIT license."
 )
 RT24_TEXT = (
-    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), Roboto "
+    "Type: Latin Modern (copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+    "used under the GUST Font License; Roboto "
     "(copyright 2011 The Roboto Project Authors) and Roboto Condensed "
     "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
 )
 RT24_HREFS = [
-    "fonts/OFL-crimson-text.txt",
+    "fonts/GUST-FONT-LICENSE.txt",
     "fonts/OFL-roboto.txt",
     "fonts/OFL-roboto-condensed.txt",
 ]
@@ -182,6 +188,9 @@ def _footer(built: Path, page: str) -> Node:
 def test_rt01_credit_line_and_links(built: Path, page: str) -> None:
     credit = _footer(built, page).find("p", "credit-line")
     assert len(credit) == 1
+    items = credit[0].find("span", "credit-item")
+    assert [i.text for i in items] == RT01_ITEMS
+    assert credit[0].find("br") == []
     assert credit[0].text == RT01_TEXT
     anchors = credit[0].links()
     assert [a.attrs.get("href") for a in anchors] == RT01_HREFS

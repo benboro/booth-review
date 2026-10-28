@@ -60,6 +60,6 @@ def test_document_title_follows_the_active_sport(
     """The tab title for each sport is the registry.js title (SHELL-02)."""
     page = nfl_guarded_page
     open_flagon_cfb(page)
-    assert page.title() == "The Broadcast Ledger · college football broadcast crews and viewership"
+    assert page.title() == "The Broadcast Ledger: college football broadcast crews and viewership"
     open_nfl_app(page, "?sport=nfl")
-    assert page.title() == "The Broadcast Ledger · NFL broadcast crews and special games"
+    assert page.title() == "The Broadcast Ledger: NFL broadcast crews and special games"

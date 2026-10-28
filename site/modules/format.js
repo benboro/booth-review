@@ -232,7 +232,7 @@ export function rivalryName(data, i) {
  * The one source for the name shown beside a named game's icons in the hover
  * tooltip, its plotly-fallback text, and (via `rivalryName`) the modal (04.10
  * D-10). A rivalry shows its name; a bowl its core name (never the sponsor);
- * a CFP game at a bowl "<core> · <round>"; a CFP game elsewhere its round
+ * a CFP game at a bowl "<core>, <round>"; a CFP game elsewhere its round
  * label; a regular non-rivalry game null. A rivalry game is always regular
  * season, so the rivalry branch never collides with a bowl or CFP branch.
  * @param {object} data - a `prepareData` result.
@@ -247,7 +247,7 @@ export function namedGameInfo(data, i) {
   const core = data.lookups.bowls?.[data.t.bowl?.[i]]?.core ?? null;
   if (info.kind === 'bowl') return { icons: ['bowl'], text: core ?? 'Bowl' };
   if (info.atBowl) {
-    return { icons: ['bowl', 'playoff'], text: core ? `${core} \u00b7 ${info.label}` : info.label };
+    return { icons: ['bowl', 'playoff'], text: core ? `${core}, ${info.label}` : info.label };
   }
   return { icons: ['playoff'], text: info.label };
 }
@@ -315,6 +315,18 @@ export function formatViewers(n) {
 }
 
 /**
+ * A viewer count in a tooltip, panel or other prose: unit shorthand with at most one decimal and
+ * no trailing zero ("220K", "1.1MM", never "220.0K" or "1.10MM"; sign-off 2026-10-27). Tables
+ * use `formatViewers`, which keeps one even decimal.
+ * @param {number|null} n
+ * @returns {string} e.g. "220K", "1.1MM", or the no-rating label for null.
+ */
+export function formatViewersProse(n) {
+  if (n == null) return NO_RATING_LABEL;
+  return formatAudienceShort(n);
+}
+
+/**
  * The one unit for a viewer figure in millions, site-wide (CFB, NFL and MLB): "MM", the
  * user's choice on 2026-10-24. Thousands stay "K". Every viewer figure in millions goes
  * through `MILLIONS` or a helper below, never a hand-written suffix.
@@ -330,6 +342,18 @@ export const MILLIONS = 'MM';
  */
 export function formatMillions(n, digits = 1) {
   return `${(n / 1e6).toFixed(digits)}${MILLIONS}`;
+}
+
+/**
+ * A viewer count in prose for the NFL and MLB, whose tables write millions with `formatMillions`
+ * ("12.0MM"): the same rounding as that table cell, with the trailing zero dropped ("12MM"), and
+ * thousands as "K" ("220K") so a hover never disagrees with its table row.
+ * @param {number} n
+ * @returns {string} e.g. "220K", "1.1MM", "12MM".
+ */
+export function formatMillionsProse(n) {
+  if (n < 1e6) return formatAudienceShort(n);
+  return formatMillions(n).replace('.0', '');
 }
 
 /**
@@ -412,9 +436,9 @@ export function figureNotViaRrText(data, i) {
   return null;
 }
 
-/** Full line: "No public rating · {cause}" (plain text; callers use textContent). */
+/** Full line: "No public rating; {cause}" (plain text; callers use textContent). */
 export function noRatingLine(data, i) {
-  return `${NO_RATING_LABEL} · ${causeText(data, i)}`;
+  return `${NO_RATING_LABEL}; ${causeText(data, i)}`;
 }
 
 /**
@@ -543,12 +567,12 @@ export function spreadLabel(data, i) {
  * @param {object} data - a `prepareData` result.
  * @param {number} i - telecast index.
  * @param {"spread"|"excitement"|"date"} axis - "date" shows both halves,
- *   spread first, joined by " \u00b7 ".
+ *   spread first, joined by "; ".
  * @returns {string}
  */
 export function axisValueText(data, i, axis) {
   if (axis === 'date') {
-    return `${spreadLabel(data, i)} \u00b7 ${formatAxisValue('excitement', data.t.excitement[i])}`;
+    return `${spreadLabel(data, i)}; ${formatAxisValue('excitement', data.t.excitement[i])}`;
   }
   if (axis === 'excitement') return formatAxisValue('excitement', data.t.excitement[i]);
   return spreadLabel(data, i);
@@ -712,10 +736,10 @@ export function summaryCopy(summary) {
     const n = summary.count;
     const count = `${summary.rated.toLocaleString('en-US')} rated of ${n.toLocaleString('en-US')} ${n === 1 ? 'game' : 'games'}`;
     if (summary.kind === 'all') return { count, detail: '' };
-    let detail = `${summary.seasonMin}–${summary.seasonMax} · ${summaryNetworks(summary.networks)}`;
+    let detail = `${summary.seasonMin}–${summary.seasonMax}, ${summaryNetworks(summary.networks)}`;
     if (summary.altCount > 0) {
       const gameWord = summary.altCount === 1 ? 'game' : 'games';
-      detail += ` · includes ${summary.altCount} alt-cast ${gameWord}`;
+      detail += `, includes ${summary.altCount} alt-cast ${gameWord}`;
     }
     return { count, detail };
   }
@@ -741,4 +765,17 @@ export function summaryCopy(summary) {
     };
   }
   return { count: '', detail: '' };
+}
+
+/**
+ * A footer freshness line with "Week" bound to its number and the last two words bound together,
+ * so a narrow line never leaves a lone "7" (or "progress") on its last row. Pairs with
+ * `text-wrap: pretty` on `.freshness`.
+ * @param {string} text
+ * @returns {string}
+ */
+export function keepTailTogether(text) {
+  const bound = text.replace(/\bWeek (\d)/g, 'Week\u00a0$1');
+  const i = bound.lastIndexOf(' ');
+  return i < 0 ? bound : `${bound.slice(0, i)}\u00a0${bound.slice(i + 1)}`;
 }

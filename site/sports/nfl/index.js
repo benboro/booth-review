@@ -26,6 +26,7 @@ import * as weekend from './views/weekend.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
+import { keepTailTogether } from '../../modules/format.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter, weekend };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
@@ -110,12 +111,16 @@ function buildRegions(footerEl) {
   // The headline is the chart module's title (13-11); it keeps its id.
   const headline = el('h2', 'nfl-headline module-title');
   headline.id = 'nfl-headline';
-  // Always-rendered 32px row: chips, Clear selection, then Clear all filters at
-  // the right end (filters.js places it; C1).
-  const selectionRow = el('div', 'selection-row nfl-selection-row');
-  selectionRow.id = 'nfl-selection-row';
-  selectionRow.append(chips, clearBtn);
-  selection.append(selectionRow, summary);
+  // The count line (same band as CFB's): the count on the left; chips, Clear selection and then
+  // Clear all filters last on the right (filters.js places the last one; C1).
+  const band = el('div', 'nfl-summary-band');
+  band.id = 'nfl-summary-band';
+  const sumLeft = el('div', 'sum-left');
+  sumLeft.append(summary);
+  const sumRight = el('div', 'sum-right');
+  sumRight.append(chips, clearBtn);
+  band.append(sumLeft, sumRight);
+  selection.append(band);
 
   const chartArea = el('section', 'nfl-region');
   chartArea.id = 'nfl-chart-area';
@@ -142,7 +147,7 @@ function buildRegions(footerEl) {
   filterLayer.id = 'nfl-filter-layer';
 
   footerEl.before(toolbar, filterLayer, selection, chartArea, matched);
-  return { toolbar, filterLayer, selection, selectionRow, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
+  return { toolbar, filterLayer, selection, sumRight, chips, clearBtn, summary, chartArea, tabHost, hint, tools, viewHost, status, matched, headline };
 }
 
 function showStatus(kind) {
@@ -173,30 +178,45 @@ function freshnessText() {
     ? `Schedules and scores through Week ${f.through_week}`
     : 'Schedules and scores: not yet available this season';
   const view = f.viewership_through_week
-    ? `Viewership through Week ${f.viewership_through_week}`
-    : 'Viewership: not yet available this season';
-  return `${sched} · ${view}`;
+    ? `viewership through Week ${f.viewership_through_week}`
+    : 'viewership: not yet available this season';
+  return `${sched}; ${view}`;
 }
 
+/** One block per source (CSS puts each on its own line); a "\n" text node sits between them. */
 function creditNodes() {
-  const t = (s) => document.createTextNode(s);
   const BY = 'https://creativecommons.org/licenses/by/4.0/';
-  return [
-    t('Viewership: '),
-    link('RatingsReference.com', 'https://ratingsreference.com'),
-    t(' ('),
-    link('CC BY 4.0', BY),
-    t('), modified: filtered and joined with crew and game data · Schedules and win-probability measures: '),
-    link('nflverse', 'https://nflverse.com'),
-    t(' ('),
-    link('CC BY 4.0', BY),
-    t('), modified: derived and joined with crew and viewership data · Scheduling changes: '),
-    link('Wikipedia', 'https://www.wikipedia.org'),
-    t(' ('),
-    link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
-    t(') · Crews and networks: '),
-    link('506 Sports', 'https://506sports.com'),
+  const item = (...kids) => {
+    const span = el('span', 'credit-item');
+    span.append(...kids);
+    return span;
+  };
+  const t = (s) => document.createTextNode(s);
+  const items = [
+    item(
+      t('Viewership: '),
+      link('RatingsReference.com', 'https://ratingsreference.com'),
+      t(' ('),
+      link('CC BY 4.0', BY),
+      t('), modified: filtered and joined with crew and game data'),
+    ),
+    item(
+      t('Schedules and win-probability measures: '),
+      link('nflverse', 'https://nflverse.com'),
+      t(' ('),
+      link('CC BY 4.0', BY),
+      t('), modified: derived and joined with crew and viewership data'),
+    ),
+    item(
+      t('Scheduling changes: '),
+      link('Wikipedia', 'https://www.wikipedia.org'),
+      t(' ('),
+      link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
+      t(')'),
+    ),
+    item(t('Crews and networks: '), link('506 Sports', 'https://506sports.com')),
   ];
+  return items.flatMap((node, i) => (i ? [t('\n'), node] : [node]));
 }
 
 function swapFooter(footerEl) {
@@ -211,7 +231,7 @@ function swapFooter(footerEl) {
     footerRefs = { freshness, credit };
     credit.replaceChildren(...creditNodes());
   }
-  freshness.replaceChildren(document.createTextNode(freshnessText()));
+  freshness.replaceChildren(document.createTextNode(keepTailTogether(freshnessText())));
 }
 
 function restoreFooter() {
@@ -302,7 +322,7 @@ function renderSelectionBar() {
   }
 }
 
-/** '{N} games · {first}–{last}' for the active Seasons range and filters. */
+/** '{N} games, {first}–{last}' for the active Seasons range and filters. */
 function renderHeadline() {
   const n = model.cols.season.length;
   let count = 0;
@@ -313,7 +333,7 @@ function renderHeadline() {
     regions.headline.textContent = TAB_LABELS[state.view];
     return;
   }
-  regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'} · ${span}`;
+  regions.headline.textContent = `${count.toLocaleString('en-US')} ${count === 1 ? 'game' : 'games'}, ${span}`;
 }
 
 function renderTable() {
@@ -516,7 +536,7 @@ function ensureShell(footerEl) {
     toolbar: regions.toolbar,
     chipsHost: regions.chips,
     sheetHost: regions.filterLayer,
-    clearHost: regions.selectionRow,
+    clearHost: regions.sumRight,
     ctx,
   });
   table.render([], { emptyKind: 'nothing' });

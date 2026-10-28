@@ -16,7 +16,7 @@ import { textWidth } from '../../../modules/bar-chart.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { currentTheme } from '../../../modules/pill.js';
 import { showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
-import { escapeHover, formatMillions, MINUS } from '../../../modules/format.js';
+import { escapeHover, formatAudienceShort, MINUS } from '../../../modules/format.js';
 
 export const CONFIG = frameConfig({ zoomable: false });
 
@@ -64,7 +64,7 @@ function fixed(x, digits) {
 }
 
 function viewersShort(x) {
-  return formatMillions(x);
+  return formatAudienceShort(x);
 }
 
 function ratedGamesText(n) {
@@ -296,7 +296,7 @@ function buildFigure(items, metric, adjusted, env, th, widthPx = 0) {
   // axis title carries it once; mixed seasons keep a season on each label, pooled rows have none.
   const shared = sharedSeason(items);
   const baseTitle = useAdj ? f.adjTitle : f.rawTitle;
-  const titleText = shared != null ? `${baseTitle} \u00B7 ${shared}` : baseTitle;
+  const titleText = shared != null ? `${baseTitle}, ${shared}` : baseTitle;
   // Full names on desktop, "Last / Last, YYYY" on a phone; the margin is sized from the
   // measured text so no label is ever cut.
   const labels = items.map((it) => {

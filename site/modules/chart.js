@@ -240,7 +240,7 @@ export function naBand(data, axis, plotPx) {
  * `tooltipModel` the default HTML tooltip renders, so the two modes can
  * never drift on content/order: matchup+score, date+kickoff, then a named
  * game's `namedGameInfo().text` -- the rivalry name, the bowl core name, or
- * "core · round" -- as its own line of plain text (notes-2 #6), since this mode can't draw the HTML
+ * "core, round" -- as its own line of plain text (notes-2 #6), since this mode can't draw the HTML
  * tooltip's icons -- and emoji glyphs vary by OS; the time-slot label is
  * panel-only, notes-4 A1),
  * slash-delimited networks (primary first, each colored by its own family --

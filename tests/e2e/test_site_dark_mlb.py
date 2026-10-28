@@ -15,11 +15,11 @@ pytestmark = pytest.mark.e2e
 
 OpenMlb = Callable[..., None]
 
-PAGE_BG = "#1D1B18"
-GRID = "#3A3632"
-MUTED = "#A59E94"
-SURFACE = "#26231F"
-INK = "#ECE7DF"
+PAGE_BG = "#191D1C"
+GRID = "#333A38"
+MUTED = "#9EA8A4"
+SURFACE = "#212625"
+INK = "#E5EAE8"
 
 
 def test_mlb_scatter_repaints_dark_after_toggle_click(

@@ -14,16 +14,17 @@ import pytest
 CSS = Path(__file__).resolve().parent.parent / "site" / "style.css"
 
 LIGHT = {
-    "--bg": "#FBF9F5",
-    "--surface": "#F4F0E8",
-    "--ink": "#23201B",
-    "--muted": "#6A6358",
-    "--rule": "#E4DDD1",
-    "--rule-strong": "#CFC6B6",
+    "--bg": "#F5F7F6",
+    "--surface": "#EBEFED",
+    "--ink": "#1E2321",
+    "--muted": "#5A6460",
+    "--rule": "#DAE0DD",
+    "--rule-strong": "#C0C9C5",
     "--accent": "#1B4F5C",
     "--accent-soft": "#E3EDEF",
     "--accent-soft-hover": "#D3E3E7",
-    "--disabled": "#9C9486",
+    "--disabled": "#8E9894",
+    "--legend-none": "#687270",
     "--error": "#B3261E",
     "--game-rivalry": "#8F2D3A",
 }
@@ -38,7 +39,7 @@ REMOVED = (
     "--font-label",
 )
 SIZE_TOKENS = {"--font-caption", "--font-body", "--font-heading", "--font-display"}
-ALLOWED_SIZES = {"12px", "14px", "20px", "24px"}
+ALLOWED_SIZES = {"12px", "14px", "20px", "22px", "27px"}
 
 
 def _css() -> str:
@@ -109,7 +110,7 @@ def test_fonts_are_self_hosted() -> None:
         "roboto-condensed-latin-400-normal",
         "roboto-latin-400-normal",
         "roboto-latin-600-normal",
-        "crimson-text-latin-600-normal",
+        "lm-roman-demi-latin-600-normal",
     ):
         assert f'url("fonts/{name}.woff2") format("woff2")' in css
 
@@ -160,16 +161,17 @@ def test_rank_pill_edge_contrast(tone: str, bg: str) -> None:
 
 
 DARK = {
-    "--bg": "#1D1B18",
-    "--surface": "#26231F",
-    "--ink": "#ECE7DF",
-    "--muted": "#A59E94",
-    "--rule": "#3A3632",
-    "--rule-strong": "#4A453E",
+    "--bg": "#191D1C",
+    "--surface": "#212625",
+    "--ink": "#E5EAE8",
+    "--muted": "#9EA8A4",
+    "--rule": "#333A38",
+    "--rule-strong": "#434B48",
     "--accent": "#68BACB",
     "--accent-soft": "#223A40",
     "--accent-soft-hover": "#274046",
-    "--disabled": "#7D766B",
+    "--disabled": "#76807C",
+    "--legend-none": "#87918D",
     "--error": "#F0877F",
     "--game-playoff": "#D9A420",
     "--game-bowl": "#D9824A",
@@ -236,3 +238,49 @@ def test_dark_contrast(fg: str, bg: str, minimum: float) -> None:
     tokens = _dark_tokens()
     ratio = _ratio(tokens[fg], tokens[bg])
     assert ratio >= minimum, f"dark {fg} on {bg}: {ratio:.2f}:1"
+
+
+# Phase 26 (26-UI-SPEC.md): every text pair meets 4.5:1 and icons 3:1 in light and dark.
+# Exempt on purpose: --disabled (disabled controls) and --rule / --rule-strong (decoration).
+THEME_CONTRAST = [
+    ("--ink", "--bg", 4.5),
+    ("--muted", "--bg", 4.5),
+    ("--accent", "--bg", 4.5),
+    ("--legend-none", "--bg", 4.5),
+    ("--ink", "--surface", 4.5),
+    ("--muted", "--surface", 4.5),
+    ("--accent", "--surface", 4.5),
+    ("--accent", "--accent-soft", 4.5),
+    ("--game-playoff", "--bg", 3.0),
+    ("--game-bowl", "--bg", 3.0),
+    ("--game-rivalry", "--bg", 3.0),
+]
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize(("fg", "bg", "minimum"), THEME_CONTRAST)
+def test_theme_contrast(theme: str, fg: str, bg: str, minimum: float) -> None:
+    tokens = _root_tokens() if theme == "light" else _dark_tokens()
+    ratio = _ratio(tokens[fg], tokens[bg])
+    assert ratio >= minimum, f"{theme} {fg} on {bg}: {ratio:.2f}:1"
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_bg_text_on_accent(theme: str) -> None:
+    tokens = _root_tokens() if theme == "light" else _dark_tokens()
+    ratio = _ratio(tokens["--bg"], tokens["--accent"])
+    assert ratio >= 4.5, f"{theme} --bg on --accent: {ratio:.2f}:1"
+
+
+def test_print_block_restates_light_tokens() -> None:
+    css = _css()
+    start = css.index('@media print {\n  [data-theme="dark"] {')
+    block = css[start : css.index("\n  }", start)]
+    printed = {
+        m.group(1): m.group(2).strip().upper()
+        for m in re.finditer(r"(--[\w-]+):\s*([^;]+);", block)
+    }
+    light = {k: v.upper() for k, v in _root_tokens().items()}
+    assert "--legend-none" in printed
+    for name, value in printed.items():
+        assert light[name] == value, f"print {name}: {value} != light {light[name]}"

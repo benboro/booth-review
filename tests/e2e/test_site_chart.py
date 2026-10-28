@@ -444,11 +444,13 @@ def test_legend_chip_greyed_when_family_has_no_offered_channel(
         expect(chip).to_have_attribute("data-offered", "false")
         expect(chip).to_have_attribute("aria-pressed", "true")
         style = chip.evaluate(
-            "el => { const s = getComputedStyle(el);"
-            " return [s.backgroundColor, s.borderTopStyle]; }"
+            "el => { const s = getComputedStyle(el); const d = getComputedStyle("
+            "el.querySelector('.legend-dot'));"
+            " return [s.backgroundColor, d.borderTopStyle, d.backgroundColor]; }"
         )
         assert style[0] in ("rgba(0, 0, 0, 0)", "transparent")
-        assert style[1] == "dashed"
+        assert style[1] == "dotted"  # no games: a dotted empty ring
+        assert style[2] == "rgba(0, 0, 0, 0)"
 
     fox = guarded_page.locator('#legend-chips button[data-family="fox"]')
     fox.click()
@@ -527,36 +529,36 @@ def test_chart_tabs_slot_holds_three_tabs(
 # text, every other family needs black).
 _PILL_CONTRAST = {
     "disney": ("rgb(0, 114, 178)", "rgb(255, 255, 255)"),
-    "fox": ("rgb(0, 158, 115)", "rgb(0, 0, 0)"),
+    "fox": ("rgb(0, 153, 112)", "rgb(0, 0, 0)"),
     "conference": ("rgb(0, 0, 0)", "rgb(255, 255, 255)"),
     "other": ("rgb(139, 139, 139)", "rgb(0, 0, 0)"),
 }
 
 
-def test_legend_chips_are_outlined_with_a_family_dot(
+def test_legend_chips_are_a_mark_and_a_label_with_no_outline(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """C5 / 13-12: a shown chip is an outlined 28px chip on the page background with
-    --ink text and an 8px dot in the family colour; there is no filled family pill."""
+    """Round 3: a shown chip is a 28px mark-plus-label with no outline or fill of its own,
+    --ink text and a filled 10px mark in the family colour; there is no family pill."""
     open_app(guarded_page, "")
-    bg = _token_rgb(guarded_page, "--bg")
     ink = _token_rgb(guarded_page, "--ink")
     for family, (fill, _text) in _PILL_CONTRAST.items():
         chip = guarded_page.locator(f'#legend-chips button[data-family="{family}"]')
         sel = f'#legend-chips button[data-family="{family}"]'
-        assert _rgb_of(guarded_page, sel, "backgroundColor") == bg, family
+        assert chip.evaluate("el => getComputedStyle(el).backgroundColor") == "rgba(0, 0, 0, 0)"
         assert _rgb_of(guarded_page, sel, "color") == ink, family
         border = chip.evaluate(
-            "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopStyle]; }"
+            "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderRadius]; }"
         )
-        assert border == ["1px", "solid"], family
+        assert border == ["0px", "0px"], family
         assert float(chip.bounding_box()["height"]) == 28, family  # type: ignore[index]
         dot = chip.locator(".legend-dot").evaluate(
             "el => { const s = getComputedStyle(el); const r = el.getBoundingClientRect();"
-            " return [s.backgroundColor, r.width, r.height]; }"
+            " return [s.backgroundColor, r.width, r.height, s.borderTopColor, s.borderTopStyle]; }"
         )
         assert dot[0] == fill, family
-        assert dot[1:] == [8, 8], family
+        assert dot[1:3] == [10, 10], family
+        assert dot[3] == fill and dot[4] == "solid", family
 
 
 def test_set_state_people_highlights_and_fades_family_traces(
@@ -593,7 +595,7 @@ def test_networks_filter_fades_and_fade_filters_keep_family_color(
     fox = next(t for t in _inert_traces(traces) if t["meta"] == "inert:fox")
     assert len(fox["x"]) == 3
     assert fox["opacity"] == tiers["inert"]
-    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
+    assert _marker_color(guarded_page, "inert:fox") == "#009970"
 
     full = guarded_page.evaluate(
         "() => document.getElementById('chart')._fullData"
@@ -674,7 +676,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
 
     dot0 = _hover_text(traces, 0)
     assert "Lakeview 20 at Northfield 27" in dot0
-    assert "Sat, Sep 7, 2019" in dot0
+    assert "Sat. Sept. 7, 2019, 12:00 pm ET" in dot0
     assert "Noon" not in dot0
     assert "Click for details" not in dot0
     assert dot0.split("<br>")[-1].startswith("Spread:")
@@ -699,7 +701,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert (
         '<span style="color:#8B8B8B">Other Network</span>'
         '/<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009E73">Beta Network</span>'
+        '/<span style="color:#009970">Beta Network</span>'
     ) in dot7
 
 
@@ -716,7 +718,7 @@ def test_hover_text_network_line_is_slash_joined_primary_first(
     dot4 = _hover_text(traces, 4)
     assert (
         '<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009E73">Beta Network</span>'
+        '/<span style="color:#009970">Beta Network</span>'
     ) in dot4
     assert "(also" not in dot4
     assert " / " not in dot4
@@ -1154,7 +1156,7 @@ def test_html_tooltip_names_every_named_game(
     # The fixture's CFP game is a semifinal played at a bowl: bowl icon, trophy,
     # and the core bowl name with the round.
     assert guarded_page.locator(icon).count() == 2
-    assert marker.text_content() == "Summit Bowl \u00b7 CFP semifinal"
+    assert marker.text_content() == "Summit Bowl, CFP semifinal"
 
     _hover_dot(guarded_page, 0)
     guarded_page.wait_for_selector(f'{icon}[data-kind="rivalry"]')
@@ -1233,8 +1235,8 @@ def test_game_type_icons_have_own_colors_meeting_non_text_contrast(
     ("round_", "kinds", "name"),
     [
         ("first_round", ["playoff"], "CFP first round"),
-        ("quarterfinal", ["bowl", "playoff"], "Summit Bowl \u00b7 CFP quarterfinal"),
-        ("semifinal", ["bowl", "playoff"], "Summit Bowl \u00b7 CFP semifinal"),
+        ("quarterfinal", ["bowl", "playoff"], "Summit Bowl, CFP quarterfinal"),
+        ("semifinal", ["bowl", "playoff"], "Summit Bowl, CFP semifinal"),
         ("championship", ["playoff"], "CFP championship"),
         (None, ["playoff"], "College Football Playoff"),
     ],
@@ -1248,7 +1250,7 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     name: str,
 ) -> None:
     """F3: a CFP quarterfinal or semifinal is played at a bowl, so its tooltip
-    marker is the bowl icon then the trophy plus "<core> \u00b7 <round>"; first
+    marker is the bowl icon then the trophy plus "<core>, <round>"; first
     round, championship and an unrecorded round show the trophy and the round
     label. The icons are aria-hidden and the span has no role (D-10)."""
     serve_round(guarded_page, round_)
@@ -1292,8 +1294,8 @@ def test_html_tooltip_named_game_sits_on_its_own_line_under_the_date(
     for index in (7, 5, 0):
         _hover_dot(guarded_page, index)
         got = guarded_page.evaluate(probe)
-        assert " \u00b7 " in got["dateText"]  # date and kickoff only, one separator
-        assert got["dateText"].count(" \u00b7 ") == 1
+        assert "\u00b7" not in got["dateText"]  # date and kickoff only, AP form
+        assert got["dateText"].count(", ") == 2  # day label, year, then the clock
         assert not any(w in got["dateText"] for w in ("Bowl", "Rivalry", "CFP"))
         assert got["nextIsMarker"] is True
         assert got["display"] == "block"
@@ -1323,7 +1325,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
             title: 't', dateText: 'd',
             networks: [{ name: 'N', family: 'other' }], crew: [], crewLines: [],
             viewersLine: 'v', axisLine: 'a', hint: 'h',
-            gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl \\u00b7 CFP semifinal' },
+            gameType: { icons: ['playoff', 'nope'], text: 'Summit Bowl, CFP semifinal' },
           };
           T.renderTooltipContent(el, model, 'light');
           const span = el.querySelector('.tooltip-game-type');
@@ -1335,7 +1337,7 @@ def test_html_tooltip_falls_back_to_text_when_an_icon_cannot_be_built(
         }
         """
     )
-    assert result == {"text": "Summit Bowl \u00b7 CFP semifinal", "svgs": 0, "role": None}
+    assert result == {"text": "Summit Bowl, CFP semifinal", "svgs": 0, "role": None}
 
 
 def test_tooltip_model_adds_excitement_line_for_excitement_y(
@@ -1400,7 +1402,7 @@ def test_plotly_fallback_tooltip_shows_game_type_text_without_slot_label(
 
     assert "Noon" not in _hover_text(traces, 0)
     assert "Lakeshore Rivalry" in _hover_text(traces, 0)
-    assert "Summit Bowl \u00b7 CFP semifinal" in _hover_text(traces, 5)
+    assert "Summit Bowl, CFP semifinal" in _hover_text(traces, 5)
     assert "Harbor Bowl" in _hover_text(traces, 7)
     # notes-2 #6: the named game is its own <br> line, not on the date line.
     lines = _hover_text(traces, 7).split("<br>")
@@ -1531,7 +1533,7 @@ def test_html_tooltip_long_bowl_name_wraps_inside_max_width(
 
     assert (
         guarded_page.locator("#chart-tooltip .tooltip-game-type").text_content()
-        == "Cotton Bowl Classic \u00b7 CFP semifinal"
+        == "Cotton Bowl Classic, CFP semifinal"
     )
     metrics = guarded_page.locator("#chart-tooltip").evaluate(
         """el => {
@@ -1684,8 +1686,8 @@ def test_tooltip_mode_trace_config(
 # `test_compare_shapes_have_no_edge_speckles` both exercising the real
 # built page (never a hand-rendered swatch).
 # The site is light-only until Phase 17, so only the light values are kept.
-_ACCENT = {"light": "#23201B"}
-_PAGE_BG = {"light": "#FBF9F5"}
+_ACCENT = {"light": "#1E2321"}
+_PAGE_BG = {"light": "#F5F7F6"}
 
 # The fixture compare selection that assigns every COMPARE_SYMBOLS shape
 # plus the shared-game star (04.1-CONTEXT.md interfaces, confirmed against
@@ -2153,7 +2155,7 @@ def test_no_halo_trace_with_no_selection(
 _BORDER_COLOR = {
     "light": {
         "disney": "rgb(0, 114, 178)",
-        "fox": "rgb(0, 158, 115)",
+        "fox": "rgb(0, 153, 112)",
         "other": "rgb(139, 139, 139)",
     },
 }
@@ -2258,7 +2260,7 @@ def _token_rgb(page: Page, name: str) -> tuple[float, float, float]:
 def test_dashed_legend_chip_text_follows_its_toggle(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-37: a dashed chip reads --ink when on and --disabled when off."""
+    """Round 3: a no-games chip's label is --legend-none (4.5:1 or better) on or off."""
     open_app(guarded_page, "?people=dale-harlow")
     sel = '#legend-chips button[data-family="fox"]'
     chip = guarded_page.locator(sel)
@@ -2266,12 +2268,13 @@ def test_dashed_legend_chip_text_follows_its_toggle(
     expect(chip).to_have_attribute("aria-pressed", "true")
     bg = _token_rgb(guarded_page, "--bg")
     on = _rgb_of(guarded_page, sel, "color")
-    assert on == _token_rgb(guarded_page, "--ink")
+    assert on == _token_rgb(guarded_page, "--legend-none")
     assert _ratio(on, bg) >= 4.5
     chip.click()
     expect(chip).to_have_attribute("aria-pressed", "false")
     off = _rgb_of(guarded_page, sel, "color")
-    assert off == _token_rgb(guarded_page, "--disabled")
+    assert off == _token_rgb(guarded_page, "--legend-none")
+    assert _ratio(off, bg) >= 4.5
     disney = '#legend-chips button[data-family="disney"]'
     disney_color = _rgb_of(guarded_page, disney, "color")
     assert disney_color == _token_rgb(guarded_page, "--ink")
@@ -2579,7 +2582,7 @@ def test_fade_mode_tiers_without_an_announcer(
     conference = next(t for t in _family_traces(traces) if t["meta"] == "family:conference")
     assert conference["customdata"] == [2]
     assert conference["opacity"] == tiers["active"]
-    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
+    assert _marker_color(guarded_page, "inert:fox") == "#009970"
 
 
 def test_fade_mode_tiers_with_an_announcer_on_a_filter(

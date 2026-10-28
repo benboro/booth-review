@@ -151,15 +151,17 @@ def _assert_layout_stable(page: Page, open_cfb: Callable[..., None]) -> None:
     count is each sport's own (D-11 dropped the equal-height spacer rule)."""
     open_cfb(page)
     bar = _bar_height(page)
-    cfb_rows = page.evaluate(_ROWS, "#toolbar > button")
-    assert measure_gap(page, "#toolbar", "#selection-row") == 8
+    cfb_rows = page.evaluate(_ROWS, "#toolbar > button, #toolbar .fgroup-row .filter-trigger")
+    assert measure_gap(page, "#toolbar", "#selection-bar") == 8
     assert measure_gap(page, "#chart-tabs", "#chart-module") == 16
     _click(page, "nfl")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert abs(_bar_height(page) - bar) <= 1
-    assert measure_gap(page, "#nfl-toolbar", "#nfl-selection-row") == 8
+    assert measure_gap(page, "#nfl-toolbar", "#nfl-selection-bar") == 8
     assert measure_gap(page, "#nfl-chart-tabs", "#nfl-chart-area .nfl-chart-module") == 16
-    nfl_rows = page.evaluate(_ROWS, "#nfl-toolbar > button")
+    nfl_rows = page.evaluate(
+        _ROWS, "#nfl-toolbar > button, #nfl-toolbar .fgroup-row .filter-trigger"
+    )
     assert element_height(page, "#nfl-toolbar") > 0
     assert page.evaluate("getComputedStyle(document.getElementById('toolbar')).display") == "none"
     # Each sport owns its row count; neither is forced to the other's height.
@@ -401,3 +403,37 @@ def test_switch_marks_the_current_sport_with_an_ink_underline(
     assert page.evaluate(probe, "nfl")[0] == "600"
     assert page.evaluate(probe, "cfb")[0] != "600"
     assert _pressed(page, "nfl") == "true"
+
+
+_HEADER_JS = """() => {
+  const title = document.querySelector('.site-title').getBoundingClientRect();
+  const sw = document.getElementById('sport-switch');
+  const slot = document.getElementById('theme-slot').getBoundingClientRect();
+  return {
+    titleH: title.height,
+    lineH: parseFloat(getComputedStyle(document.querySelector('.site-title')).lineHeight),
+    titleR: title.right,
+    swL: sw ? sw.getBoundingClientRect().left : null,
+    swR: sw ? sw.getBoundingClientRect().right : null,
+    slotL: slot.left,
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+}"""
+
+
+@pytest.mark.parametrize("width", (481, 540, 600, 700, 767))
+def test_header_keeps_one_row_between_phone_and_tablet(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], width: int
+) -> None:
+    """26-10 critique: from 481 to 767px the 27px title wrapped onto two lines beside the sport
+    switch and the page links. The links drop there (they are in the footer nav) and the title
+    stays on one line, clear of the switch and the theme toggle."""
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": width, "height": 900})
+    open_flagon_cfb(page)
+    page.evaluate("() => document.fonts.ready")
+    got = page.evaluate(_HEADER_JS)
+    assert got["titleH"] <= got["lineH"] + 1, got
+    assert got["titleR"] < got["swL"] < got["swR"] < got["slotL"], got
+    assert got["overflow"] <= 0, got
+    assert page.locator(".header-links").is_hidden()

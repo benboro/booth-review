@@ -343,7 +343,7 @@ def test_score_line_in_model_and_plotly_text(
         assert got["line"] == text
         assert text in got["hover"]
     unrated = guarded_page.evaluate(_TIP_JS, [nr, "points"])
-    assert unrated["viewers"].startswith("No public rating · ")
+    assert unrated["viewers"].startswith("No public rating; ")
     for y in ("viewers", "excitement"):
         assert guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, y])["line"] is None
         assert "Total points" not in guarded_page.evaluate(_TIP_JS, [_BIG_TOTAL, y])["hover"]

@@ -233,13 +233,14 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
     body0 = guarded_page.inner_text("#panel-body")
     assert "Conference: SEC vs Pac-12" in body0
     assert "Noon (before 2 PM ET)" in body0
+    assert "pm ET; Noon" in body0 or "am ET; Noon" in body0
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
     body7 = guarded_page.inner_text("#panel-body")
     assert "Acme Harbor Bowl" in body7
     assert "Neutral site" not in body7
     assert "Prime time" not in body7
-    assert "Sat, Dec 6, 2025" in body7
+    assert "Sat. Dec. 6, 2025, 7:00 pm ET" in body7
 
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
     body5 = guarded_page.inner_text("#panel-body")
@@ -1199,11 +1200,36 @@ def test_tooltip_model_and_hover_text_for_unrated_games(
           };
         }"""
     )
-    assert lines["u15"] == "No public rating · Stream Plus games are rarely rated"
-    assert lines["u12"] == "No public rating · no figure was published"
+    assert lines["u15"] == "No public rating; Stream Plus games are rarely rated"
+    assert lines["u12"] == "No public rating; no figure was published"
     assert lines["c12"] == ["Crew not recorded"]
-    assert lines["u19"] == "No public rating · viewership not posted yet"
-    assert lines["u13"] == "No public rating · no figure found in our 2021\u201324 sources"
+    assert lines["u19"] == "No public rating; viewership not posted yet"
+    assert lines["u13"] == "No public rating; no figure found in our 2021\u201324 sources"
     assert lines["rated"].startswith("Viewers: ")
     if lines["hover"] is not None:
-        assert "No public rating · Stream Plus games are rarely rated" in lines["hover"]
+        assert "No public rating; Stream Plus games are rarely rated" in lines["hover"]
+
+
+def test_panel_and_tooltip_trim_the_viewer_zero_while_the_table_keeps_it(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Sign-off 2026-10-27: prose writes 970K and the table cell still reads 970.0K."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.setState({people: ['dale-harlow']})")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+    assert "970.0K" in " ".join(_row_texts(guarded_page))
+    i = guarded_page.evaluate(
+        "() => window.__testHooks.data.t.viewers.findIndex((v) => v === 970000)"
+    )
+    assert i >= 0
+    guarded_page.evaluate(f"window.__testHooks.openPanel({i})")
+    body = guarded_page.inner_text("#panel-body")
+    assert "Viewers: 970K" in body and "970.0K" not in body
+    line = guarded_page.evaluate(
+        """async (i) => {
+          const T = await import(new URL('./modules/tooltip.js', location.href).href);
+          return T.tooltipModel(window.__testHooks.data, i, { axis: 'spread' }).viewersLine;
+        }""",
+        i,
+    )
+    assert line == "Viewers: 970K"

@@ -76,11 +76,10 @@ def test_palette_map_constants(guarded_page: Page, site_url: str) -> None:
     assert got["lc"] == "#6A5BA0"
     assert got["dc"] == "#9A8CD0"
     assert got["same"] and got["frozen"]
-    # The 13-05 warm land (#F1EDE4) puts the unchanged conference purple at 4.97:1; keep the
-    # WCAG AA 4.5:1 floor rather than the old 5:1 margin.
+    # The green-gray land (#E8EDEA, Phase 26) puts the unchanged conference purple at 4.90:1;
+    # keep the WCAG AA 4.5:1 floor rather than the old 5:1 margin.
     assert got["contrastL"] >= 4.5
-    # Phase 17's warm dark land (#2A2722, 17-UI-SPEC) puts the kept dark violet at 4.98:1;
-    # same 4.5:1 floor as light.
+    # The dark land (#242A28) puts the kept dark violet at 4.90:1; same 4.5:1 floor as light.
     assert got["contrastD"] >= 4.5
     assert got["splat"]["viewersWeight"] == 0.35
     assert got["splat"]["unratedFallback"] == 150000

@@ -395,7 +395,11 @@ def test_more_names_tooltip_on_hover_and_focus_and_never_picks(heavy: Page) -> N
     assert f"{TRICKY} (1)" in text
     assert tip.locator("b").count() == 0
     border = tip.evaluate("e => getComputedStyle(e).borderTopColor")
-    assert border == "rgb(207, 198, 182)"  # --rule-strong
+    rule_strong = heavy.evaluate(
+        "() => { const s = document.createElement('span'); s.style.color = 'var(--rule-strong)';"
+        " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+    )
+    assert border == rule_strong
     heavy.mouse.move(5, 5)
     assert tip.is_hidden()
     more.focus()

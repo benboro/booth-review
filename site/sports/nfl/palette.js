@@ -8,16 +8,18 @@
  * segment names. The hues are positional Okabe-Ito picks and imply no CFB network
  * family. Sunday night (from #1D96DB) and the greys (from #8F8F8F) are darkened in
  * the light theme because they measured 2.99 and 2.96 against --surface, under the
- * 3:1 check (NFL-only style, D-18).
+ * 3:1 check (NFL-only style, D-18). On the Phase 26 green-gray surface (#EBEFED) Monday
+ * (from #009E73, 2.95:1) and CBS national (from #B77F00, 2.99:1) fell under it too, so
+ * they take the deepened map-family values (#009970, #B37C00) in the light theme.
  */
 export const NFL_CATEGORY_COLORS = Object.freeze({
   solo_thursday: Object.freeze({ light: '#0072B2', dark: '#0072B2' }),
   solo_sunday: Object.freeze({ light: '#1B90D2', dark: '#56B4E9' }),
-  solo_monday: Object.freeze({ light: '#009E73', dark: '#009E73' }),
+  solo_monday: Object.freeze({ light: '#009970', dark: '#009E73' }),
   solo_holiday: Object.freeze({ light: '#8A7A00', dark: '#F0E442' }),
   solo_other: Object.freeze({ light: '#888888', dark: '#999999' }),
   agotw: Object.freeze({ light: '#D55E00', dark: '#D55E00' }),
-  cbs_national: Object.freeze({ light: '#B77F00', dark: '#E69F00' }),
+  cbs_national: Object.freeze({ light: '#B37C00', dark: '#E69F00' }),
   international_other: Object.freeze({ light: '#C26D9C', dark: '#CC79A7' }),
 });
 

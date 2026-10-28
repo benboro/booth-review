@@ -31,7 +31,7 @@ _G = _DENSE["games"]
 _POST_ROUNDS = {"wild_card", "division", "lcs", "world_series", "tiebreak"}
 
 VIEWER_TICKS = {"500K", "1MM", "2MM", "5MM", "10MM", "20MM"}
-PAGE_BG_LIGHT = "#FBF9F5"
+PAGE_BG_LIGHT = "#F5F7F6"
 
 
 def _densify(route: Route) -> None:

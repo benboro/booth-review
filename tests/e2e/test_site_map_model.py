@@ -611,7 +611,7 @@ def test_venue_card_rows_and_viewers(guarded_page: Page, site_url: str) -> None:
         """,
     )
     card = got["card"]
-    assert card["title"] == "Alpha Field · South Bend, IN"
+    assert card["title"] == "Alpha Field, South Bend, IN"
     assert card["leader"] == "disney"
     games = [s["games"] for s in card["slices"]]
     assert games == sorted(games, reverse=True)

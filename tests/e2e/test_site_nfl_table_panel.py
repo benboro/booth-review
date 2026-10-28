@@ -62,6 +62,9 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
         snf: F.slotLabel('SNF'), other: F.slotLabel('Thanksgiving'),
         flags: F.flagLabels(mk({ flexed: true, agotw: true, standalone: true })),
         v: F.viewersText(base), nv: F.viewersText(mk({ viewers: null })),
+        tbl: F.viewersText(mk({ viewers: 220000 })),
+        prose: [220000, 1100000, 1000000, 12300000].map((n) => F.viewersProseText(mk({ viewers: n }))),
+        nprose: F.viewersProseText(mk({ viewers: null })),
         ko: F.kickoffText(base), long: F.dateLongText(base),
         cause: F.CAUSE_COPY.regional.panel,
       };
@@ -75,6 +78,10 @@ def test_format_helpers(run: Callable[[str], Any]) -> None:
     assert got["flags"] == ["Solo slot", "Fox AGOTW", "Flexed"]
     assert got["v"] == "12.3MM"
     assert got["nv"] is None
+    # Tables keep the millions form; prose trims it (sign-off 2026-10-27).
+    assert got["tbl"] == "0.2MM"
+    assert got["prose"] == ["220K", "1.1MM", "1MM", "12.3MM"]
+    assert got["nprose"] is None
     assert got["ko"] == "1:00 PM ET"
     assert got["long"] == "Sunday, Sep 7, 2025"
     assert got["cause"] == "Ratings Reference does not compile regional games"
@@ -108,7 +115,7 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
       };
     """)
     assert got["heading"] == "Matched games"
-    assert got["summary"] == "2 games · 2025–2025 · 1 rated"
+    assert got["summary"] == "2 games, 2025–2025, 1 rated"
     assert got["heads"] == ["Date", "Matchup", "Score", "Network", "Crew", "Viewers", "Source"]
     # Default sort is date newest first, so the Sep 14 row (unrated) is first.
     second = got["second"]
@@ -125,8 +132,8 @@ def test_table_cells(run: Callable[[str], Any]) -> None:
     assert second[5] == "No rating"
     assert second[6] == "No record"
     assert got["badLink"] is False
-    # Re-styled at Phase 15 Plan 12 r6: the category line is muted text joined by " · ", not pills.
-    assert got["categoryText"] == "SNF · Fox AGOTW"
+    # Re-styled at Phase 15 Plan 12 r6: the category line is muted text joined by ", ", not pills.
+    assert got["categoryText"] == "SNF, Fox AGOTW"
     assert got["pills"] == 0
     assert "spread" not in got["text"]
 
@@ -260,7 +267,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     assert got["closeLabel"] == "Close details"
     assert got["headings"] == ["Crew", "Links"]
     paras = got["paras"]
-    assert paras[0] == "Sunday, Sep 7, 2025 · 1:00 PM ET"
+    assert paras[0] == "Sun. Sept. 7, 2025, 1:00 pm ET"
     assert paras[1] == "Network: "  # the logo carries the name as alt/title
     # SHELL-05: the espn id shows its logo (alt/title = name, no text), no pill.
     assert got["mark"] == {"alt": "ESPN", "title": "ESPN", "text": "", "pills": 0}
@@ -274,7 +281,7 @@ def test_panel_cfb_layout(run: Callable[[str], Any]) -> None:
     ]
     assert got["crewBox"] == 3 and got["rolePills"] >= 2
     assert "From published lineup." in got["boxText"]
-    assert "Viewers: 12.3MM · Window-level figure (all Sunday afternoon games)." in paras
+    assert "Viewers: 12.3MM; window-level figure (all Sunday afternoon games)." in paras
     assert "Measured under Nielsen panel plus out-of-home." in paras
     facts = next(x for x in paras if x.startswith("Slot:"))
     assert "Slot: Monday Night Football (MNF). Shares its window." in facts
@@ -332,7 +339,7 @@ def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
       };
     """)
     paras = got["paras"]
-    assert paras[0] == "Sunday, Sep 7, 2025 · Kickoff time not recorded"
+    assert paras[0] == "Sun. Sept. 7, 2025, kickoff time not recorded"
     assert "Network not recorded." in paras and "Crew not listed." in paras
     assert "Viewers: not available (Ratings Reference does not compile regional games)" in paras
     assert not any(x.startswith("Measured under") for x in paras)

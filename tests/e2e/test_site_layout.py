@@ -16,6 +16,11 @@ from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
+_TOKEN_COLOR_JS = (
+    "(n) => { const s = document.createElement('span'); s.style.color = `var(${n})`;"
+    " document.body.append(s); const c = getComputedStyle(s).color; s.remove(); return c; }"
+)
+
 
 def _parse_rgb(css_color: str) -> tuple[float, float, float]:
     """Parses a `getComputedStyle` `rgb(...)`/`rgba(...)` string into (r, g, b)."""
@@ -101,7 +106,7 @@ def _assert_no_horizontal_overflow(page: Page) -> None:
         "const sb = document.getElementById('selection-bar'); "
         "return { iw, sbScrollWidth: sb.scrollWidth, sbClientWidth: sb.clientWidth, "
         "boxes: Array.from(els).map((el) => { const r = el.getBoundingClientRect(); "
-        "return { x: r.x, right: r.right }; }) }; }"
+        "return { x: r.x, right: r.right, w: r.width }; }).filter((b) => b.w > 0) }; }"
     )
     assert len(info["boxes"]) > 0
     inner_width = info["iw"]
@@ -237,7 +242,7 @@ def test_chip_row_sits_between_toolbar_and_chart_and_wraps_without_overflow(
     for query in ["Dale Harlow", "Dale Harlow Jr.", "Kris Venn", "Jax Venn"]:
         _add_person_by_query(guarded_page, query)
 
-    selection_row = guarded_page.locator("#selection-row")
+    selection_row = guarded_page.locator("#summary")
     expect(selection_row).to_be_visible()
 
     toolbar_box = guarded_page.locator("#toolbar").bounding_box()
@@ -270,28 +275,31 @@ def test_chip_row_wraps_without_overflow_on_phone(
         "!document.getElementById('filters-sheet').matches(':popover-open')"
     )
 
-    expect(mobile_page.locator("#selection-row")).to_be_visible()
-    _assert_no_horizontal_overflow(mobile_page)
+    expect(mobile_page.locator("#summary")).to_be_visible()
+    overflow = mobile_page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    assert overflow <= 0
 
 
 def test_trigger_counts_selected_announcers(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-21/D-02: the Announcers trigger reads its own selection count,
-    like every other filter trigger."""
+    """D-21/D-02 (Round 3b): the Announcers entry reads Any, then the first pick and how
+    many more."""
     open_app(guarded_page, "")
     trigger = guarded_page.locator("#trigger-announcers")
-    expect(trigger).to_have_text("Announcers")
+    expect(trigger.locator(".filter-value")).to_have_text("Any")
     assert trigger.get_attribute("data-active") == "false"
 
     _add_person_by_query(guarded_page, "Dale Harlow")
     _add_person_by_query(guarded_page, "Kris Venn")
 
-    expect(trigger).to_have_text("Announcers · 2")
+    expect(trigger.locator(".filter-value")).to_have_text("Dale Harlow +1")
     assert trigger.get_attribute("data-active") == "true"
 
 
-def test_summary_is_one_line_under_the_chip_row(
+def test_summary_is_one_line_above_the_action_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """D-21: the summary line sits on one line under the chip row (the selection band is
@@ -301,8 +309,8 @@ def test_summary_is_one_line_under_the_chip_row(
     for query in ["Dale Harlow", "Kris Venn", "Sam Delgado"]:
         _add_person_by_query(guarded_page, query)
 
-    selection_row_box = guarded_page.locator("#selection-row").bounding_box()
-    summary_box = guarded_page.locator("#summary").bounding_box()
+    selection_row_box = guarded_page.locator("#summary .sum-left").bounding_box()
+    summary_box = guarded_page.locator("#summary .sum-right").bounding_box()
     count_box = guarded_page.locator("#summary-count").bounding_box()
     detail_box = guarded_page.locator("#summary-detail").bounding_box()
     assert selection_row_box is not None
@@ -317,22 +325,26 @@ def test_summary_is_one_line_under_the_chip_row(
     assert abs(count_center - detail_center) <= 12
 
     inner_width = guarded_page.evaluate("() => window.innerWidth")
-    assert summary_box["width"] >= 0.5 * inner_width
+    assert selection_row_box["width"] >= 0.5 * inner_width
 
 
-def test_selection_row_is_always_rendered_with_only_clear_all_when_empty(
+def test_count_line_always_holds_clear_all_last_with_nothing_selected(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """With nothing selected #selection-row is still rendered (32px fixed, 13-10) and
-    holds only Clear all filters at its right end; #summary shows the unfiltered count."""
+    """With nothing selected the count line (32px fixed) holds the unfiltered count and, at its
+    right end, only Clear all filters."""
     open_app(guarded_page, "")
-    row = guarded_page.locator("#selection-row")
+    row = guarded_page.locator("#summary")
     expect(row).to_be_visible()
     expect(guarded_page.locator("#clear-filters")).to_be_visible()
     assert guarded_page.locator("#chips .chip").count() == 0
+    assert guarded_page.locator("#selection-row").count() == 0
     assert row.bounding_box() is not None
     assert row.bounding_box()["height"] == 32  # type: ignore[index]
-    expect(guarded_page.locator("#summary")).to_be_visible()
+    last = guarded_page.evaluate(
+        "document.querySelector('#summary .sum-right').lastElementChild.id"
+    )
+    assert last == "clear-filters"
 
 
 def test_phone_announcers_picker_is_in_the_filters_sheet(
@@ -348,7 +360,7 @@ def test_phone_announcers_picker_is_in_the_filters_sheet(
         "document.getElementById('filters-sheet').matches(':popover-open')"
     )
     first_section_id = mobile_page.evaluate(
-        "() => document.querySelector('.sheet-body').firstElementChild.id"
+        "() => document.querySelector('.sheet-body > section').id"
     )
     assert first_section_id == "filter-announcers"
 
@@ -363,12 +375,13 @@ def test_phone_announcers_picker_is_in_the_filters_sheet(
         "!document.getElementById('filters-sheet').matches(':popover-open')"
     )
 
-    selection_row_box = mobile_page.locator("#selection-row").bounding_box()
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
+    summary_box = mobile_page.locator("#summary").bounding_box()
     chart_area_box = mobile_page.locator("#chart-area").bounding_box()
-    assert selection_row_box is not None
+    assert summary_box is not None
     assert chart_area_box is not None
-    expect(mobile_page.locator("#selection-row")).to_be_visible()
-    assert selection_row_box["y"] + selection_row_box["height"] <= chart_area_box["y"] + 0.5
+    assert summary_box["height"] == 24
+    assert summary_box["y"] + summary_box["height"] <= chart_area_box["y"] + 0.5
 
 
 def test_clear_selection_is_readable(
@@ -388,7 +401,7 @@ def test_clear_selection_is_readable(
 def test_clear_all_filters_is_distinct_and_aa(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-25b / C1: Clear all filters sits at the right end of the selection row, clears
+    """D-25b / C1: Clear all filters sits at the right end of the count line, clears
     WCAG AA against the page background, and is distinct from a plain filter trigger
     (1px --ink border and 600 weight against the trigger's --rule-strong border) once a filter
     is changed; at the default it is disabled."""
@@ -398,15 +411,16 @@ def test_clear_all_filters_is_distinct_and_aa(
         "() => { const pageBg = getComputedStyle(document.body).backgroundColor; "
         "const clear = getComputedStyle(document.getElementById('clear-filters')); "
         "const trig = getComputedStyle(document.getElementById('trigger-seasons')); "
-        "const row = document.getElementById('selection-row').getBoundingClientRect(); "
+        "const row = document.getElementById('summary').getBoundingClientRect(); "
         "const box = document.getElementById('clear-filters').getBoundingClientRect(); "
         "return { pageBg, clearColor: clear.color, clearBorderTop: clear.borderTopColor, "
         "clearWeight: clear.fontWeight, trigWeight: trig.fontWeight, "
-        "trigBorderTop: trig.borderTopColor, rowRight: row.right, clearRight: box.right }; }"
+        "trigBorderTopWidth: trig.borderTopWidth, rowRight: row.right, clearRight: box.right }; }"
     )
     assert _contrast_ratio(_parse_rgb(styles["clearColor"]), _parse_rgb(styles["pageBg"])) >= 4.5
-    assert styles["clearBorderTop"] == "rgb(35, 32, 27)"  # --ink
-    assert styles["clearBorderTop"] != styles["trigBorderTop"]
+    ink = guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
+    assert styles["clearBorderTop"] == ink  # --ink
+    assert styles["trigBorderTopWidth"] == "0px"  # an entry has no box, Clear all does
     assert styles["clearWeight"] == "600"
     assert styles["clearWeight"] != styles["trigWeight"]
     assert styles["rowRight"] - styles["clearRight"] <= 1
@@ -491,7 +505,8 @@ def test_no_empty_band_between_toolbar_and_chart(
     assert element_height(guarded_page, "#chart-tabs") == 40
     assert measure_gap(guarded_page, "#toolbar", "#selection-bar") == 8
     assert measure_gap(guarded_page, "#chart-tabs", "#chart-module") == 16
-    assert element_height(guarded_page, "#selection-bar") == 64
+    # 12px above the 32px count line, and nothing else.
+    assert element_height(guarded_page, "#selection-bar") == 44
 
 
 def _module_head_boxes(page: Page) -> dict[str, dict[str, float]]:
@@ -522,7 +537,7 @@ def test_module_head_carries_title_subtitle_and_right_aligned_tools(
     assert title["right"] <= subtitle["left"] + 0.5
     assert subtitle["right"] <= tools["left"] + 0.5
     assert abs(title["top"] - tools["top"]) < 40  # one head row
-    assert boxes["module"]["right"] - tools["right"] <= 17.5  # 16px padding + 1px border
+    assert boxes["module"]["right"] - tools["right"] <= 25.5  # 24px padding + 1px border (T3)
 
 
 def _assert_phone_boundary(page: Page, button: str, trigger: str) -> None:

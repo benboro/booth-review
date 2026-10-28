@@ -27,6 +27,7 @@ from typing import Any, Final
 import polars as pl
 from pydantic import ValidationError
 
+from booth_review.build.serif_glyphs import check_serif_text, lookup_names
 from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import DataPaths
 from booth_review.contract.mlb_models import (
@@ -763,8 +764,21 @@ def mlb_site_payload_bytes(site: MlbSiteData) -> bytes:
     )
 
 
+def check_mlb_serif(site: MlbSiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
+    lookups = site.lookups
+    for lookup, rows, fields in (
+        ("clubs", lookups.clubs, ("name",)),
+        ("team_names", lookups.team_names, ("name", "short")),
+        ("leagues", lookups.leagues, ("name",)),
+        ("people", lookups.people, ("name",)),
+    ):
+        check_serif_text(lookup_names(rows, *fields), where=f"mlb-data.json lookups.{lookup}")
+
+
 def write_mlb_site_data(paths: DataPaths, site: MlbSiteData) -> str:
     """Write `processed/mlb-data.json` atomically; returns its vault-relative path."""
+    check_mlb_serif(site)
     atomic_write_bytes(paths.vault / MLB_SITE_DATA_PATH, mlb_site_payload_bytes(site))
     return MLB_SITE_DATA_PATH
 

@@ -14,10 +14,11 @@ pytestmark = pytest.mark.e2e
 
 _PAGES = ("index.html", "methodology.html", "coverage.html")
 
-_CREDIT_LINE = (
+_CREDIT_ITEMS = (
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and "
-    "joined with crew and game data · Crews: 506 Sports · "
-    "Data provided by CollegeFootballData.com"
+    "joined with crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
 )
 
 _TRADEMARK_LINE = (
@@ -26,22 +27,23 @@ _TRADEMARK_LINE = (
 )
 
 _TYPE_LINE = (
-    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), "
-    "Roboto (copyright 2011 The Roboto Project Authors) and "
+    "Type: Latin Modern (copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+    "used under the GUST Font License; Roboto "
+    "(copyright 2011 The Roboto Project Authors) and "
     "Roboto Condensed (copyright 2011 Google Inc.), "
     "used under the SIL Open Font License 1.1."
 )
 
 _OFL_HREFS = (
-    "fonts/OFL-crimson-text.txt",
+    "fonts/GUST-FONT-LICENSE.txt",
     "fonts/OFL-roboto.txt",
     "fonts/OFL-roboto-condensed.txt",
 )
 
 _TITLES = {
-    "index.html": "The Broadcast Ledger · college football broadcast crews and viewership",
-    "methodology.html": "Methodology · The Broadcast Ledger",
-    "coverage.html": "Coverage · The Broadcast Ledger",
+    "index.html": "The Broadcast Ledger: college football broadcast crews and viewership",
+    "methodology.html": "Methodology - The Broadcast Ledger",
+    "coverage.html": "Coverage - The Broadcast Ledger",
 }
 
 _CREDIT_LINKS = (
@@ -61,9 +63,10 @@ def test_footer_credits_freshness_and_nav(
     guarded_page.goto(f"{site_url}/{page_name}")
 
     footer_text = re.sub(r"\s+", " ", guarded_page.inner_text("footer")).strip()
-    assert _CREDIT_LINE in footer_text
-    assert "Crews and scores through Week 5" in footer_text
-    assert "Viewership through Week 4" in footer_text
+    items = guarded_page.locator("footer .credit-line .credit-item").all_inner_texts()
+    assert tuple(re.sub(r"\s+", " ", i).strip() for i in items) == _CREDIT_ITEMS
+    assert "Crews and scores through Week 5; viewership through Week 4" in footer_text
+    assert "·" not in footer_text
 
     for label, href in _CREDIT_LINKS:
         link = guarded_page.locator(f"footer a:text-is('{label}')")
@@ -207,3 +210,21 @@ def test_index_meta_description_names_games_and_public_viewer_counts(
     content = guarded_page.get_attribute("meta[name=description]", "content") or ""
     assert "college football games and their public viewer counts" in content
     assert "rated college football broadcasts" not in content
+
+
+@pytest.mark.parametrize("width", (390, 600))
+def test_methodology_tables_scroll_in_their_box_not_the_page(
+    guarded_page: Page, site_url: str, width: int
+) -> None:
+    """26-10 critique: the Markdown tables widened the methodology page past a phone screen, so
+    the whole page scrolled sideways. Each sits in a .table-scroll box now."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    guarded_page.goto(f"{site_url}/methodology.html")
+    overflow = guarded_page.evaluate(
+        "document.documentElement.scrollWidth - document.documentElement.clientWidth"
+    )
+    assert overflow <= 0
+    assert (
+        guarded_page.locator(".page table").count()
+        == guarded_page.locator(".page .table-scroll > table").count()
+    )

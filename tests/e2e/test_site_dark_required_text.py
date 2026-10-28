@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from playwright.sync_api import Page
 from test_site_required_text import (
+    RT01_ITEMS,
     RT01_TEXT,
     RT07_TEXT,
     RT20_TEXT,
@@ -136,7 +137,7 @@ def test_required_text_present_and_legible_in_dark(
     for selector, text in _FOOTER_ROWS.items():
         # NFL and MLB footers swap in their own credit lines (RT-04); the lead credit stays.
         if which in ("nfl", "mlb") and selector.endswith("credit-line"):
-            text = RT01_TEXT.split(" · ")[0]
+            text = RT01_ITEMS[0]
         _check_row(page, selector, text)
     for selector, text in _PAGE_ROWS.get(which, {}).items():
         # RT-20 and RT-21 captions are shown only for some chart states.

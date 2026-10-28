@@ -320,8 +320,8 @@ def test_hover_card_shows_matchup_booth_kickoff_network_and_venue(wkmap: Wk, the
     card = page.locator("#chart-tooltip").inner_text()
     assert "Ironpeak @ Stonebridge" in card
     assert "Rowan · Delgado" in card
-    assert "7:30 pm ET · Alpha Sports" in card
-    assert "Stonebridge Stadium · Pasadena, CA" in card
+    assert "7:30 pm ET, Alpha Sports" in card
+    assert "Stonebridge Stadium, Pasadena, CA" in card
     assert page.locator("#chart-tooltip .tt-open-game").count() == 0
 
 

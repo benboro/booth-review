@@ -4,7 +4,7 @@
  * field here is, or is derived from, a point spread.
  */
 
-import { MONTHS, formatKickoff, formatMillions } from '../../modules/format.js';
+import { MONTHS, formatKickoff, formatMillions, formatMillionsProse } from '../../modules/format.js';
 
 const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -53,10 +53,16 @@ export function crewSourceText(row) {
   return row.crewSource === 'published_lineup' ? 'from published lineup' : null;
 }
 
-/** '12.3MM' or null when unrated. */
+/** '12.3MM' or null when unrated: the table form, one even decimal in millions. */
 export function viewersText(row) {
   if (row.viewers == null) return null;
   return formatMillions(row.viewers);
+}
+
+/** '220K', '1.1MM' or null when unrated: the tooltip and panel form, no trailing zero. */
+export function viewersProseText(row) {
+  if (row.viewers == null) return null;
+  return formatMillionsProse(row.viewers);
 }
 
 /** '1:00 PM ET' or null. */

@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 import polars as pl
 from pydantic import ValidationError
 
+from booth_review.build.serif_glyphs import check_serif_text, lookup_names
 from booth_review.build.site_data import _contract_error_summary
 from booth_review.config import DataPaths
 from booth_review.contract.nfl_models import (
@@ -842,7 +843,20 @@ def nfl_site_payload_bytes(site: NflSiteData) -> bytes:
     )
 
 
+def check_nfl_serif(site: NflSiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
+    lookups = site.lookups
+    for lookup, rows, fields in (
+        ("franchises", lookups.franchises, ("name",)),
+        ("team_names", lookups.team_names, ("name", "short")),
+        ("venues", lookups.venues, ("name",)),
+        ("people", lookups.people, ("name",)),
+    ):
+        check_serif_text(lookup_names(rows, *fields), where=f"nfl-data.json lookups.{lookup}")
+
+
 def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:
     """Write `processed/nfl-data.json` atomically; returns its vault-relative path."""
+    check_nfl_serif(site)
     atomic_write_bytes(paths.vault / NFL_SITE_DATA_PATH, nfl_site_payload_bytes(site))
     return NFL_SITE_DATA_PATH

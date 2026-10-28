@@ -172,11 +172,13 @@ export function kickoffMinutes(iso) {
  * @param {string} isoDate - ET date `YYYY-MM-DD`.
  * @param {string|null} kickoffIso - ET ISO datetime, or null.
  * @param {string} [noTime] - the text when there is no time.
+ * @param {{year?: boolean}} [options] - `year` adds the year after the day: `Sat. Nov. 21, 2020, 12:00 pm ET`.
  * @returns {string}
  */
-export function apKickoff(isoDate, kickoffIso, noTime = 'Time TBA') {
+export function apKickoff(isoDate, kickoffIso, noTime = 'Time TBA', { year = false } = {}) {
   const min = kickoffMinutes(kickoffIso);
-  return `${dayLabel(isoDate)}, ${min == null ? noTime : `${clock12(min)} ET`}`;
+  const day = year ? `${dayLabel(isoDate)}, ${isoDate.slice(0, 4)}` : dayLabel(isoDate);
+  return `${day}, ${min == null ? noTime : `${clock12(min)} ET`}`;
 }
 
 // ---- Classification, days, axis ----

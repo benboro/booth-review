@@ -447,7 +447,7 @@ def test_light_theme_uses_light_land_and_map_family_colors(
                   fox: P.MAP_FAMILY_COLORS.light.fox}; }"""
     )
     traces = _traces(guarded_page)
-    assert palette["land"] == "#F1EDE4"
+    assert palette["land"] == "#E8EDEA"
     assert traces["outline"]["fill"] == palette["land"]
     assert traces["legs:disney"]["color"] == palette["disney"]
     assert traces["legs:fox"]["color"] == palette["fox"]

@@ -12,6 +12,8 @@ ALLOWED_MAX_WIDTHS: dict[str, str] = {
     "360": _NARROW,
     "374": _NARROW,
     "420": _NARROW,
+    "599": "header band: the title takes the 22px heading size below 600px (26-10 critique)",
+    "767": "header band: the page links drop from 481 to 767px, matching the 768px filter bar",
     "1279": "desktop-narrow switch of the MLB postseason LDS and LCS round heads (16-UI-SPEC)",
 }
 
@@ -62,8 +64,6 @@ def test_js_max_width_reads_use_phone_query() -> None:
             continue
         for line in p.read_text(encoding="utf-8").splitlines():
             if "matchMedia" in line and "max-width" in line:
-                if p.name == "toolbar-fit.js" and "'(max-width: 480px)'" in line:
-                    continue
                 offenders.append(f"{p.relative_to(SITE)}: {line.strip()}")
     assert not offenders, offenders
 

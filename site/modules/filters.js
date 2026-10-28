@@ -223,7 +223,7 @@ function networkRowHidden(count, checked, narrowed) {
 }
 
 /**
- * D-36: how many Networks rows are shown, and how many of those are checked.
+ * D-36: how many Networks rows are shown, how many of those are checked, and the checked names.
  * Iterates `data.primaryNetworks` only; missing facets count every row as shown.
  */
 function shownNetworkCounts(data, state, view) {
@@ -231,15 +231,19 @@ function shownNetworkCounts(data, state, view) {
   const narrowed = networksPickNarrowed(data, state);
   let shown = 0;
   let checkedShown = 0;
+  const names = [];
   for (const idx of data.primaryNetworks) {
     const net = data.lookups.networks[idx];
     const checked = currentIds.includes(net.id);
     const count = view?.facets?.networks?.[idx] ?? 1;
     if (networkRowHidden(count, checked, narrowed)) continue;
     shown += 1;
-    if (checked) checkedShown += 1;
+    if (checked) {
+      checkedShown += 1;
+      names.push(net.name);
+    }
   }
-  return { shown, checked: checkedShown };
+  return { shown, checked: checkedShown, names };
 }
 
 /**
@@ -948,22 +952,63 @@ function placeSections(isMobile) {
   }
   if (isMobile) {
     els.sheetClearSlot.appendChild(els.clearFilters);
-    for (const [sectionId] of SECTION_POPOVERS) {
-      els.sheetBody.appendChild(document.getElementById(sectionId));
+    els.sheetBody.replaceChildren();
+    for (const group of SHEET_GROUPS) {
+      const label = document.createElement('div');
+      label.className = 'sheet-group-label';
+      label.textContent = group.label;
+      els.sheetBody.appendChild(label);
+      for (const sectionId of group.sections) els.sheetBody.appendChild(document.getElementById(sectionId));
     }
+    // The people strip sits under the Announcers heading: chips (row A), then the three buttons (row B).
+    const strip = document.createElement('div');
+    strip.className = 'people-strip';
+    strip.id = 'people-strip';
+    strip.append(els.chips, els.toggleGroup);
+    const announcers = document.getElementById('filter-announcers');
+    announcers.querySelector('.section-head').after(strip);
   } else {
-    els.selectionRow.appendChild(els.clearFilters);
-    for (const [sectionId, popoverId] of SECTION_POPOVERS) {
-      document.getElementById(popoverId).appendChild(document.getElementById(sectionId));
-    }
+    // Hold the sections before the sheet body is emptied: clearing it detaches them from the
+    // document, and a later getElementById would then return null (phone to desktop resize).
+    const sections = SECTION_POPOVERS.map(([sectionId, popoverId]) => [
+      document.getElementById(sectionId),
+      document.getElementById(popoverId),
+    ]);
+    document.getElementById('people-strip')?.remove();
+    els.sheetBody.replaceChildren();
+    els.sumRight.append(els.chips, els.toggleGroup, els.clearFilters);
+    for (const [section, popover] of sections) popover.appendChild(section);
   }
 }
+
+/** The phone Filters panel's groups, in the order the desktop bar shows them (Round 3b). */
+const SHEET_GROUPS = [
+  { label: 'Broadcast', sections: ['filter-announcers', 'filter-networks', 'filter-booth', 'filter-role'] },
+  { label: 'Matchup', sections: ['filter-conference', 'filter-school', 'filter-game'] },
+  { label: 'Calendar', sections: ['filter-seasons', 'filter-slots', 'filter-postseason'] },
+];
+
+/** Each trigger's panel section id, for the pick shown beside a changed section's heading. */
+const TRIGGER_SECTIONS = {
+  announcers: 'filter-announcers',
+  seasons: 'filter-seasons',
+  networks: 'filter-networks',
+  kickoff: 'filter-slots',
+  role: 'filter-role',
+  conference: 'filter-conference',
+  school: 'filter-school',
+  postseason: 'filter-postseason',
+  game: 'filter-game',
+  booth: 'filter-booth',
+};
 
 /** Binds every toolbar/popover/sheet DOM event listener once. `getState` always returns the latest state. */
 export function initFilters({ data, getState, setState }) {
   els = {
     toolbar: document.getElementById('toolbar'),
-    selectionRow: document.getElementById('selection-row'),
+    sumRight: document.querySelector('#summary .sum-right'),
+    chips: document.getElementById('chips'),
+    toggleGroup: document.querySelector('#summary .toggle-group'),
     filterChips: document.getElementById('filter-chips'),
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
@@ -1164,6 +1209,20 @@ export function initFilters({ data, getState, setState }) {
   const mobileMedia = window.matchMedia(PHONE_QUERY);
   placeSections(mobileMedia.matches);
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
+
+  // A chip lives inside the open sheet: it takes the visitor to its filter section and never closes it.
+  els.filterChips.addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.filter-chip');
+    const heading = chip ? document.getElementById(chip.dataset.section)?.querySelector('h3') : null;
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start' });
+  });
+
+  // The changed-filter chips re-decide their wording whenever their strip's width changes: opening
+  // the panel, a rotation, or a resize (a closed panel measures 0 and is skipped).
+  new ResizeObserver(() => fitFilterChips()).observe(els.filterChips);
 }
 
 /** Sum of `facets.seasons` over the inclusive range [from, to]. */
@@ -1380,77 +1439,105 @@ function renderGame(data, state, view) {
   syncGameChrome(els.gameSearch.value);
 }
 
-/** A toolbar trigger's label and active state, from `state` (D-02 copywriting).
- * D-36: the Networks count is the checked rows among the rows shown in the list. */
-function triggerInfo(name, data, state, view) {
-  if (name === 'crew') {
-    // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
-    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null };
-  }
-  if (name === 'announcers') {
-    if (state.people.length === 0) return { label: 'Announcers', active: false };
-    return { label: `Announcers · ${state.people.length}`, active: true };
-  }
-  if (name === 'seasons') {
-    if (state.seasons == null) return { label: 'Seasons', active: false };
-    const [a, b] = state.seasons;
-    return { label: `Seasons ${a}–${b}`, active: true };
-  }
-  if (name === 'networks') {
-    if (state.networks == null) return { label: 'Networks', active: false };
-    const { shown, checked } = shownNetworkCounts(data, state, view);
-    if (checked === shown) return { label: 'Networks', active: false };
-    return { label: `Networks · ${checked}`, active: true };
-  }
-  if (name === 'kickoff') {
-    if (state.slots == null) return { label: 'Kickoff', active: false };
-    const label =
-      state.slots.length === 1 ? `Kickoff: ${SLOT_SHORT_LABELS[state.slots[0]]}` : `Kickoff · ${state.slots.length}`;
-    return { label, active: true };
-  }
-  if (name === 'role') {
-    if (state.role == null) return { label: 'Role', active: false };
-    return { label: `Role: ${ROLE_LABELS[state.role]}`, active: true };
-  }
-  if (name === 'conference') {
-    if (state.conferences.length === 0) return { label: 'Conference', active: false };
-    const label =
-      state.conferences.length === 1 ? `Conference: ${state.conferences[0]}` : `Conference · ${state.conferences.length}`;
-    return { label, active: true };
-  }
-  if (name === 'school') {
-    if (state.school.length === 0) return { label: 'School', active: false };
-    if (state.h2h === true && state.school.length === 2) {
-      const [a, b] = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
-      return { label: `School: ${a} vs ${b}`, active: true };
-    }
-    if (state.school.length === 1) {
-      const idx = data.teamIndexBySlug.get(state.school[0]);
-      return { label: `School: ${data.lookups.teams[idx].name}`, active: true };
-    }
-    return { label: `School · ${state.school.length}`, active: true };
-  }
-  if (name === 'postseason') {
-    if (state.postseason === 'all') return { label: 'Bowls/Playoffs', active: false };
-    const label = state.postseason === 'exclude' ? 'Bowls/Playoffs: Exclude' : 'Bowls/Playoffs: Only';
-    return { label, active: true };
-  }
-  if (name === 'booth') {
-    if (state.booth.length === 0) return { label: 'Booth', active: false };
-    const label =
-      state.booth.length === 1 ? `Booth: ${BOOTH_LABELS[state.booth[0]]}` : `Booth · ${state.booth.length}`;
-    return { label, active: true };
-  }
-  if (name === 'game') {
-    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
-    if (idx === undefined) return { label: 'Game', active: false };
-    return { label: `Game: ${data.games[idx].label}`, active: true };
-  }
-  return { label: name, active: false };
-}
+/** What an untouched entry reads in its value line (Round 3b): the default, in words. */
+const ENTRY_DEFAULTS = {
+  announcers: 'Any',
+  networks: 'All',
+  booth: 'Any',
+  role: 'Both',
+  conference: 'Any',
+  school: 'Any',
+  game: 'Any',
+  kickoff: 'Any',
+  postseason: 'All games',
+};
 
 /** Resting label per trigger name, captured from index.html before the first render replaces any of them. */
 const restingLabels = new Map();
+
+/**
+ * A toolbar trigger's active state and its picks in full, from `state` (D-02 copywriting).
+ * `items` lists each pick as the visitor reads it ([] at default); `label` is the full summary
+ * ("Announcers: Kirk Herbstreit, Chris Fowler"), the title and accessible name. The short text an
+ * entry shows is `entryValue`'s. D-36: the Networks picks are the checked rows among the rows shown.
+ */
+function triggerInfo(name, data, state, view) {
+  const resting = restingLabels.get(name) ?? name;
+  // `count` is how many things the visitor picked, which differs from `items.length` when one display
+  // string covers several picks (head-to-head) or none (Networks "None"). null: a range, no count.
+  const info = (items, count = items.length) => ({
+    label: items.length > 0 ? `${resting}: ${items.join(', ')}` : resting,
+    active: items.length > 0,
+    items,
+    count,
+  });
+  if (name === 'crew') {
+    // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
+    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null, items: [], count: 1 };
+  }
+  if (name === 'announcers') {
+    return info(
+      state.people.map((id) => {
+        const idx = data.personIndexById.get(id);
+        return idx === undefined ? id : data.lookups.people[idx].name;
+      }),
+    );
+  }
+  if (name === 'seasons') {
+    if (state.seasons == null) return info([]);
+    const [a, b] = state.seasons;
+    return info([`${a}–${b}`], null);
+  }
+  if (name === 'networks') {
+    if (state.networks == null) return info([]);
+    const { shown, checked, names } = shownNetworkCounts(data, state, view);
+    if (checked === shown) return info([]);
+    return info(names.length > 0 ? names : ['None'], names.length);
+  }
+  if (name === 'kickoff') {
+    return info(state.slots == null ? [] : state.slots.map((slot) => SLOT_SHORT_LABELS[slot]));
+  }
+  if (name === 'role') {
+    return info(state.role == null ? [] : [ROLE_LABELS[state.role]]);
+  }
+  if (name === 'conference') {
+    return info([...state.conferences]);
+  }
+  if (name === 'school') {
+    const names = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
+    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs ${names[1]}`], 2);
+    return info(names);
+  }
+  if (name === 'postseason') {
+    if (state.postseason === 'all') return info([]);
+    return info([state.postseason === 'exclude' ? 'Exclude' : 'Only']);
+  }
+  if (name === 'booth') {
+    return info(state.booth.map((tier) => BOOTH_LABELS[tier]));
+  }
+  if (name === 'game') {
+    const idx = state.game != null ? data.gameIndexBySlug.get(state.game) : undefined;
+    return info(idx === undefined ? [] : [data.games[idx].label]);
+  }
+  return { label: name, active: false, items: [] };
+}
+
+/**
+ * The text an entry shows on its value line: the default word at rest, otherwise the pick itself
+ * (one pick in full, several "{first} +{n-1}"; compare mode counts people because the count line
+ * names them). Seasons shows its range, read from the data. Long text truncates in the entry.
+ */
+function entryValue(name, data, state, view) {
+  const { items, active } = triggerInfo(name, data, state, view);
+  if (!active) {
+    if (name === 'seasons') return `${Math.min(...data.seasons)}–${Math.max(...data.seasons)}`;
+    return ENTRY_DEFAULTS[name] ?? '';
+  }
+  if (name === 'announcers' && state.compare) {
+    return items.length === 1 ? '1 person' : `${items.length} people`;
+  }
+  return items.length === 1 ? items[0] : `${items[0]} +${items.length - 1}`;
+}
 
 /** The trigger's changed value text ("" at default): the part of the summary after the resting label. */
 function triggerValue(name, label, active) {
@@ -1461,7 +1548,7 @@ function triggerValue(name, label, active) {
 
 /**
  * The control keys that differ from a clean load, in toolbar order (SHELL-03).
- * One predicate for the desktop accent, the phone "Filters · N changed" label and
+ * One predicate for the desktop accent, the phone "Filters (N changed)" label and
  * the phone chips. It reads the same per-control facts `triggerInfo` shows, not
  * `activeFilterCount`, which also counts each selected person (Pitfall 10).
  */
@@ -1501,24 +1588,24 @@ function renderTriggers(data, state, view) {
     labelSpan.textContent = resting;
     const valueSpan = document.createElement('span');
     valueSpan.className = 'filter-value';
-    valueSpan.textContent = triggerValue(name, label, active);
+    valueSpan.textContent = entryValue(name, data, state, view);
     const text = document.createElement('span');
     text.className = 'filter-text';
     text.append(labelSpan, valueSpan);
     btn.replaceChildren(text);
     btn.dataset.active = active ? 'true' : 'false';
     btn.classList.toggle('is-changed', changed.has(name));
-    // The full summary is always available; long values truncate in their grid cell (C3).
+    // The full summary is always available; a long pick truncates inside its entry.
     btn.setAttribute('title', label);
     btn.setAttribute('aria-label', label);
   }
 }
 
-/** Renders the phone `#filters-button` label and the changed-control chips (SHELL-03 Phone). */
+/** Renders the phone `#filters-button` label, the changed-control chips and each section's pick (SHELL-03 Phone). */
 function renderFiltersButton(data, state, view) {
   const changed = changedControls(data, state, view);
   const n = changed.length;
-  els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
+  els.filtersButton.textContent = n > 0 ? `Filters (${n} changed)` : 'Filters';
   els.filtersButton.classList.toggle('is-changed', n > 0);
   // Clear all filters looks and reads as disabled while nothing it would reset is changed: a
   // changed toolbar control, the map's venue filter (its chip sits in the table heading row),
@@ -1526,25 +1613,75 @@ function renderFiltersButton(data, state, view) {
   const live = clearAllActive(changed, state, els.gameSearch.value);
   els.clearFilters.setAttribute('aria-disabled', live ? 'false' : 'true');
   const chips = changed.map((name) => {
-    const { label } = triggerInfo(name, data, state, view);
+    const { label, count: picks } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'filter-chip';
-    chip.setAttribute('popovertarget', 'filters-sheet');
-    chip.setAttribute('aria-haspopup', 'dialog');
+    // The chip sits inside the open sheet, so it must not toggle the sheet: it jumps to its section.
+    chip.dataset.section = TRIGGER_SECTIONS[name] ?? '';
     // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
-    const resting = name === 'crew' ? 'Crew:' : (restingLabels.get(name) ?? label);
-    const strong = document.createElement('b');
-    strong.textContent = resting;
-    const value = name === 'crew' ? label.slice(resting.length) : triggerValue(name, label, true);
-    chip.append(strong, document.createTextNode(value));
+    const resting = name === 'crew' ? 'Crew' : (restingLabels.get(name) ?? label);
+    const value = name === 'crew' ? label.slice('Crew'.length) : triggerValue(name, label, true);
+    const count = picks == null ? '' : String(picks);
+    const text = document.createElement('span');
+    text.className = 'chip-text';
+    text.dataset.name = resting;
+    text.dataset.value = value;
+    text.dataset.count = count;
+    chip.append(text);
     chip.setAttribute('aria-label', label);
+    chip.title = label;
     li.append(chip);
     return li;
   });
+  if (chips.length === 0) {
+    const none = document.createElement('li');
+    none.className = 'chip-none';
+    none.textContent = 'No filters changed';
+    chips.push(none);
+  }
   els.filterChips.replaceChildren(...chips);
-  els.filterChips.hidden = chips.length === 0;
+  fitFilterChips();
+  for (const name of TRIGGER_NAMES) {
+    const section = document.getElementById(TRIGGER_SECTIONS[name]);
+    const head = section?.querySelector(':scope > .section-head');
+    if (!head) continue;
+    let pick = head.querySelector(':scope > .section-pick');
+    if (!pick) {
+      pick = document.createElement('span');
+      pick.className = 'section-pick';
+      head.querySelector('h3').after(pick);
+    }
+    const on = changed.includes(name);
+    pick.hidden = !on;
+    pick.textContent = on ? entryValue(name, data, state, view) : '';
+  }
+}
+
+/**
+ * Chooses each changed-filter chip's wording by measuring: the long form "Announcers: A, B" when it
+ * fits on the chip, otherwise "Announcers (2)" (the filter name and the pick count, no middle dot).
+ * The long form is set first and kept unless it overflows the chip.
+ */
+function fitFilterChips() {
+  if (!els?.filterChips) return;
+  for (const text of els.filterChips.querySelectorAll('.chip-text')) {
+    const { name, value, count } = text.dataset;
+    text.replaceChildren();
+    const strong = document.createElement('b');
+    strong.textContent = name;
+    text.append(strong, document.createTextNode(value));
+    text.dataset.form = 'long';
+    // A closed panel has no width to measure; the next resize event decides.
+    // A Seasons range has no count, so it keeps the long form.
+    if (count !== '' && text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
+      const short = document.createElement('b');
+      short.textContent = name;
+      text.replaceChildren(short, document.createTextNode(` (${count})`));
+      text.dataset.form = 'short';
+    }
+  }
 }
 
 /** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */

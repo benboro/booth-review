@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from booth_review.build.pages import (
-    CREDIT_LINE_TEXT,
+    CREDIT_ITEMS,
     NAV,
     THEME_TOGGLE_HTML,
     csp_for,
@@ -64,12 +64,32 @@ def test_freshness_stamps_with_none() -> None:
     )
 
 
+def test_footer_freshness_line_joins_with_a_semicolon_and_nav_has_no_separator() -> None:
+    footer = footer_html(
+        Freshness(season=2026, crews_through_week="8", viewership_through_week="7")
+    )
+    assert (
+        '<p class="freshness">Crews and scores through Week\u00a08; '
+        "viewership through\u00a0Week\u00a07</p>" in footer
+    )
+    empty = footer_html(Freshness(season=2026))
+    assert (
+        "Crews and scores: not yet available this season; "
+        "viewership: not yet available this\u00a0season" in empty
+    )
+    assert "</a> <a" in footer
+    assert "·" not in footer
+
+
 def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     freshness = Freshness(season=2026, crews_through_week="5", viewership_through_week="4")
     footer = footer_html(freshness)
 
     plain = _strip_tags(footer)
-    assert plain.count(CREDIT_LINE_TEXT) == 1
+    for item in CREDIT_ITEMS:
+        assert plain.count(item) == 1
+    assert footer.count('class="credit-item"') == 3
+    assert " · " not in plain
 
     for _label, href in NAV:
         assert f'href="{href}"' in footer
@@ -88,7 +108,7 @@ def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     assert footer.count('class="trademark-line"') == 1
     assert footer.count('class="type-line"') == 1
     for href in (
-        "fonts/OFL-crimson-text.txt",
+        "fonts/GUST-FONT-LICENSE.txt",
         "fonts/OFL-roboto.txt",
         "fonts/OFL-roboto-condensed.txt",
     ):
@@ -106,6 +126,9 @@ def test_render_methodology_includes_known_gaps_demoted_and_no_marker() -> None:
     assert 'href="known-gaps.md"' not in result
     assert "<h3" in result
     assert "<table" in result
+    # A wide table scrolls inside its own box on a phone, never the whole page (26-10 critique).
+    assert result.count("<table>") == result.count('<div class="table-scroll"><table>') > 0
+    assert result.count("</table></div>") == result.count("<table>")
     assert result.count("<script") == 1
     assert "script-src 'sha256-" in result
     assert 'href="style.css"' in result
@@ -391,7 +414,16 @@ def test_render_methodology_resolves_md_links_against_docs(
 # switch line removed.
 # Re-pinned at Phase 17.1 review: dot-size prose follows D-20, D-23 and D-24 (scale set by the
 # busiest venue shown, rescaling with filters and picks; paler dots sized without the pick).
-_METHODOLOGY_FLAG_OFF_SHA256 = "acea43bb8e649bd295726f907367b26a9132bd52b668c8278ce37abc4b52de83"
+# Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
+# Re-pinned at Phase 26 Plan 05: title takes a hyphen; footer credit blocks, spaced nav, semicolon
+# freshness.
+# Re-pinned at Phase 26 Plan 09: the methodology's "No public rating" line shows the semicolon
+# the site uses.
+# Re-pinned at Phase 26 Plan 10 (critique): each Markdown table sits in a .table-scroll box.
+# Re-pinned at Phase 26 Plan 10 (sign-off): the 27 em-dashes in methodology.md and the
+# known-gaps text it splices in become commas, colons, semicolons and parentheses.
+# Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
+_METHODOLOGY_FLAG_OFF_SHA256 = "f96bea18dab8fbd62d196cc7011a4cce943bb0bbdb3d688c0c15e0d508da4d0c"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
@@ -420,6 +452,15 @@ def test_methodology_flag_off_digest_is_pinned() -> None:
 
     rendered = render_methodology(_DOCS, _fixture_site())
     assert hashlib.sha256(rendered.encode("utf-8")).hexdigest() == _METHODOLOGY_FLAG_OFF_SHA256
+
+
+def test_methodology_prose_has_no_em_dash() -> None:
+    """Sign-off 2026-10-27: no em-dash in the methodology source, the known-gaps text it
+    splices in, or the rendered page. En-dash ranges (2014\u20132026) are fine."""
+    em_dash = "\u2014"
+    assert em_dash not in (_DOCS / "methodology.md").read_text(encoding="utf-8")
+    assert em_dash not in (_DOCS / "known-gaps.md").read_text(encoding="utf-8")
+    assert em_dash not in render_methodology(_DOCS, _fixture_site())
 
 
 def test_methodology_states_the_backend_modal_exception() -> None:

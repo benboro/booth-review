@@ -346,7 +346,7 @@ def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
     assert order.index("highlight-halo-unrated-open") == order.index("highlight-unrated") - 1
 
 
-@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#ECE7DF")])
+@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#E5EAE8")])
 def test_enlarged_dots_give_lead_stars_the_dot_outline(
     guarded_page: Page, serve_booths: Callable, open_app: Callable, theme: str, rim: str
 ) -> None:
@@ -364,7 +364,7 @@ def test_enlarged_dots_give_lead_stars_the_dot_outline(
     assert (casing["size"], star["size"]) == (18, 14)
 
 
-@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#ECE7DF")])
+@pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#E5EAE8")])
 def test_enlarged_dots_give_the_no_rating_star_the_dot_outline(
     guarded_page: Page, serve_booths: Callable, open_app: Callable, theme: str, rim: str
 ) -> None:

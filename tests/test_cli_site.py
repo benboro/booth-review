@@ -187,13 +187,13 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
 
     assert set(by_suffix) <= {".html", ".js", ".css", ".json", ".svg", ".woff2", ".txt"}
     assert by_suffix[".woff2"] == {
-        "fonts/crimson-text-latin-600-normal.woff2",
+        "fonts/lm-roman-demi-latin-600-normal.woff2",
         "fonts/roboto-latin-400-normal.woff2",
         "fonts/roboto-latin-600-normal.woff2",
         "fonts/roboto-condensed-latin-400-normal.woff2",
     }
     assert by_suffix[".txt"] == {
-        "fonts/OFL-crimson-text.txt",
+        "fonts/GUST-FONT-LICENSE.txt",
         "fonts/OFL-roboto.txt",
         "fonts/OFL-roboto-condensed.txt",
     }

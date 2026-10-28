@@ -21,6 +21,7 @@ import * as postseasonView from './views/postseason.js';
 import * as scatterView from './views/scatter.js';
 import { showToolsFor } from './tools.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
+import { keepTailTogether } from '../../modules/format.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
 const VIEW_MODULES = { apple: appleView, postseason: postseasonView, scatter: scatterView };
@@ -128,7 +129,7 @@ function buildRegions(footerEl) {
   chartModule.append(moduleHead, viewHost, status);
   chartArea.append(tabHost, chartModule);
 
-  const matched = el('section', 'nfl-region');
+  const matched = el('section', 'nfl-region module');
   matched.id = 'mlb-matched-games';
 
   footerEl.before(toolbar, selection, chartArea, matched);
@@ -161,26 +162,42 @@ function freshnessText() {
   const through = f.retrosheet_through_season
     ? `Retrosheet through ${f.retrosheet_through_season}`
     : 'Retrosheet: not yet loaded';
-  return f.in_progress && f.season ? `${through} · ${f.season} season in progress` : through;
+  return f.in_progress && f.season ? `${through}; ${f.season} season in progress` : through;
 }
 
+/** One block per source (CSS puts each on its own line); a "\n" text node sits between them. */
 function creditNodes() {
   const t = (s) => document.createTextNode(s);
-  return [
-    t(`${RETROSHEET_NOTICE} ${RETROSHEET_CONTACT}`),
-    link('www.retrosheet.org', 'https://www.retrosheet.org'),
-    t(' · Viewership: '),
-    link('RatingsReference.com', 'https://ratingsreference.com'),
-    t(' ('),
-    link('CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/'),
-    t('), modified: filtered and joined with crew and game data · Postseason outlets and some crews: '),
-    link('Wikipedia', 'https://www.wikipedia.org'),
-    t(' ('),
-    link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
-    t(') · Crews and networks: '),
-    link('506 Sports', 'https://506sports.com'),
-    t(' · Some 2026 crews: relayed from a fan schedule blog, each linked in the game panel with the press page it cites'),
+  const item = (...kids) => {
+    const span = el('span', 'credit-item');
+    span.append(...kids);
+    return span;
+  };
+  const items = [
+    item(
+      t(`${RETROSHEET_NOTICE} ${RETROSHEET_CONTACT}`),
+      link('www.retrosheet.org', 'https://www.retrosheet.org'),
+    ),
+    item(
+      t('Viewership: '),
+      link('RatingsReference.com', 'https://ratingsreference.com'),
+      t(' ('),
+      link('CC BY 4.0', 'https://creativecommons.org/licenses/by/4.0/'),
+      t('), modified: filtered and joined with crew and game data'),
+    ),
+    item(
+      t('Postseason outlets and some crews: '),
+      link('Wikipedia', 'https://www.wikipedia.org'),
+      t(' ('),
+      link('CC BY-SA 4.0', 'https://creativecommons.org/licenses/by-sa/4.0/'),
+      t(')'),
+    ),
+    item(t('Crews and networks: '), link('506 Sports', 'https://506sports.com')),
+    item(
+      t('Some 2026 crews: relayed from a fan schedule blog, each linked in the game panel with the press page it cites'),
+    ),
   ];
+  return items.flatMap((node, i) => (i ? [t('\n'), node] : [node]));
 }
 
 function swapFooter(footerEl) {
@@ -195,7 +212,7 @@ function swapFooter(footerEl) {
     footerRefs = { freshness, credit };
     credit.replaceChildren(...creditNodes());
   }
-  if (model) freshness.replaceChildren(document.createTextNode(freshnessText()));
+  if (model) freshness.replaceChildren(document.createTextNode(keepTailTogether(freshnessText())));
 }
 
 function restoreFooter() {
@@ -251,7 +268,7 @@ function renderSelectionBar() {
   const seasons = model.cols.season;
   const lo = model.n ? Math.min(...seasons) : null;
   const hi = model.n ? Math.max(...seasons) : null;
-  const span = lo == null ? '' : ` · ${lo === hi ? lo : `${lo}–${hi}`}`;
+  const span = lo == null ? '' : `, ${lo === hi ? lo : `${lo}–${hi}`}`;
   headline.textContent = `${model.n.toLocaleString('en-US')} ${model.n === 1 ? 'game' : 'games'}${span}`;
 }
 

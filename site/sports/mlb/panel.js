@@ -10,7 +10,7 @@
 
 import { externalLink, crewBox, linksList, networksParagraph } from '../../modules/panel-parts.js';
 import { currentTheme } from '../../modules/pill.js';
-import { dateLongText } from './format.js';
+import { dateApText } from './format.js';
 import { CAUSE_COPY, viewersText } from './data.js';
 
 export const RETROSHEET_NOTICE =
@@ -28,13 +28,13 @@ function titleText(row) {
   return `${row.away} at ${row.home}`;
 }
 
-/** 'Championship Series · AL, Game 2' or '' for the regular season. */
+/** 'Championship Series, AL, Game 2' or '' for the regular season. */
 function roundLine(row) {
   if (!row.roundLabel) return '';
   const bits = [row.roundLabel];
   if (row.seriesLeague) bits.push(row.seriesLeague);
   if (row.seriesGame != null) bits.push(`Game ${row.seriesGame}`);
-  return bits.length > 1 ? `${bits[0]} · ${bits.slice(1).join(', ')}` : bits[0];
+  return bits.length > 1 ? bits.join(', ') : bits[0];
 }
 
 function creditLine(row) {
@@ -226,10 +226,10 @@ export function createDetailPanel(host, { onClose, getConstants } = {}) {
 
   function renderRow(row) {
     title.textContent = titleText(row);
-    const when = [dateLongText(row)];
+    const when = [dateApText(row)];
     const round = roundLine(row);
     if (round) when.push(round);
-    const dateP = el('p', null, when.join(' · '));
+    const dateP = el('p', null, when.join(', '));
     const network = row.network == null
       ? el('p', null, 'Outlet not recorded.')
       : networksParagraph({ primary: { id: row.networkId, name: row.network, family: row.networkFamily }, others: [], theme: currentTheme() });

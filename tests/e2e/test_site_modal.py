@@ -219,11 +219,11 @@ def test_close_then_reopen_in_one_task_keeps_the_panel_live(
     )
     expect(guarded_page.locator("#detail-panel")).to_have_attribute("open", "")
     body = guarded_page.locator("#panel-body")
-    expect(body).to_contain_text("Spread: Ironpeak +7.0 · Excitement: 6.8")
+    expect(body).to_contain_text("Spread: Ironpeak +7.0; Excitement: 6.8")
     guarded_page.evaluate("window.__testHooks.setState({ axis: 'excitement' })")
-    expect(body).to_contain_text("Excitement: 6.8 · Spread: Ironpeak +7.0")
+    expect(body).to_contain_text("Excitement: 6.8; Spread: Ironpeak +7.0")
     guarded_page.evaluate("window.__testHooks.setState({ axis: 'spread' })")
-    expect(body).to_contain_text("Spread: Ironpeak +7.0 · Excitement: 6.8")
+    expect(body).to_contain_text("Spread: Ironpeak +7.0; Excitement: 6.8")
 
 
 CLOSE_IN_VIEW = """
@@ -275,7 +275,7 @@ def test_unrated_modal_shows_cause_and_why_link_without_source_rows(
     link; no figure, publisher, Ratings Reference, or flag rows; the 506 listing stays."""
     text = _open(guarded_page, open_app, 16)
     body = guarded_page.locator("#panel-body")
-    assert "No public rating · no figure found in our 2021\u201324 sources" in text
+    assert "No public rating; no figure found in our 2021\u201324 sources" in text
     why = body.locator("a", has_text="Why no rating?")
     expect(why).to_have_count(1)
     assert (why.get_attribute("href") or "").endswith(

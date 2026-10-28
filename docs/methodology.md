@@ -11,9 +11,9 @@ figures on the chart come from.
 Each dot is one rated national telecast of an FBS college football game, from
 the 2014 season onward. The y-axis is viewers, on a log scale, and can show excitement, total points or winning margin instead (see [the y-axis section](#the-y-axis-viewers-excitement-points-or-margin)). The x-axis
 defaults to the winner's closing point spread (see below) and can be toggled
-to CFBD's post-game excitement measure or to the game's date instead. Dots are colored by network family —
-for example, the Disney family groups ABC and the ESPN networks under one
-color — but the specific network that carried a telecast is always named in
+to CFBD's post-game excitement measure or to the game's date instead. Dots are colored by network family
+(for example, the Disney family groups ABC and the ESPN networks under one
+color), but the specific network that carried a telecast is always named in
 the hover, the detail panel, and the matched-games table. No dot is ever
 colored by an individual announcer or crew.
 
@@ -29,7 +29,7 @@ The single most important thing to understand before reading anything into
 this chart: **a person's dots show what game they were assigned to call, not
 how good they are at calling it, and not whether they personally drew
 viewers.** Networks put their most experienced crews on the games they
-already expect to draw the largest audience — the marquee matchup, the
+already expect to draw the largest audience: the marquee matchup, the
 rivalry game, the playoff game. A crew with dots skewed toward large audiences
 is evidence the network trusted them with big assignments; it is not evidence
 that audience showed up *because* of them.
@@ -48,7 +48,7 @@ The Bars and Butterfly views count assignments, not quality. Every bar is a numb
 
 ## Which games are included
 
-A game is in scope if at least one participating team was FBS that season —
+A game is in scope if at least one participating team was FBS that season:
 a rated FBS-versus-FCS opener counts, but two non-FBS teams playing each
 other does not. Only **rated** telecasts appear as dots: a telecast needs a
 viewership figure this project could attach to it. Unrated games (mostly
@@ -58,9 +58,9 @@ v1, even though their game and crew data still exists behind the scenes.
 Each dot is one main-feed figure. When a game aired on more than one outlet
 at once (a simulcast), it is still one dot, credited to the game's primary
 rights-holder network; every outlet that carried it is listed in the hover
-and detail panel. A combined figure — one viewership number that spans a
+and detail panel. A combined figure (one viewership number that spans a
 main broadcast plus one or more alternate-feed broadcasts, most often seen on
-marquee postseason games with a companion "alt-cast" — is also one dot,
+marquee postseason games with a companion "alt-cast") is also one dot,
 credited to the main booth. The people who called an alt-cast feed on a
 combined figure are still linked to that dot and still match a person search
 (labelled "alt-cast" in the table and detail panel), but they never match a
@@ -111,7 +111,7 @@ Besides the rated games the chart plots, the site lists the games that have no p
 3. "no figure found in our 2021–24 sources": the game is from a season in that range, Ratings Reference compiled few figures for those seasons, and the second sources listed under Sources and credits did not cover the game (see Known gaps).
 4. "no figure was published": anything else. This also covers the rare game whose only figure is for an alternate feed.
 
-On the site each game reads "No public rating · {cause}".
+On the site each game reads "No public rating; {cause}".
 
 **Counts.** "N rated of M games" counts the games that pass the current filters or selection: N is how many have a figure, M is all of them, rated or not. Filter counts count every game.
 
@@ -124,7 +124,7 @@ On the site each game reads "No public rating · {cause}".
 Nielsen, the source of nearly every viewership figure on this chart, changed
 how it measures television audiences several times across this project's
 2014-onward range. Comparing a raw viewership number from one era against
-another without accounting for this is misleading — a level shift from a
+another without accounting for this is misleading, since a level shift from a
 methodology change can look like a change in real audience interest. Every
 dot's detail panel shows which era its figure falls under.
 
@@ -140,14 +140,14 @@ Because each of these changes tends to shift viewership levels upward (out-of-ho
 and co-viewing measurement both count audiences that panel-only Nielsen
 measurement missed), a season-over-season or era-over-era comparison of raw
 viewership numbers needs this context. This chart does not attempt to correct
-older figures onto a later era's basis — every figure is shown as originally
+older figures onto a later era's basis; every figure is shown as originally
 published, tagged with its own era.
 
 Separate from measurement eras, a small number of telecasts carry an event
 flag for a one-off circumstance that affected their audience. One such flag
 on this chart marks telecasts that aired while Disney's networks (including
 ABC and the ESPN networks) were in a carriage dispute with YouTube TV, from
-October 31, 2025 through November 14, 2025 — see
+October 31, 2025 through November 14, 2025; see
 [the reporting on the resolved dispute](https://www.espn.com/espn/story/_/id/46969585/disney-reaches-new-deal-youtube-tv-ending-blackout)
 for background. A telecast carrying this flag may show depressed viewership
 on the affected platform for reasons unrelated to the matchup or the crew.
@@ -156,8 +156,8 @@ on the affected platform for reasons unrelated to the matchup or the crew.
 
 Some viewership figures on this chart blend Nielsen's linear-television
 measurement with streaming-analytics data from Adobe, rather than reporting
-Nielsen alone. These dots look exactly like every other dot on the chart —
-same size, same color, same behavior under every filter — but their detail
+Nielsen alone. These dots look exactly like every other dot on the chart
+(same size, same color, same behavior under every filter), but their detail
 panel and matched-games table row label them "Nielsen + Adobe (streaming)."
 Because this figure type mixes two different measurement approaches, it is not strictly
 comparable to a Nielsen-only figure, even within the same era, and should be
@@ -178,7 +178,7 @@ an excitement value from an earlier season, even though both are reported on
 the same numeric scale. Every telecast from the 2025 season onward carries
 this flag in its detail panel, and when the chart's x-axis is set
 to excitement mode, a caption appears under the axis noting the break. The caption shows whenever excitement is on either axis.
-Affected dots look identical to any other dot — the flag is informational
+Affected dots look identical to any other dot; the flag is informational
 only and never changes a dot's size, color, or shape.
 
 ## The x-axis: spread, excitement, and date
@@ -478,7 +478,7 @@ data from other sources, and reshaped for this chart, rather than reproduced
 as published. Every dot's detail panel links the specific Ratings Reference
 record (or records, when more than one record was merged for the same
 telecast) that its figure came from, along with that figure's own original
-source — the article, wire report, or post the number was first published
+source: the article, wire report, or post the number was first published
 in.
 
 **Sports Media Watch and the other viewership sources.** Ratings Reference
@@ -535,7 +535,7 @@ detail panel also says the
 figure is not listed on Ratings Reference. These sources are used without
 asking first, and a source's figures come off the site if it objects.
 
-**506 Sports.** Crew listings — who called each telecast — come from
+**506 Sports.** Crew listings (who called each telecast) come from
 [506sports.com](https://506sports.com).
 
 Crews come from 506 Sports, except a small set of telecasts 506 never lists,
@@ -579,13 +579,13 @@ self-hosted alongside this site's other files.
 
 This site offers no bulk download of any of the data above, and it loads no
 data from Ratings Reference, 506 Sports, CollegeFootballData.com, or any
-other outside source at the time you view it — every figure shown here was
+other outside source at the time you view it. Every figure shown here was
 gathered and assembled ahead of time, before the page was built.
 
 ## Known gaps
 
 This project's coverage of 2014-onward college football telecasts has some
-known thin spots and edge cases — where a source's own records are uneven,
+known thin spots and edge cases: where a source's own records are uneven,
 where a match between two sources could not be made with full confidence, or
 where a figure combines more than one broadcast feed. See
 [Known gaps](known-gaps.md) for the details, in the project's own words and

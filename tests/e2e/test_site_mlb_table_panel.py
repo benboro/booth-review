@@ -128,6 +128,13 @@ def test_lineups_nine_batters_and_starter_per_side(mlb: Page) -> None:
     assert link.get_attribute("rel") == "noopener noreferrer"
 
 
+def test_panel_date_is_ap_style_with_the_year(mlb: Page) -> None:
+    _open(mlb, 1)
+    first = mlb.locator("#mlb-detail-panel p").first.inner_text()
+    assert first.startswith("Fri. April 10, 2026"), first
+    assert "Friday," not in first
+
+
 def test_pending_2026_lineup_and_excitement(mlb: Page) -> None:
     _open(mlb, 0)
     text = _panel(mlb)
@@ -282,7 +289,7 @@ def test_phone_panel_fits_without_sideways_scroll(
 
 def test_panel_round_line(mlb: Page) -> None:
     _open(mlb, 6)
-    assert "Wild Card · AL, Game 1" in _panel(mlb)
+    assert "Wild Card, AL, Game 1" in _panel(mlb)
     _open(mlb, 0)
     assert "Reg. Season" in _panel(mlb)
 
@@ -404,7 +411,7 @@ def test_game_figure_reads_as_that_games_viewers_not_its_label(
     assert "Viewers: 5.5MM (whole broadcast window, not this game alone)" in _panel(page)
     assert "window-level:" not in _panel(page)
     _open(page, 7)
-    assert "Viewers: 12.0MM (several telecasts combined)" in _panel(page)
+    assert "Viewers: 12MM (several telecasts combined)" in _panel(page)
 
 
 def test_panel_says_retrosheet_not_loaded_without_retrosheet(

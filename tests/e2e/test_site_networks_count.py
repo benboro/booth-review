@@ -46,6 +46,12 @@ def _trigger(page: Page) -> Any:
     return page.locator("#trigger-networks")
 
 
+def _value(page: Page) -> Any:
+    """The entry's value line: 'All' at default, else the first checked shown network
+    (Round 3b), with '+N' for the rest. The checked-among-shown rule (D-36) is unchanged."""
+    return page.locator("#trigger-networks .filter-value")
+
+
 def test_networks_count_counts_only_shown_rows(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -56,7 +62,7 @@ def test_networks_count_counts_only_shown_rows(
     expect(_fam_item(guarded_page, "other")).to_be_hidden()
     expect(_net_item(guarded_page, "net-d")).to_be_hidden()
     _uncheck(guarded_page, "net-c")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
+    expect(_value(guarded_page)).to_have_text("Alpha Sports +1")
     assert _trigger(guarded_page).get_attribute("data-active") == "true"
 
 
@@ -65,7 +71,7 @@ def test_networks_count_absent_when_every_shown_row_is_checked(
 ) -> None:
     """D-36 with D-15: no count, inactive look, but the pick stays stored and resettable."""
     open_app(guarded_page, "?people=kris-venn&networks=net-a,net-b,net-c")
-    expect(_trigger(guarded_page)).to_have_text("Networks")
+    expect(_value(guarded_page)).to_have_text("All")
     assert _trigger(guarded_page).get_attribute("data-active") == "false"
     assert "networks=net-a,net-b,net-c" in guarded_page.evaluate("location.search")
     _open_filter(guarded_page, "networks")
@@ -80,14 +86,14 @@ def test_phone_filters_badge_agrees_with_networks_trigger(
     count (D-36), so a stored pick with every shown row checked adds nothing;
     the pick stays in the URL and the Reset stays live (D-15)."""
     open_app(mobile_page, "?people=kris-venn&networks=net-a,net-b,net-c")
-    expect(_trigger(mobile_page)).to_have_text("Networks")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    expect(_value(mobile_page)).to_have_text("All")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
     assert "networks=net-a,net-b,net-c" in mobile_page.evaluate("location.search")
     reset = mobile_page.locator(".group-reset[data-reset='networks']")
     assert reset.get_attribute("aria-disabled") == "false"
     mobile_page.evaluate("window.__testHooks.setState({ networks: ['net-b'] })")
-    expect(_trigger(mobile_page)).to_have_text("Networks · 1")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 2 changed")
+    expect(_value(mobile_page)).to_have_text("Beta Network")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (2 changed)")
 
 
 def test_networks_count_ignores_hidden_family_chip_toggle(
@@ -113,11 +119,11 @@ def test_networks_count_ignores_hidden_family_chip_toggle(
     open_app(guarded_page, "?people=kris-venn")
     _open_filter(guarded_page, "networks")
     _uncheck(guarded_page, "net-c")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
+    expect(_value(guarded_page)).to_have_text("Alpha Sports +1")
     chip = guarded_page.locator('#legend-chips button[data-family="other"]')
     chip.click()
     expect(chip).to_have_attribute("aria-pressed", "false")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
+    expect(_value(guarded_page)).to_have_text("Alpha Sports +1")
 
 
 def test_networks_count_includes_greyed_explicit_pick(
@@ -129,7 +135,7 @@ def test_networks_count_includes_greyed_explicit_pick(
     expect(_fam_item(guarded_page, "disney")).to_be_visible()
     expect(_fam_item(guarded_page, "fox")).to_be_visible()
     expect(_net_item(guarded_page, "net-b")).to_be_hidden()  # D-13: no channel row
-    expect(_trigger(guarded_page)).to_have_text("Networks · 1")
+    expect(_value(guarded_page)).to_have_text("Beta Network")
 
 
 def test_networks_count_unchanged_without_people(
@@ -137,6 +143,6 @@ def test_networks_count_unchanged_without_people(
 ) -> None:
     """Guard: with no announcer every channel is shown, so the count is the pick size."""
     open_app(guarded_page, "?networks=net-a")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 1")
+    expect(_value(guarded_page)).to_have_text("Alpha Sports")
     open_app(guarded_page, "?networks=net-a,net-b")
-    expect(_trigger(guarded_page)).to_have_text("Networks · 2")
+    expect(_value(guarded_page)).to_have_text("Alpha Sports +1")

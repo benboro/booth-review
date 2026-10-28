@@ -23,10 +23,8 @@ import {
   figureNotViaRrText,
   axisValueText,
   boothLabel,
-  formatDate,
-  formatKickoff,
   formatMatchup,
-  formatViewers,
+  formatViewersProse,
   gameTypeInfo,
   rivalryName,
   measurementLabel,
@@ -55,7 +53,7 @@ let pointerDownOnBackdrop = false;
 
 export { safeHref } from './panel-parts.js';
 
-/** date · kickoff ET · time-slot line. The time-slot label ("Prime time",
+/** Date and kickoff ET, then the time-slot after a semicolon. The time-slot label ("Prime time",
  * "Afternoon", "Noon") is gated on `showsTimeSlot` (D-19): only a
  * regular-season Saturday game shows it, so a Saturday bowl/CFP game never
  * gets a misleading scheduling-pattern label. */
@@ -64,9 +62,8 @@ function dateLine(data, i, unplayed = false, weekend = false) {
   const noTime = unplayed ? 'Time TBA' : 'Kickoff time not recorded';
   // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
   if (weekend) return apKickoff(t.date[i], t.kickoff[i], noTime);
-  const parts = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? noTime];
-  if (showsTimeSlot(data, i)) parts.push(SLOT_LABELS[t.time_slot[i]]);
-  return parts.join(' · ');
+  const line = apKickoff(t.date[i], t.kickoff[i], noTime.toLowerCase() === 'time tba' ? noTime : 'kickoff time not recorded', { year: true });
+  return showsTimeSlot(data, i) ? `${line}; ${SLOT_LABELS[t.time_slot[i]]}` : line;
 }
 
 /** Networks paragraph for a CFB telecast: primary network first, then the other
@@ -118,7 +115,7 @@ function buildViewersParagraph(data, i) {
   const t = data.t;
   const p = document.createElement('p');
   if (!data.rated[i]) {
-    p.appendChild(document.createTextNode(`${noRatingLine(data, i)} · `));
+    p.appendChild(document.createTextNode(`${noRatingLine(data, i)}; `));
     const why = document.createElement('a');
     why.href = 'methodology.html#games-with-no-public-rating';
     why.textContent = 'Why no rating?';
@@ -126,7 +123,7 @@ function buildViewersParagraph(data, i) {
     return p;
   }
   if (t.measurement_type[i] === 'nielsen_adobe') {
-    p.appendChild(document.createTextNode(`Viewers: ${formatViewers(t.viewers[i])} · `));
+    p.appendChild(document.createTextNode(`Viewers: ${formatViewersProse(t.viewers[i])}, `));
     const flag = flagOfKind(data, i, 'measurement');
     const badge =
       (flag && externalLink(flag.source_url, 'Nielsen + Adobe (streaming)')) ??
@@ -137,7 +134,7 @@ function buildViewersParagraph(data, i) {
   } else {
     p.appendChild(
       document.createTextNode(
-        `Viewers: ${formatViewers(t.viewers[i])} · ${measurementLabel(t.measurement_type[i])}`,
+        `Viewers: ${formatViewersProse(t.viewers[i])}, ${measurementLabel(t.measurement_type[i])}`,
       ),
     );
   }
@@ -400,8 +397,8 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = 
     const excitementText = axisValueText(data, i, 'excitement');
     const axisP = document.createElement('p');
     axisP.textContent = state.axis === 'excitement'
-      ? `${excitementText} · ${spreadText}`
-      : `${spreadText} · ${excitementText}`;
+      ? `${excitementText}; ${spreadText}`
+      : `${spreadText}; ${excitementText}`;
     children.push(axisP);
 
     const flagsList = buildFlagsList(data, i);

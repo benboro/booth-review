@@ -6,7 +6,7 @@
  * never 0.
  */
 
-import { formatMillions } from '../../modules/format.js';
+import { formatMillionsProse } from '../../modules/format.js';
 
 const REQUIRED_BLOCKS = [
   'games', 'lineups', 'lookups', 'apple_booths', 'apple_summary',
@@ -217,9 +217,9 @@ export function retrosheetLoaded(model) {
   return (model.freshness ? model.freshness.retrosheet_through_season ?? null : null) != null;
 }
 
-/** '12.0MM' or null when unrated. */
+/** '12MM', '220K' or null when unrated: panel prose, no trailing zero (sign-off 2026-10-27). */
 export function viewersText(viewers) {
-  return viewers == null ? null : formatMillions(viewers);
+  return viewers == null ? null : formatMillionsProse(viewers);
 }
 
 function lineupSide(model, row) {

@@ -1,4 +1,4 @@
-"""U6: every chart legend (CFB, NFL and MLB) uses the one outlined chip with a colour dot.
+"""U6: every chart legend (CFB, NFL and MLB) uses the one chip: a colour mark plus a label.
 
 The 13-12 CFB chip (tests/e2e/test_site_legend_dblclick.py) is the model: an outlined 28px
 chip on --bg, never filled with the series colour, an 8px dot in that colour beside the label,
@@ -15,7 +15,7 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-BG = "rgb(251, 249, 245)"  # --bg (light)
+CLEAR = "rgba(0, 0, 0, 0)"
 
 _LOOK_JS = """
 (sel) => [...document.querySelectorAll(sel + ' button')].map((el) => {
@@ -26,7 +26,8 @@ _LOOK_JS = """
   return {
     cls: el.className, h: el.getBoundingClientRect().height, border: s.borderTopWidth,
     bg: s.backgroundColor, color: s.color, pressed: el.getAttribute('aria-pressed'),
-    dot: d ? { bg: ds.backgroundColor, w: r.width, h: r.height, opacity: ds.opacity } : null,
+    dot: d ? { bg: ds.backgroundColor, w: r.width, h: r.height, ring: ds.borderTopColor } : null,
+    offered: el.getAttribute('data-offered'),
     label: el.querySelector(':scope > .legend-label')?.textContent ?? null,
     text: el.textContent,
   };
@@ -39,12 +40,16 @@ def _assert_shared_chips(page: Page, sel: str) -> list[dict[str, Any]]:
     assert chips, f"no legend chips under {sel}"
     for c in chips:
         assert c["cls"] == "legend-chip", c
-        assert c["h"] >= 28 and c["border"] == "1px", c
-        assert c["bg"] == BG, c  # outlined: never the series fill
-        assert c["dot"] is not None and (c["dot"]["w"], c["dot"]["h"]) == (8, 8), c
-        assert c["dot"]["bg"] not in (BG, "rgba(0, 0, 0, 0)"), c
+        assert c["h"] >= 28 and c["border"] == "0px", c
+        assert c["bg"] == CLEAR, c  # no outline, never the series fill
+        assert c["dot"] is not None and (c["dot"]["w"], c["dot"]["h"]) == (10, 10), c
+        assert c["dot"]["ring"] != CLEAR, c
         assert c["label"] and c["text"] == c["label"], c
-        assert c["dot"]["opacity"] == ("1" if c["pressed"] == "true" else "0.32"), c
+        # On = a filled mark; off = an empty ring (truly empty).
+        if c["pressed"] == "true" and c["offered"] != "false":
+            assert c["dot"]["bg"] == c["dot"]["ring"], c
+        else:
+            assert c["dot"]["bg"] == CLEAR, c
     return chips
 
 

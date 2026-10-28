@@ -1,4 +1,4 @@
-"""Crew pick chrome (plan 14-06, D-07): the selection-row chip, its clears, the phone count and
+"""Crew pick chrome (plan 14-06, D-07): the count-line chip, its clears, the phone count and
 the Crews subtitle. Runs on the synthetic crews dataset; no vault content.
 """
 
@@ -13,7 +13,7 @@ from test_site_crew_pick_views import _crew_names, _key, _set
 
 pytestmark = pytest.mark.e2e
 
-_ROW_HEIGHT_JS = "() => document.getElementById('selection-row').getBoundingClientRect().height"
+_ROW_HEIGHT_JS = "() => document.getElementById('summary').getBoundingClientRect().height"
 _CHIP_WIDTH_JS = "() => document.querySelector('#chips > .chip-crew').getBoundingClientRect().width"
 
 
@@ -93,7 +93,7 @@ def test_crew_counts_once_in_changed_controls_and_phone_label(app: Page) -> None
     )
     assert after.count("crew") == 1
     assert len(after) == len(before) + 1
-    expect(app.locator("#filters-button")).to_have_text(f"Filters · {len(after)} changed")
+    expect(app.locator("#filters-button")).to_have_text(f"Filters ({len(after)} changed)")
     expect(app.locator("#filter-chips")).to_contain_text("Crew:")
 
 
@@ -108,7 +108,7 @@ def test_booth_control_untouched_by_a_crew_pick(app: Page) -> None:
 
 
 @pytest.mark.parametrize("width", [1440, 1104, 481])
-def test_selection_row_does_not_shift_with_a_crew_chip(app: Page, width: int) -> None:
+def test_count_line_does_not_shift_with_a_crew_chip(app: Page, width: int) -> None:
     app.set_viewport_size({"width": width, "height": 900})
     before: float = app.evaluate(_ROW_HEIGHT_JS)
     _pick(app)
@@ -143,10 +143,16 @@ def test_map_prompt_hides_on_a_crew_pick(app: Page) -> None:
     expect(app.locator("#chart-subtitle")).to_have_text("")
 
 
+def _open_sheet(app: Page) -> None:
+    app.click("#filters-button")
+    app.wait_for_function("document.getElementById('filters-sheet').matches(':popover-open')")
+
+
 def test_phone_filter_chip_never_widens_the_page(app: Page) -> None:
     """The phone "Crew: A / B / C" accent chip truncates inside the row (Plan 10 critique)."""
     app.set_viewport_size({"width": 390, "height": 800})
     _pick(app)
+    _open_sheet(app)
     widths = app.evaluate(
         "() => [document.documentElement.scrollWidth, document.documentElement.clientWidth]"
     )
@@ -157,6 +163,7 @@ def test_phone_filter_chip_never_widens_the_page(app: Page) -> None:
 def test_phone_filter_chip_names_the_crew_once(app: Page) -> None:
     app.set_viewport_size({"width": 390, "height": 800})
     _, names = _pick(app)
+    _open_sheet(app)
     chip = app.locator("#filter-chips .filter-chip")
     expect(chip).to_have_count(1)
     assert chip.inner_text().strip() == f"Crew: {' / '.join(names)}"

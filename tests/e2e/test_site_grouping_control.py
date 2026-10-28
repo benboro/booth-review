@@ -46,7 +46,8 @@ def test_group_by_lives_in_module_tools_and_pressed_fills_ink(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """13-UI-SPEC "Module header tools": the group-by and role groups sit in #chart-tools,
-    and the pressed button fills --ink (rgb(35, 32, 27)) with --bg text."""
+    and the pressed button is a --surface fill with --ink text and a 2px ink underline (the
+    Phase 26 T3 segmented control, which replaced the filled-ink pressed button)."""
     open_app(guarded_page, BAR_VIEW)
     assert guarded_page.locator("#chart-tools #group-by-toggle").count() == 1
     assert guarded_page.locator("#chart-tools #bar-role-toggle").count() == 1
@@ -56,9 +57,15 @@ def test_group_by_lives_in_module_tools_and_pressed_fills_ink(
     ):
         styles = guarded_page.eval_on_selector(
             selector,
-            "el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color]",
+            "el => [getComputedStyle(el).backgroundColor, getComputedStyle(el).color,"
+            " getComputedStyle(el).boxShadow]",
         )
-        assert styles == ["rgb(35, 32, 27)", "rgb(251, 249, 245)"], selector
+        # light --surface #EBEFED, light --ink #1E2321
+        assert styles == [
+            "rgb(235, 239, 237)",
+            "rgb(30, 35, 33)",
+            "rgb(30, 35, 33) 0px -2px 0px 0px inset",
+        ], selector
 
 
 def _pressed_by(page: Page) -> list[str]:

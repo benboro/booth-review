@@ -90,4 +90,4 @@ def test_document_title_follows_the_active_sport(
 ) -> None:
     """The tab title for each sport is the registry.js title (SHELL-02)."""
     open_mlb_app(mlb_guarded_page, "?sport=mlb")
-    assert mlb_guarded_page.title() == "The Broadcast Ledger · MLB national telecasts"
+    assert mlb_guarded_page.title() == "The Broadcast Ledger: MLB national telecasts"

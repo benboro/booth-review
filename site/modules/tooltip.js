@@ -22,11 +22,9 @@ import {
   crewEntries,
   axisValueText,
   boothLabel,
-  formatDate,
   formatAudienceShort,
-  formatKickoff,
   formatMatchup,
-  formatViewers,
+  formatViewersProse,
   namedGameInfo,
   noRatingLine,
   stripNetworkNote,
@@ -34,6 +32,7 @@ import {
 import { makeGameTypeIcon } from './icons.js';
 import { networkMark, networkMarks, sortNetworks } from './network.js';
 import { crewBox } from './panel-parts.js';
+import { apKickoff } from './weekend.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
   FAMILY_COLORS,
@@ -84,7 +83,7 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
 
   const title = formatMatchup(data, i, { withScore: true });
 
-  const dateText = [formatDate(t.date[i]), formatKickoff(t.kickoff[i]) ?? 'Kickoff time not recorded'].join(' · ');
+  const dateText = apKickoff(t.date[i], t.kickoff[i], 'kickoff time not recorded', { year: true });
   const gameType = namedGameInfo(data, i);
 
   const primaryNetwork = data.lookups.networks[t.network[i]];
@@ -102,7 +101,7 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const crewLines = crew.map((entry) => `${entry.name} (${ROLE_PILL_TEXT[roleKey(entry.role)]})`);
   if (crewLines.length === 0) crewLines.push('Crew not recorded');
 
-  const viewersLine = data.rated[i] ? `Viewers: ${formatViewers(t.viewers[i])}` : noRatingLine(data, i);
+  const viewersLine = data.rated[i] ? `Viewers: ${formatViewersProse(t.viewers[i])}` : noRatingLine(data, i);
   // D-17: on Spread x with Excitement y the line shows both plotted measures,
   // the same form as the Date line. Excitement x cannot pair with Excitement y
   // (the D-11 swap), and Viewers y is unchanged.

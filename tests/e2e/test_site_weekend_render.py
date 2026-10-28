@@ -257,7 +257,7 @@ def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
     assert _style(wk_page, _cell("c"), "opacity") == "0.3"
     assert _style(wk_page, _cell("a"), "opacity") == "1"
     ring = _style(wk_page, _cell("a"), "boxShadow")
-    assert "rgb(35, 32, 27)" in ring and "rgb(251, 249, 245)" in ring
+    assert "rgb(30, 35, 33)" in ring and "rgb(245, 247, 246)" in ring
     assert "inset" in ring
     # No pick active: nothing fades or rings.
     _mount(wk_page, games)
@@ -309,7 +309,7 @@ def test_faded_cell_hides_the_hour_hairlines(wk_page: Page, theme: str) -> None:
 def test_ring_is_light_in_dark_theme(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a"), _known(key="b", home="B")], theme="dark", pass_keys=["a"])
     ring = _style(wk_page, _cell("a"), "boxShadow")
-    assert "rgb(236, 231, 223)" in ring and "rgb(29, 27, 24)" in ring
+    assert "rgb(229, 234, 232)" in ring and "rgb(25, 29, 28)" in ring
 
 
 def test_networks_pick_fades_whole_rows(wk_page: Page) -> None:
@@ -586,7 +586,7 @@ def test_tba_strip_cell_states(wk_page: Page, theme: str) -> None:
     assert wk_page.locator(f"{net_known} .wk-tail").inner_text() == "FOX"
     assert _style(wk_page, net_known, "backgroundColor") == pal["tint"]
     assert wk_page.locator(f"{net_unknown} .wk-tail").inner_text() == "Network TBA"
-    surface = {"light": "rgb(244, 240, 232)", "dark": "rgb(38, 35, 31)"}[theme]
+    surface = {"light": "rgb(235, 239, 237)", "dark": "rgb(33, 38, 37)"}[theme]
     assert _style(wk_page, net_unknown, "backgroundColor") == surface
     assert _style(wk_page, net_unknown, "boxShadow") != "none"
     box = wk_page.locator(net_known).bounding_box()
@@ -615,7 +615,9 @@ def test_compact_table_rows_booths_and_keys(wk_page: Page) -> None:
     ]
     _mount(wk_page, games)
     assert wk_page.locator("#wk-host .wk-compact-title").inner_text() == "ESPN+ and regional"
-    assert _style(wk_page, "#wk-host .wk-compact-title", "fontFamily").startswith('"Crimson Text"')
+    assert _style(wk_page, "#wk-host .wk-compact-title", "fontFamily").startswith(
+        '"Latin Modern Demi"'
+    )
     heads = wk_page.locator("#wk-host .wk-compact-table th").all_inner_texts()
     assert heads == ["Time", "Game", "Network", "Booth"]
     rows = wk_page.locator("#wk-host .wk-compact-table tbody tr")
@@ -667,8 +669,8 @@ def test_stamp_line_variants(wk_page: Page) -> None:
     }
     _mount(wk_page, games, model={"freshness": fresh})
     assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
-        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET · ESPN Press Room week 9 saved "
-        "Mon. Oct. 26 · Schedule updated Fri. Oct. 30, 6:00 pm ET"
+        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET; ESPN Press Room week 9 saved "
+        "Mon. Oct. 26; schedule updated Fri. Oct. 30, 6:00 pm ET"
     )
     assert wk_page.locator("#wk-host .wk-stamp").get_attribute("aria-live") == "off"
     only_506 = {"crews_506_saved_at": fresh["crews_506_saved_at"]}
@@ -704,8 +706,8 @@ def test_source_line_cfb_credits_and_links(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a")])
     line = wk_page.locator("#wk-host .wk-source")
     assert line.inner_text() == (
-        "Schedule: CollegeFootballData.com · Crews: 506 Sports and ESPN Press Room · "
-        "Networks: CollegeFootballData.com and 506 Sports"
+        "Schedule: CollegeFootballData.com; crews: 506 Sports and ESPN Press Room; "
+        "networks: CollegeFootballData.com and 506 Sports"
     )
     anchors = wk_page.locator("#wk-host .wk-source a")
     assert anchors.count() == 5
@@ -720,7 +722,7 @@ def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
     games = [_known(key="a", sport="nfl", networkId="cbs", networkName="CBS", family="cbs")]
     _mount(wk_page, games, model={"sport": "nfl"})
     text = wk_page.locator("#wk-host .wk-source").inner_text()
-    assert text == "Schedule: nflverse · Crews: 506 Sports"
+    assert text == "Schedule: nflverse; crews: 506 Sports"
     assert "CollegeFootballData" not in text and "Wikipedia" not in text
     _mount(
         wk_page,
@@ -728,7 +730,7 @@ def test_source_line_nfl_has_no_cfbd_credit(wk_page: Page) -> None:
         model={"sport": "nfl", "links": {"wikipedia": "https://en.wikipedia.org/wiki/Foo"}},
     )
     text = wk_page.locator("#wk-host .wk-source").inner_text()
-    assert text.endswith("Networks: Wikipedia (CC BY-SA 4.0)")
+    assert text.endswith("networks: Wikipedia (CC BY-SA 4.0)")
     href = wk_page.locator("#wk-host .wk-source a", has_text="Wikipedia").get_attribute("href")
     assert href == "https://en.wikipedia.org/wiki/Foo"
     # An unsafe href never becomes a link.
@@ -844,7 +846,7 @@ def test_phone_picks_fade_and_ring(phone_page: Page, theme: str) -> None:
     sel = lambda k: f'#wk-host .wk-item[data-wk-id="g:{k}"]'  # noqa: E731
     assert _style(phone_page, sel("f2"), "opacity") == "0.3"
     assert _style(phone_page, sel("f1"), "opacity") == "1"
-    ink = "rgb(35, 32, 27)" if theme == "light" else "rgb(236, 231, 223)"
+    ink = "rgb(30, 35, 33)" if theme == "light" else "rgb(229, 234, 232)"
     assert ink in _style(phone_page, sel("f1"), "boxShadow")
     phone_page.locator(sel("f2")).click()
     assert phone_page.evaluate("window.__wk.opened") == ["f2"]

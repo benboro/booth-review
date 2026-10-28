@@ -102,10 +102,11 @@ export const PILL_TEXT_COLOR = {
  * @type {{light: Record<string, string>, dark: Record<string, string>}}
  */
 export const FAMILY_COLORS = {
+  // Light FOX and CBS are the map-family values (Phase 26 panel F4): 3:1 or more on SURFACE.light.
   light: {
     disney: '#0072B2',
-    fox: '#009E73',
-    cbs: '#B77F00',
+    fox: '#009970',
+    cbs: '#B37C00',
     nbc: '#C972A2',
     cw: '#1D96DB',
     wbd: '#D55E00',
@@ -125,28 +126,28 @@ export const FAMILY_COLORS = {
 };
 
 /** UI chrome accent token per theme (search focus ring, active states, highlight outline). */
-export const ACCENT = { light: '#23201B', dark: '#ECE7DF' };
+export const ACCENT = { light: '#1E2321', dark: '#E5EAE8' };
 
 /** The --ink text token per theme: neutral marks and unmatched bar fills (D-04). */
-export const INK = { light: '#23201B', dark: '#ECE7DF' };
+export const INK = { light: '#1E2321', dark: '#E5EAE8' };
 
 /** Outline on enlarged (filter-passing) dots: black on light, ink on dark so it stays visible (D-08). */
-export const DOT_OUTLINE = { light: '#000000', dark: '#ECE7DF' };
+export const DOT_OUTLINE = { light: '#000000', dark: '#E5EAE8' };
 
 /** Result-vs-spread zero line: a step darker than DIVIDER gridlines, lighter than MUTED text (D-02). */
-export const ZERO_LINE = { light: '#CFC6B6', dark: '#5A554D' };
+export const ZERO_LINE = { light: '#C0C9C5', dark: '#56605C' };
 
 /** UI chrome divider/border token per theme. */
-export const DIVIDER = { light: '#E4DDD1', dark: '#3A3632' };
+export const DIVIDER = { light: '#DAE0DD', dark: '#333A38' };
 
 /**
  * Faint gold/brown tint behind each season's bowl and playoff span on the Date axis
- * (04.17 D-07). Light alpha must stay at or below 0.10 for CBS/Other contrast. Dark alpha
- * 0.07 (Phase 17 review F4, was 0.12) keeps every dark family at 3:1 or more on the band
- * over SURFACE (the "No public rating" strip, #322C21, Disney 3.04:1) and over PAGE_BG
- * (#2A241B, Disney 3.37:1).
+ * (04.17 D-07). Light alpha 0.05 (was 0.07 before the green-gray ground) keeps CBS and Other
+ * at 3:1 or more on the band over PAGE_BG (#F5F7F6; CBS 3.06:1, Other 3.01:1). Dark alpha 0.06
+ * (was 0.07) keeps every dark family at 3:1 or more on the band over SURFACE (the "No public
+ * rating" strip, #212625; Disney 3.05:1) and over PAGE_BG (#191D1C; Disney 3.39:1).
  */
-export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(212, 160, 60, 0.07)' };
+export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.05)', dark: 'rgba(212, 160, 60, 0.06)' };
 
 /**
  * "Bowls & CFP" label text: a darker tint of the band hue on light, a lighter one on dark
@@ -155,25 +156,25 @@ export const POSTSEASON_BAND = { light: 'rgba(166, 120, 40, 0.07)', dark: 'rgba(
 export const POSTSEASON_LABEL = { light: '#6E4A10', dark: '#E8BE6E' };
 
 /** UI chrome page background token per theme. */
-export const PAGE_BG = { light: '#FBF9F5', dark: '#1D1B18' };
+export const PAGE_BG = { light: '#F5F7F6', dark: '#191D1C' };
 
 /** UI chrome secondary-surface token per theme (rail, top bar, panel, table header). */
-export const SURFACE = { light: '#F4F0E8', dark: '#26231F' };
+export const SURFACE = { light: '#EBEFED', dark: '#212625' };
 
 /** The --muted text token per theme (axis ticks and zero lines; not a bar fill). */
-export const MUTED = { light: '#6A6358', dark: '#A59E94' };
+export const MUTED = { light: '#5A6460', dark: '#9EA8A4' };
 
 /**
  * Map land fill per theme (04.18 D-08, UI-SPEC "Color"): barely off the page background so
  * the states read as a faint base. DEFAULTED pending the user's close-out sign-off.
  */
-export const MAP_LAND = { light: '#F1EDE4', dark: '#2A2722' };
+export const MAP_LAND = { light: '#E8EDEA', dark: '#242A28' };
 
 /**
  * Map state outline per theme (04.18 D-08, UI-SPEC "Color"): muted, one step darker than
  * the land on light and lighter on dark. DEFAULTED pending the user's close-out sign-off.
  */
-export const MAP_OUTLINE = { light: '#C4C9D1', dark: '#4A453E' };
+export const MAP_OUTLINE = { light: '#BCC6C2', dark: '#46504D' };
 
 /** Edge-marker label text (04.18 D-15): the muted token, aliased so the Map can tune it alone. */
 export const MAP_MARKER_LABEL = MUTED;

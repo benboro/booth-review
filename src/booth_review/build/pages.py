@@ -29,10 +29,11 @@ from booth_review.transport.cache import atomic_write_bytes
 if TYPE_CHECKING:
     from booth_review.contract.models import Freshness, SiteData
 
-CREDIT_LINE_TEXT = (
+CREDIT_ITEMS: tuple[str, str, str] = (
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and "
-    "joined with crew and game data · Crews: 506 Sports · "
-    "Data provided by CollegeFootballData.com"
+    "joined with crew and game data",
+    "Crews: 506 Sports",
+    "Data provided by CollegeFootballData.com",
 )
 
 NAV: tuple[tuple[str, str], ...] = (
@@ -84,6 +85,14 @@ _GITHUB_BLOB_BASE = "https://github.com/benboro/booth-review/blob/main/"
 _EN_DASH = "\N{EN DASH}"
 
 
+def keep_tail_together(text: str) -> str:
+    """Bind "Week" to its number and the last two words together, so a narrow footer line never
+    leaves a lone "7" on its last row (the JS twin is `keepTailTogether` in modules/format.js)."""
+    bound = re.sub(r"\bWeek (\d)", "Week\u00a0\\1", text)
+    head, sep, tail = bound.rpartition(" ")
+    return f"{head}\u00a0{tail}" if sep else bound
+
+
 def freshness_stamps(freshness: Freshness) -> tuple[str, str]:
     """The two footer freshness lines (UI-SPEC Copywriting Contract)."""
     crews = (
@@ -110,27 +119,34 @@ def footer_html(freshness: Freshness) -> str:
     nav, both freshness stamps, and the verbatim D-16 credit line.
     """
     crews_stamp, viewership_stamp = freshness_stamps(freshness)
-    nav_html = " · ".join(f'<a href="{href}">{html.escape(label)}</a>' for label, href in NAV)
-    credit_html = (
-        'Viewership: <a href="https://ratingsreference.com" '
-        'rel="noopener noreferrer">RatingsReference.com</a> '
-        '(<a href="https://creativecommons.org/licenses/by/4.0/" '
-        'rel="noopener noreferrer">CC BY 4.0</a>), modified: filtered and '
-        "joined with crew and game data · Crews: "
-        '<a href="https://506sports.com" rel="noopener noreferrer">506 Sports</a> '
-        "· Data provided by "
-        '<a href="https://collegefootballdata.com" '
-        'rel="noopener noreferrer">CollegeFootballData.com</a>'
+    nav_html = " ".join(f'<a href="{href}">{html.escape(label)}</a>' for label, href in NAV)
+    credit_html = "\n".join(
+        (
+            '<span class="credit-item">Viewership: <a href="https://ratingsreference.com" '
+            'rel="noopener noreferrer">RatingsReference.com</a> '
+            '(<a href="https://creativecommons.org/licenses/by/4.0/" '
+            'rel="noopener noreferrer">CC BY 4.0</a>), modified: filtered and '
+            "joined with crew and game data</span>",
+            '<span class="credit-item">Crews: '
+            '<a href="https://506sports.com" rel="noopener noreferrer">506 Sports</a></span>',
+            '<span class="credit-item">Data provided by '
+            '<a href="https://collegefootballdata.com" '
+            'rel="noopener noreferrer">CollegeFootballData.com</a></span>',
+        )
     )
     type_html = (
-        'Type: <a href="fonts/OFL-crimson-text.txt">Crimson Text</a> '
-        "(copyright 2010 The Crimson Text Project Authors), "
+        'Type: <a href="fonts/GUST-FONT-LICENSE.txt">Latin Modern</a> '
+        "(copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+        "used under the GUST Font License; "
         '<a href="fonts/OFL-roboto.txt">Roboto</a> '
         "(copyright 2011 The Roboto Project Authors) and "
         '<a href="fonts/OFL-roboto-condensed.txt">Roboto Condensed</a> '
         "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
     )
-    freshness_line = f"{html.escape(crews_stamp)} · {html.escape(viewership_stamp)}"
+    freshness_line = keep_tail_together(
+        f"{html.escape(crews_stamp)}; "
+        f"{html.escape(viewership_stamp[0].lower() + viewership_stamp[1:])}"
+    )
     return (
         f'<nav aria-label="Site">{nav_html}</nav>'
         f'<p class="freshness">{freshness_line}</p>'
@@ -205,6 +221,15 @@ def _known_gaps_body(text: str) -> str:
     while lines and not lines[0].strip():
         lines = lines[1:]
     return _demote_headings("\n".join(lines))
+
+
+def _wrap_tables(rendered_html: str) -> str:
+    """Put each rendered Markdown table in a `.table-scroll` box, as the coverage tables are,
+    so a wide table scrolls inside its box on a phone instead of widening the whole page."""
+    opened = re.sub(
+        r"<table\b[^>]*>", lambda m: f'<div class="table-scroll">{m.group(0)}', rendered_html
+    )
+    return opened.replace("</table>", "</table></div>")
 
 
 def _rewrite_relative_md_links(rendered_html: str) -> str:
@@ -311,9 +336,9 @@ def render_methodology(
 
     combined = methodology_text.replace(_INCLUDE_MARKER, _known_gaps_body(known_gaps_text))
     renderer = markdown.Markdown(extensions=["tables", "toc"])
-    body_html = _rewrite_relative_md_links(renderer.convert(combined))
+    body_html = _wrap_tables(_rewrite_relative_md_links(renderer.convert(combined)))
     return page_html(
-        "Methodology · The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
+        "Methodology - The Broadcast Ledger", body_html, site.freshness, theme_script=theme_script
     )
 
 
@@ -416,7 +441,7 @@ def render_coverage(site: SiteData, *, theme_script: str | None = None) -> str:
         f"{quality_table}"
     )
     return page_html(
-        "Coverage · The Broadcast Ledger", body, site.freshness, theme_script=theme_script
+        "Coverage - The Broadcast Ledger", body, site.freshness, theme_script=theme_script
     )
 
 

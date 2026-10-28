@@ -36,6 +36,7 @@ from booth_review.build.named_games import (
     resolve_rivalry_games,
 )
 from booth_review.build.rivalries import load_rivalries
+from booth_review.build.serif_glyphs import check_serif_text, lookup_names
 from booth_review.build.shipped import (
     left_out_unrated_expr,
     network_rated_counts,
@@ -61,6 +62,7 @@ from booth_review.resolve.networks import (
     load_network_rarity,
     load_networks,
 )
+from booth_review.resolve.teams import load_team_crosswalk
 from booth_review.transport.cache import atomic_write_bytes
 
 if TYPE_CHECKING:
@@ -600,7 +602,14 @@ def build_site_data(
     ]
     conference_index = {name: i for i, name in enumerate(sorted(conference_is_fbs))}
 
-    teams = [{"name": name} for name in sorted(team_names)]
+    # A `cfbd` crosswalk row renames a CFBD spelling for display only (the okina in
+    # Hawai'i); the index order above stays the CFBD names' sorted order.
+    display_names = {
+        row.variant: row.canonical
+        for row in load_team_crosswalk(reference_directory)
+        if row.source == "cfbd"
+    }
+    teams = [{"name": display_names.get(name, name)} for name in sorted(team_names)]
     conferences = [
         {"name": name, "is_fbs": conference_is_fbs[name]} for name in sorted(conference_is_fbs)
     ]
@@ -971,10 +980,26 @@ def _contract_error_summary(exc: ValidationError) -> str:
     return f"site data failed the contract: {len(errors)} error(s): {'; '.join(parts)}{suffix}"
 
 
+def check_site_serif(site: SiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
+    lookups = site.lookups
+    for lookup, rows in (
+        ("teams", lookups.teams),
+        ("conferences", lookups.conferences),
+        ("bowls", lookups.bowls),
+        ("bowl_franchises", lookups.bowl_franchises),
+        ("rivalries", lookups.rivalries),
+        ("venues", lookups.venues),
+        ("people", lookups.people),
+    ):
+        check_serif_text(lookup_names(rows, "name"), where=f"site-data.json lookups.{lookup}")
+
+
 def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:
     """Write `processed/site-data.json`: compact JSON (",", ":" separators,
     sorted keys), atomically. Returns its vault-relative path.
     """
+    check_site_serif(site)
     payload = site.model_dump(mode="json")
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     atomic_write_bytes(paths.processed / "site-data.json", body)

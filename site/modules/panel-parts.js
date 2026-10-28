@@ -52,7 +52,7 @@ export function networksParagraph({ primary, others = [] }) {
   p.appendChild(document.createTextNode('Network: '));
   p.appendChild(networkMark(primary));
   if (others.length > 0) {
-    p.appendChild(document.createTextNode(' · Also on: '));
+    p.appendChild(document.createTextNode('; also on: '));
     others.forEach((net, pos) => {
       if (pos > 0) p.appendChild(document.createTextNode(' '));
       p.appendChild(networkMark(net));

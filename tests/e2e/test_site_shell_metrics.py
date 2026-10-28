@@ -17,7 +17,7 @@ pytestmark = pytest.mark.e2e
 
 WIDTHS = (1440, 1104, 1024, 768, 390)
 FONT_FILES = {
-    "crimson-text-latin-600-normal.woff2",
+    "lm-roman-demi-latin-600-normal.woff2",
     "roboto-latin-400-normal.woff2",
     "roboto-latin-600-normal.woff2",
     "roboto-condensed-latin-400-normal.woff2",
@@ -37,7 +37,7 @@ class Sport:
     # selection area takes the bar's place and the 8px gap runs to its summary line.
     bar: str
     below_bar: str
-    # Selection row top .. summary bottom is the 64px band.
+    # Selection row top .. summary bottom is the 64px band (CFB: the count line, 32px or 72px).
     band_top: str
     summary: str
 
@@ -51,8 +51,8 @@ CFB = Sport(
     "#chart-tabs",
     "#chart-module",
     "#toolbar",
-    "#selection-row",
-    "#selection-row",
+    "#selection-bar",
+    "#summary",
     "#summary",
 )
 NFL = Sport(
@@ -63,8 +63,8 @@ NFL = Sport(
     "#nfl-chart-tabs",
     "#nfl-chart-area .nfl-chart-module",
     "#nfl-toolbar",
-    "#nfl-selection-row",
-    "#nfl-selection-row",
+    "#nfl-selection-bar",
+    "#nfl-selection-bar",
     "#nfl-summary",
 )
 MLB = Sport(
@@ -158,8 +158,12 @@ def test_band_is_64px_with_zero_one_and_four_people(
     _open(page, both_site_url, sport, query)
     if people:
         chip_sel = "#chips li" if sport_key == "cfb" else "#nfl-chips li"
-        assert page.locator(chip_sel).count() == count
-    assert _band_height(page, sport) == pytest.approx(64, abs=0.5)
+        # CFB shows person chips on the count line only in compare mode (two or more here).
+        shown = count if sport_key != "cfb" or count > 1 else 0
+        assert page.locator(chip_sel).count() == shown
+    # NFL's count line is the 32px band under an 8px lead-in, at every width and pick count.
+    expected = (32 if width >= 1104 else 72) if sport_key == "cfb" else 40
+    assert _band_height(page, sport) == pytest.approx(expected, abs=0.5)
 
 
 def test_mlb_selection_area_is_32px_with_summary_8px_below(
@@ -374,17 +378,9 @@ def test_no_overlap_between_shell_regions_and_no_horizontal_scroll(
     sport = SPORT_BY_KEY[sport_key]
     page.set_viewport_size({"width": width, "height": 900})
     _open(page, both_site_url, sport)
-    if sport.key == "mlb":
-        regions = ["#topbar", sport.bar, sport.summary, sport.tab_row, sport.module]
-    else:
-        regions = [
-            "#topbar",
-            sport.bar,
-            sport.below_bar,
-            sport.summary,
-            sport.tab_row,
-            sport.module,
-        ]
+    # The selection bar wraps its count line (NFL's bar is the count line's parent too), so only
+    # the line itself is compared.
+    regions = ["#topbar", sport.bar, sport.summary, sport.tab_row, sport.module]
     for i in range(len(sport.tabs)):
         _select_tab(page, sport, i)
         boxes: list[dict[str, Any]] = page.evaluate(_BOXES, regions)
@@ -403,18 +399,18 @@ def test_cfb_filter_bar_row_count_is_recorded(
     both_guarded_page: Page, both_site_url: str, width: int, record_property: Any
 ) -> None:
     """UI-SPEC asks for the CFB filter bar's row count at five widths; recorded, and
-    bounded (the ten triggers wrap onto at most three rows)."""
+    exact: one row from 1280px, two below (Round 3b, layout depends only on width)."""
     page = both_guarded_page
     page.set_viewport_size({"width": width, "height": 900})
     _open(page, both_site_url, CFB)
     rows = page.evaluate(
-        """new Set([...document.querySelectorAll('#toolbar > .filter-trigger')]
+        """new Set([...document.querySelectorAll('#toolbar .fgroup-row .filter-trigger')]
           .filter((e) => e.getClientRects().length > 0)
           .map((e) => Math.round(e.getBoundingClientRect().top))).size"""
     )
     record_property("cfb_filter_bar_rows", rows)
     print(f"CFB_ROWS width={width} rows={rows}")
-    assert 1 <= rows <= 3
+    assert rows == (1 if width >= 1280 else 2)
 
 
 # ---------------------------------------------------------------------------
@@ -450,7 +446,7 @@ _WALK = """() => {
   return out;
 }"""
 
-ALLOWED_SIZES = {12.0, 14.0, 20.0, 24.0}
+ALLOWED_SIZES = {12.0, 14.0, 20.0, 22.0, 27.0}
 ALLOWED_WEIGHTS = {"400", "600"}
 
 
@@ -459,7 +455,7 @@ ALLOWED_WEIGHTS = {"400", "600"}
 def test_type_scale_weights_and_requests_across_every_view(
     both_guarded_page: Page, both_site_url: str, sport_key: str, width: int
 ) -> None:
-    """V3: no text below 12px, only 12/14/20/24 (plus 16px inputs in the phone sheet), only
+    """V3: no text below 12px, only 12/14/20/22/27 (plus 16px inputs in the phone sheet), only
     weights 400 and 600, only the four font files requested, and nothing off-origin."""
     page = both_guarded_page
     sport = SPORT_BY_KEY[sport_key]

@@ -5,8 +5,7 @@
  * off ships no sports/nfl/ files, so an import from there would 404.
  */
 import { MONTHS } from '../../modules/format.js';
-
-const WEEKDAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+import { dayLabel } from '../../modules/weekend.js';
 
 /** Splits 'YYYY-MM-DD' into a UTC date plus its parts (no timezone shift). */
 function parts(ymd) {
@@ -20,8 +19,7 @@ export function dateShortText(row) {
   return `${MONTHS[m - 1]} ${d}, ${y}`;
 }
 
-/** 'Friday, Apr 3, 2026'. */
-export function dateLongText(row) {
-  const { dow } = parts(row.date);
-  return `${WEEKDAYS_LONG[dow]}, ${dateShortText(row)}`;
+/** AP style with the year, as CFB and NFL write it: 'Fri. April 3, 2026'. MLB has no kickoff time. */
+export function dateApText(row) {
+  return `${dayLabel(row.date)}, ${row.date.slice(0, 4)}`;
 }

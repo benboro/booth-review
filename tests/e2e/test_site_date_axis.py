@@ -340,9 +340,9 @@ def test_axis_line_shows_spread_and_excitement_on_date(app_page: Page) -> None:
     out = app_page.evaluate(_COPY_JS)
     assert out["label"] == "Date"
     for row in out["rows"]:
-        assert row["date"] == f"{row['spread']} · {row['exc']}"
-    assert out["rows"][3]["date"] == "Spread: not available · Excitement: 4.1"
-    assert out["rows"][2]["date"].endswith(" · Excitement (CFBD): not available")
+        assert row["date"] == f"{row['spread']}; {row['exc']}"
+    assert out["rows"][3]["date"] == "Spread: not available; Excitement: 4.1"
+    assert out["rows"][2]["date"].endswith("; Excitement (CFBD): not available")
 
 
 def test_axis_url_round_trip_and_allowlist(app_page: Page) -> None:

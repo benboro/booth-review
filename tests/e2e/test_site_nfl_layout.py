@@ -210,7 +210,7 @@ _FONTS_JS = """
 
 @pytest.mark.parametrize("width", WIDTHS)
 @pytest.mark.parametrize("view", VIEWS)
-def test_font_sizes_are_12_14_20_only(
+def test_font_sizes_are_12_14_22_only(
     pg: Page,
     open_nfl_app: Callable[..., None],
     serve_nfl_crews: Callable[[Page], None],
@@ -221,7 +221,7 @@ def test_font_sizes_are_12_14_20_only(
     _open(pg, open_nfl_app, f"&view={view}", width)
     sizes: list[str] = pg.evaluate(_FONTS_JS, f"#nfl-view-{view}, .nfl-chart-module .module-head")
     assert sizes
-    assert set(sizes) <= {"12px", "14px", "20px"}, sizes
+    assert set(sizes) <= {"12px", "14px", "22px"}, sizes  # 22px: the Latin Modern heading step
 
 
 # ------------------------------------------------------------------ V15-11

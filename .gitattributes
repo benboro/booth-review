@@ -9,3 +9,6 @@ site/vendor/*.js -text linguist-vendored
 # Vendored fonts are binary (digests pinned in tests/test_site_assets.py); logos are LF text.
 *.woff2 binary
 *.svg text eol=lf
+
+# The GUST licence text is pinned byte-for-byte (CRLF as published); never normalize it.
+site/fonts/GUST-FONT-LICENSE.txt -text

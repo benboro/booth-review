@@ -61,18 +61,23 @@ _TRADEMARK_LINE = (
 )
 
 _TYPE_LINE = (
-    "Type: Crimson Text (copyright 2010 The Crimson Text Project Authors), "
-    "Roboto (copyright 2011 The Roboto Project Authors) and "
+    "Type: Latin Modern (copyright 2003, 2009 B. Jackowski and J. M. Nowacki), "
+    "used under the GUST Font License; Roboto "
+    "(copyright 2011 The Roboto Project Authors) and "
     "Roboto Condensed (copyright 2011 Google Inc.), "
     "used under the SIL Open Font License 1.1."
 )
 
-_RT02_TEXT = (
+# One block per source (checker gap 2); the line's text is the blocks joined by a space.
+_RT02_ITEMS = [
     "Viewership: RatingsReference.com (CC BY 4.0), modified: filtered and joined with crew and "
-    "game data · Schedules and win-probability measures: nflverse (CC BY 4.0), modified: "
-    "derived and joined with crew and viewership data · Scheduling changes: Wikipedia "
-    "(CC BY-SA 4.0) · Crews and networks: 506 Sports"
-)
+    "game data",
+    "Schedules and win-probability measures: nflverse (CC BY 4.0), modified: "
+    "derived and joined with crew and viewership data",
+    "Scheduling changes: Wikipedia (CC BY-SA 4.0)",
+    "Crews and networks: 506 Sports",
+]
+_RT02_TEXT = " ".join(_RT02_ITEMS)
 
 _BY = "https://creativecommons.org/licenses/by/4.0/"
 _RT02_LINKS = [
@@ -109,6 +114,7 @@ def test_footer_swap_and_restore(cfb: Page) -> None:
     # RT-02 in full: exact text, link text and targets, rel on every link.
     credit = cfb.locator("#site-footer .credit-line")
     assert _norm(credit.inner_text()) == _RT02_TEXT
+    assert [_norm(t) for t in credit.locator(".credit-item").all_inner_texts()] == _RT02_ITEMS
     anchors = credit.locator("a")
     assert anchors.evaluate_all("els => els.map(e => [e.textContent, e.getAttribute('href')])") == [
         list(pair) for pair in _RT02_LINKS
@@ -299,14 +305,14 @@ def test_headline_shows_count_and_season_range(
     open_nfl_app(page)
     seasons = nfl_fixture_raw["games"]["season"]
     lo, hi = min(seasons), max(seasons)
-    expect = f"{len(seasons):,} games · {lo}–{hi}"
+    expect = f"{len(seasons):,} games, {lo}–{hi}"
     page.wait_for_function(
         "t => document.querySelector('#nfl-headline')?.textContent === t", arg=expect
     )
     assert page.locator("#nfl-chart-area .module-head h2#nfl-headline").count() == 1
     inner = [s for s in seasons if lo <= s <= lo + 1]
     page.evaluate("p => window.__nflTestHooks.setState(p)", {"seasons": [lo, lo + 1]})
-    want = f"{len(inner):,} {'game' if len(inner) == 1 else 'games'} · {lo}–{lo + 1}"
+    want = f"{len(inner):,} {'game' if len(inner) == 1 else 'games'}, {lo}–{lo + 1}"
     page.wait_for_function(
         "t => document.querySelector('#nfl-headline').textContent === t", arg=want
     )
@@ -322,7 +328,7 @@ def test_headline_shows_count_and_season_range(
         assert page.locator("#nfl-headline").is_visible()
         text = page.locator("#nfl-headline").text_content() or ""
         if title is None:
-            assert " games · " in text or " game · " in text
+            assert " games, " in text or " game, " in text
         else:
             assert text == title
 
@@ -394,7 +400,8 @@ def test_booth_chip_caption_and_empty(
     assert f"No games match the current filters for {label}." in empty
     # The remove button clears the booth.
     page.evaluate("window.__nflTestHooks.setState({ seasons: [2024, 2026] })")
-    page.locator("#nfl-chips .chip-remove").click()
+    # Desktop hides the chips (answer 8); the remove button is the phone strip's, so click it directly.
+    page.locator("#nfl-chips .chip-remove").dispatch_event("click")
     assert page.locator("#nfl-chips .chip").count() == 0
     assert page.evaluate("window.__nflTestHooks.getState().booths") == []
 
@@ -403,13 +410,13 @@ def test_booth_chip_caption_and_empty(
 
 
 @pytest.mark.parametrize("view", ["special", "crews", "viewership", "scatter"])
-def test_selection_row_and_booths_on_every_tab(
+def test_count_line_and_booths_on_every_tab(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
 ) -> None:
     page = nfl_guarded_page
     open_nfl_app(page, f"?sport=nfl&view={view}")
-    # The selection row is always rendered, with Clear all filters at its right end.
-    row = page.locator("#nfl-selection-row")
+    # The count line is always rendered, with Clear all filters at its right end.
+    row = page.locator("#nfl-summary-band .sum-right")
     assert row.is_visible()
     clear = page.locator("#nfl-clear-filters")
     assert clear.is_visible()

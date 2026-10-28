@@ -66,7 +66,11 @@ _SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad4
 # #theme-slot toggle in the header.
 # Re-pinned at Phase 17 review: theme-init.js re-applies the stored theme on a back/forward
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
-_COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070411c"
+# Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
+# Re-pinned at Phase 26 Plan 05: footer credit blocks, spaced nav, semicolon freshness, title.
+# Re-pinned at Phase 26 Plan 10 (sign-off): the freshness line binds "Week" to its number and the
+# last two words with no-break spaces.
+_COVERAGE_SHA256 = "c0475d22f70cef579abe5008fa44e1f4996e12313a291e250ffbecc95dd720e6"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -78,7 +82,7 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # Re-pinned after the Phase 13 checkpoint: the Viewers head carries class="num" so it aligns
 # right like its cells (1 changed line).
 # Re-pinned after the Phase 13 panel review: #theme-slot drops aria-hidden (1 changed line).
-# Re-pinned for the toolbar-fit.js preload in <head> (1 added line).
+# Re-pinned for the toolbar measuring script's preload in <head> (1 added line).
 # Re-pinned at Phase 14 Plan 09: #pick-status and #matched-subtitle seats (crew pick).
 # Re-pinned at Phase 17 Plan 06: theme-init.js head script and #theme-toggle button markup.
 # Re-pinned at Phase 17.1 Plan 03: Network colors switch markup removed from #legend-row.
@@ -89,7 +93,15 @@ _COVERAGE_SHA256 = "f486fd2361993d9323d36870d0d7e23f1150efeef31c2e829cd53b7d6070
 # approved by the user at plan 12 sign-off ("Fix both items").
 # Re-pinned at Phase 18 Plan 13 (F1): the week label column moves the index only through its
 # site-data cache-bust hash. Re-pinned again for F7's scheduled crew columns, the same way.
-_INDEX_PRE_PHASE_SHA256 = "691e9407679b73d24bf6eae9117df8a7e7010d42f7809d8ab252678b8e1fd735"
+# Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces the old serif (1 changed line).
+# Re-pinned at Phase 26 Plan 05: the page title takes a colon (1 changed line).
+# Re-pinned at Phase 26 Plan 06: the ten CFB filter triggers move into three .fgroup wrappers.
+# Re-pinned at Phase 26 Plan 07: the selection row goes, #summary gains .sum-left and .sum-right,
+# and the phone changed-filter chips move into the Filters sheet.
+# Re-pinned at Phase 26 Plan 08: the retired toolbar measuring script's preload and script tag
+# removed (2 removed lines).
+# Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
+_INDEX_PRE_PHASE_SHA256 = "11b5b64019f60fbdbb336b771c400e243a2dbaac8098c1445cc574f7dc9be767"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

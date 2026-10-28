@@ -18,11 +18,11 @@ pytestmark = pytest.mark.e2e
 
 OpenApp = Callable[[Page, str], None]
 
-PAGE_BG = "#1D1B18"
-GRID = "#3A3632"
-MUTED = "#A59E94"
-SURFACE = "#26231F"
-INK = "#ECE7DF"
+PAGE_BG = "#191D1C"
+GRID = "#333A38"
+MUTED = "#9EA8A4"
+SURFACE = "#212625"
+INK = "#E5EAE8"
 
 _PALETTE_JS = """
 async () => {
@@ -68,7 +68,7 @@ def test_scatter_tooltip_is_dark_ink_on_surface(guarded_page: Page, open_app: Op
         "(() => { const t = document.getElementById('chart-tooltip');"
         " const s = getComputedStyle(t); return [s.backgroundColor, s.color]; })()"
     )
-    assert tip == [rgb(SURFACE), rgb(INK)]
+    assert tip == [rgb(PAGE_BG), rgb(INK)]  # T3: the tooltip sits on the page colour
     assert white_box_offenders(guarded_page) == []
 
 
@@ -87,7 +87,7 @@ def test_strips_and_reset_zoom_in_dark(guarded_page: Page, open_app: OpenApp) ->
         "(() => { const s = getComputedStyle(document.getElementById('reset-zoom'));"
         " const r = getComputedStyle(document.documentElement);"
         " return [s.color, s.borderTopColor,"
-        " r.getPropertyValue('--ink').trim(), r.getPropertyValue('--rule-strong').trim(),"
+        " r.getPropertyValue('--ink').trim(), r.getPropertyValue('--rule').trim(),"
         " r.getPropertyValue('--disabled').trim()]; })()"
     )
     # At the home range Reset zoom is disabled, so its label takes --disabled.
@@ -130,7 +130,7 @@ def test_legend_dots_pills_and_network_dots_repaint_without_reload(
     set_theme(guarded_page, "dark")
     legend = guarded_page.evaluate(
         "Array.from(document.querySelectorAll('#legend-chips .legend-chip')).map(c =>"
-        " [c.dataset.family, getComputedStyle(c.querySelector('.legend-dot')).backgroundColor])"
+        " [c.dataset.family, getComputedStyle(c.querySelector('.legend-dot')).borderTopColor])"
     )
     assert legend
     for family, color in legend:
@@ -193,8 +193,8 @@ _MAP_TRACES = """() => document.getElementById('map-chart').data.map(
 _MAP_IMAGES = (
     "() => (document.getElementById('map-chart').layout.images || []).map((i) => i.source)"
 )
-MAP_LAND = "#2A2722"
-MAP_OUTLINE = "#4A453E"
+MAP_LAND = "#242A28"
+MAP_OUTLINE = "#46504D"
 MAP_NEUTRAL = "#8B8377"
 
 

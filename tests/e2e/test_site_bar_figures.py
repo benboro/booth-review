@@ -555,7 +555,7 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
             accent: P.SPECIAL.light,
             accentMix: P.mixHex(P.SPECIAL.light, P.PAGE_BG.light, 0.55),
             mainTones: F.barTones({ family: null, mainFamily: 'fox' }, 'light'),
-            mainMix: P.mixHex('#009E73', P.PAGE_BG.light, 0.55),
+            mainMix: P.mixHex('#009970', P.PAGE_BG.light, 0.55),
           };
         }"""
     )
@@ -573,7 +573,7 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
     assert out["plainTones"] == {"a": out["heroInk"], "b": out["heroMix"]}
     assert out["matchedTones"] == {"a": "#1B4F5C", "b": out["accentMix"]}
     assert out["accent"] == "#1B4F5C"
-    assert out["mainTones"] == {"a": "#009E73", "b": out["mainMix"]}  # D-31
+    assert out["mainTones"] == {"a": "#009970", "b": out["mainMix"]}  # D-31
 
 
 def test_channel_shades(guarded_page: Page, site_url: str) -> None:
@@ -774,16 +774,18 @@ def test_rendered_accent_matches_css_token(
 
 def _end_markers(page: Page, figure: dict[str, Any], fills: list[str], axis: str = "x") -> None:
     """UI-SPEC ranked bars: each row with games has a filled circle in the bar colour, a --bg
-    2px ring, its count centred in 600 text readable on the fill, and the raw value in a
-    right-aligned column (SHELL-06)."""
+    2px ring and its count centred in 600 text readable on the fill. The count is not repeated
+    in a right-hand value column (sign-off 2026-10-27, brief section 4)."""
     layout = figure["layout"]
     anns = layout["annotations"]
     markers = [a for a in anns if a.get("name") == "total"]
-    values = [a for a in anns if a.get("name") == "value"]
+    assert not [a for a in anns if a.get("name") == "value"], (
+        "the marker's count repeats at the right"
+    )
     circles = layout["shapes"]
     assert markers, "ranked bars drew no end markers"
     assert len(circles) == len(markers)
-    assert all(a["captureevents"] is False for a in markers + values)
+    assert all(a["captureevents"] is False for a in markers)
     page_bg = page.evaluate("async () => (await import('./modules/palette.js')).PAGE_BG.light")
     for shape, anno in zip(circles, markers, strict=True):
         assert shape["type"] == "circle" and shape["name"] == "end-marker"
@@ -800,9 +802,6 @@ def _end_markers(page: Page, figure: dict[str, Any], fills: list[str], axis: str
             [anno["font"]["color"], shape["fillcolor"]],
         )
         assert ratio >= 4.5, (anno["text"], anno["font"]["color"], shape["fillcolor"])
-    for v in values:  # the raw value column: right-aligned at the plot's right edge
-        assert (v["xref"], v["x"], v["xanchor"]) == ("paper", 1, "right")
-        assert v["font"]["size"] == 14
 
 
 def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
@@ -817,8 +816,8 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert any(v == 0 for v in rated["x"]) and any(v > 0 for v in unrated["x"])
     # D-31: Northfield's games are all net-a (Disney), so announcer bars are Disney blue.
     # (the crews of the unrated FOX games take the FOX family's green)
-    assert set(rated["marker"]["color"]) == {"#0072B2", "#009E73"}
-    assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,158,115,0.25)"}
+    assert set(rated["marker"]["color"]) == {"#0072B2", "#009970"}
+    assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,153,112,0.25)"}
     # Both parts carry a 1.5px border in the full tone, so they look equally thick (notes-2 #2);
     # a zero-length part has border width 0.
     for trace, xs in ((rated, rated["x"]), (unrated, unrated["x"])):
@@ -839,12 +838,13 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert layout["dragmode"] is False
     assert figure["config"]["displayModeBar"] is False
     assert layout["height"] == n * 32 + 72
+    assert layout["margin"]["r"] == 16  # no value column: the end markers carry each total
     annos = layout["annotations"]
     assert all(a["captureevents"] is True for a in annos[:n])
-    # Row labels, then an end marker per row with games (D-29), then the value column.
+    # Row labels, then an end marker per row with games (D-29); no value column after them.
     totals = [a["text"] for a in annos[n:] if a["name"] == "total"]
     assert totals == [str(r["total"]) for r in rows if r["total"] > 0]
-    assert [a["text"] for a in annos[n:] if a["name"] == "value"] == [str(r["total"]) for r in rows]
+    assert [a["name"] for a in annos[n:]] == ["total"] * len(totals)
     _end_markers(guarded_page, figure, rated["marker"]["color"])
     assert "transition" not in layout
 
@@ -907,13 +907,13 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert [a["captureevents"] for a in layout["annotations"][:n]] == [
         r["target"] is not None for r in rows
     ]
-    assert all(a["name"] in ("total", "value") for a in layout["annotations"][n:])
+    assert all(a["name"] == "total" for a in layout["annotations"][n:])
     _end_markers(guarded_page, figure, [tones[0]] * n)
 
 
 _MAIN_FAMILY_LIGHT = [
-    "#009E73", "#8B8B8B", "#0072B2", "#009E73", "#0072B2",
-    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#000000", "#009E73",
+    "#009970", "#8B8B8B", "#0072B2", "#009970", "#0072B2",
+    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#000000", "#009970",
 ]  # fmt: skip
 
 
@@ -979,8 +979,7 @@ def test_stacked_totals_on_bars(
         assert a["x"] == int(a["text"])
         assert a["xanchor"] == "center" and a["showarrow"] is False
         assert a["captureevents"] is False
-    values = [a for a in annos[n:] if a["name"] == "value"]
-    assert [a["text"] for a in values] == [str(r["total"]) for r in out["model"]["rows"]]
+    assert not [a for a in annos[n:] if a["name"] == "value"]
     simple = _figure(guarded_page, site_url, {"school": ["northfield"]})
     simple_totals = [
         a for a in simple["figure"]["layout"]["annotations"] if a.get("name") == "total"
@@ -1056,15 +1055,15 @@ def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> Non
     out = _figure(guarded_page, site_url, {"school": ["northfield"], "by": "network"})
     first = out["figure"]["traces"][0]
     # Shade 0 is each row's family color: ABC/ESPN blue, FOX/FS1/BTN green.
-    assert set(first["marker"]["color"]) == {"#0072B2", "#009E73"}
-    assert set(first["marker"]["line"]["color"]) == {"#0072B2", "#009E73"}  # border in its own tone
+    assert set(first["marker"]["color"]) == {"#0072B2", "#009970"}
+    assert set(first["marker"]["line"]["color"]) == {"#0072B2", "#009970"}  # border in its own tone
 
 
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"]}, env=_PHONE)
     layout = out["figure"]["layout"]
-    # Labels sit above the bars, so the left margin is 8; the right margin holds the value column.
-    assert layout["margin"]["l"] == 8 and layout["margin"]["r"] > 8
+    # Labels sit above the bars, so the left margin is 8; with no value column the right is 8 too.
+    assert layout["margin"]["l"] == 8 and layout["margin"]["r"] == 8
     n = len(out["model"]["rows"])
     assert layout["height"] == n * 44 + 72
     labels = layout["annotations"][:n]
@@ -1138,7 +1137,7 @@ def test_butterfly_stacked_figure_matches_bars_builder(guarded_page: Page, site_
     assert figure["layout"]["uniformtext"] == {"mode": "hide", "minsize": 14}
     assert {t["xaxis"] for t in figure["traces"]} == {"x", "x2", "x3", "x4", "x5", "x6"}
     for overlay in _on(figure, "x3") + _on(figure, "x4"):
-        assert overlay["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28 (--bg gap)
+        assert overlay["marker"]["line"] == {"width": 3, "color": "#F5F7F6"}  # D-28 (--bg gap)
     for text in _on(figure, "x5") + _on(figure, "x6"):
         assert text["textposition"] == "inside"
     for piece in _on(figure, "x") + _on(figure, "x2"):
@@ -1631,7 +1630,7 @@ def test_family_stack_figure_shape(
         line = t["marker"]["line"]  # 1.5px border in the piece's own shade (notes-2 #2)
         assert line["width"] == [1.5 if v > 0 else 0 for v in t["x"]]
     colors = {c for t in pieces for c in t["marker"]["color"] if c.startswith("#")}
-    assert colors == {"#0072B2", "#66AAD1", "#009E73"}  # net-a, net-e shade 1, FOX family
+    assert colors == {"#0072B2", "#66AAD1", "#009970"}  # net-a, net-e shade 1, FOX family
     assert {c for t in pieces for c in t["marker"]["line"]["color"]} == colors
     assert all(
         c.startswith("rgba(") and c.endswith(",0.25)")
@@ -1641,7 +1640,7 @@ def test_family_stack_figure_shape(
     )
     for k, t in enumerate(overlays):
         assert t["marker"]["color"] == _TRANSPARENT
-        assert t["marker"]["line"] == {"width": 3, "color": "#FBF9F5"}  # D-28
+        assert t["marker"]["line"] == {"width": 3, "color": "#F5F7F6"}  # D-28
         assert t["customdata"][0] == {"r": 0, "s": k, "side": None}
         assert t["x"][0] == (segs[k]["count"] if k < len(segs) else 0)
         assert not any(t.get("text", []))
@@ -1738,7 +1737,7 @@ def test_conference_stack_still_uses_stack_traces(guarded_page: Page, site_url: 
     assert all(t["hoverinfo"] in ("none", "skip") for t in traces)
     assert {c for t in _on(out["figure"], "x") for c in t["marker"]["line"]["color"]} <= {
         "#1B4F5C",
-        "#809CA1",
+        "#7D9BA1",
     }  # the accent pair: a pick is active
 
 
@@ -1804,7 +1803,7 @@ def test_rendered_family_segments_align_with_channel_pieces(
     # 7 + 4 (Bars) and 13 + 6 (Butterfly) pieces; one overlay per announcer segment.
     segment_count = sum(len(segs) for segs in expected.values())
     assert (n_pieces, n_over) == ((11, segment_count) if fn == "barsModel" else (19, segment_count))
-    bg = {"light": "#FBF9F5"}[theme]
+    bg = {"light": "#F5F7F6"}[theme]
     for key, segs in expected.items():
         if not segs:
             assert key not in groups
@@ -2093,15 +2092,8 @@ def test_rendered_stacked_totals_sit_past_the_bar_end(
         if fn != "barsModel":
             assert not any(_overlaps(anno, bar) for bar in out["bars"])
         assert not any(_overlaps(anno, other) for other in others)
-    if fn == "barsModel":  # the value column is right-aligned: every value ends at one x
-        values = [
-            by_index[i]
-            for i, t in enumerate(out["figAnnos"])
-            if i >= first and t["name"] == "value"
-        ]
-        assert len(values) == n
-        assert max(v["r"] for v in values) - min(v["r"] for v in values) <= 1
-        assert all(v["r"] <= out["gdRight"] for v in values)
+    if fn == "barsModel":  # the end marker carries the count: no value column at the right
+        assert not [t for i, t in enumerate(out["figAnnos"]) if i >= first and t["name"] == "value"]
 
 
 def test_rendered_unrated_part_click_resolves_like_the_rated_part(

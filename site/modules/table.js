@@ -107,7 +107,7 @@ function buildSourceCell(data, i) {
   const rrUrls = t.rr_urls[i];
   if (figureSourceOf(data, i) !== 'rr' || rrUrls.length === 0) return td;
 
-  td.appendChild(document.createTextNode(' · '));
+  td.appendChild(document.createTextNode('; '));
 
   rrUrls.forEach((url, idx) => {
     if (idx > 0) td.appendChild(document.createTextNode(' '));

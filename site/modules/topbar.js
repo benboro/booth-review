@@ -6,8 +6,10 @@
  *
  * D-21: the search combobox lives in the toolbar's Announcers popover
  * (`#pop-announcers`/`#filter-announcers`); the chips, toggles, and summary
- * live in `#selection-bar`'s `#selection-row` (always rendered; with no one
- * selected it holds only Clear all filters) below the toolbar.
+ * live in `#selection-bar`'s count line `#summary`: the count and detail on
+ * the left, the actions in `.sum-right` (person chips in compare mode, the
+ * toggles, Clear all filters last). On a phone filters.js moves the chips and
+ * toggles into the Filters panel's people strip.
  *
  * D-28: `#person-results` is an Excel AutoFilter-style multi-select list --
  * every person is always rendered (one `<li role="option">` per person,
@@ -35,6 +37,7 @@
  * always land in the DOM via textContent.
  */
 
+import { PHONE_QUERY } from './breakpoints.js';
 import { searchPeople } from './data.js';
 import { MAX_COMPARE } from './select.js';
 import { crewPickNames, summaryCopy } from './format.js';
@@ -223,9 +226,9 @@ export function initTopbar({ data, getState, setState }) {
   els = {
     input: document.getElementById('person-search'),
     results: document.getElementById('person-results'),
-    selectionRow: document.getElementById('selection-row'),
+    summary: document.getElementById('summary'),
     chips: document.getElementById('chips'),
-    toggleGroup: document.querySelector('#selection-row .toggle-group'),
+    toggleGroup: document.querySelector('#summary .toggle-group'),
     compareToggle: document.getElementById('compare-toggle'),
     compareHelp: document.getElementById('compare-help'),
     togetherToggle: document.getElementById('together-toggle'),
@@ -301,11 +304,19 @@ export function initTopbar({ data, getState, setState }) {
   els.clearSelection.addEventListener('click', () => {
     setState({ people: [], compare: false, together: false, crew: null });
   });
+
+  // Crossing the phone width changes which parts render (chips and toggles live in the panel
+  // strip). app.js re-runs the whole render on that change, which includes renderTopbar; a
+  // second, topbar-only render here ran after it and put the all-games count back over This
+  // weekend's "N of M games match".
 }
 
 /** Renders the chips list in selection order. */
-function renderChips(data, state) {
-  const items = state.people.map((id, position) => {
+function renderChips(data, state, phone) {
+  // Person chips show on the count line only in compare mode (the Announcers entry then reads
+  // "N people", so each name appears once); the phone panel always lists them.
+  const showPeople = phone || state.compare;
+  const items = (showPeople ? state.people : []).map((id, position) => {
     const idx = data.personIndexById.get(id);
     const person = data.lookups.people[idx];
 
@@ -341,6 +352,12 @@ function renderChips(data, state) {
   });
   const names = crewPickNames(data, state);
   if (state.crew != null && names.length > 0) items.push(buildCrewChip(names));
+  if (phone && items.length === 0) {
+    const none = document.createElement('li');
+    none.className = 'chip-none';
+    none.textContent = 'No one picked';
+    items.push(none);
+  }
   els.chips.replaceChildren(...items);
 }
 
@@ -378,7 +395,9 @@ function buildCrewChip(names) {
 function renderToggles(state) {
   els.compareToggle.setAttribute('aria-pressed', String(state.compare));
   const overLimit = state.people.length > MAX_COMPARE;
-  els.compareToggle.disabled = overLimit;
+  // On a phone the three buttons are always present in the panel's strip and idle without a pick.
+  const idle = window.matchMedia(PHONE_QUERY).matches && state.people.length === 0;
+  els.compareToggle.disabled = overLimit || idle;
   els.compareHelp.textContent = overLimit ? `${BASE_COMPARE_HELP}${OVER_LIMIT_SUFFIX}` : BASE_COMPARE_HELP;
   // The helper text moved from a visible paragraph to an aria-describedby
   // span (D-21, to keep the chip row compact); a `title` tooltip keeps the
@@ -519,19 +538,26 @@ function renderPersonFacets(state, view) {
 }
 
 /** Pure DOM update from the current state/view, called every render cycle. */
-export function renderTopbar({ data, state, view }) {
+export function renderTopbar(ctx) {
+  const { data, state, view } = ctx;
   // The row always renders (it holds Clear all filters); only its person parts hide.
   const noPeople = state.people.length === 0;
   const noPick = noPeople && state.crew == null;
-  els.chips.hidden = noPick;
+  const phone = window.matchMedia(PHONE_QUERY).matches;
+  // Phone: the strip always holds the chips row and the three buttons (fixed height), so nothing
+  // hides. Desktop: chips only in compare mode or for a crew pick; the toggle group only with a pick.
+  const noChips = phone ? false : noPick || (!state.compare && state.crew == null);
+  els.chips.hidden = noChips;
   // A crew-only pick keeps the group for Clear selection, but Compare / Called together are
   // person tools and stay out of the row.
-  els.toggleGroup.hidden = noPick;
-  els.compareToggle.hidden = noPeople;
-  els.togetherToggle.hidden = noPeople;
-  renderChips(data, state);
+  els.toggleGroup.hidden = phone ? false : noPick;
+  els.compareToggle.hidden = phone ? false : noPeople;
+  els.togetherToggle.hidden = phone ? false : noPeople;
+  els.summary.dataset.short = state.people.length >= 4 ? 'true' : 'false';
+  renderChips(data, state, phone);
   renderToggles(state);
-  els.clearSelection.hidden = noPick;
+  els.clearSelection.hidden = phone ? false : noPick;
+  els.clearSelection.disabled = phone && noPick;
   renderShapeLegend(data, state, view);
   renderLeadKey(data, view);
   renderSummary(view);

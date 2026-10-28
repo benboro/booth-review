@@ -514,7 +514,7 @@ def test_hover_lines_rated_window_and_unrated_regional(
         lines[0]
         == f"{names[g['away_name'][rated]]['name']} at {names[g['home_name'][rated]]['name']}"
     )
-    assert lines[1].endswith(f" ET · Week {g['week'][rated]}")
+    assert lines[1].endswith(f" ET, Week {g['week'][rated]}")
     net_name = networks[g["network"][rated]]["name"]
     # D-09: the network line is a mark (logo img with alt/title = name, or dot plus name).
     net = nfl_guarded_page.evaluate(
@@ -549,7 +549,7 @@ def test_hover_lines_rated_window_and_unrated_regional(
         "matched": False,
         "names": [people[pbp["person"]]["name"], people[analyst["person"]]["name"]],
     }
-    assert f"Viewers: {g['viewers'][rated] / 1e6:.1f}MM · window-level" in lines
+    assert f"Viewers: {g['viewers'][rated] / 1e6:.1f}MM, window-level" in lines
     exc = g["excitement"][rated]
     assert f"Excitement: {exc:.1f} (GEI-style, not CFBD's index)" in lines
     assert lines[-1].startswith("Excitement:")

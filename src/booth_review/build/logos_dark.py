@@ -30,9 +30,9 @@ import re
 
 from booth_review.errors import SiteBuildError
 
-DARK_BACKGROUNDS: tuple[str, ...] = ("#1D1B18", "#26231F", "#223A40", "#274046")
-OFF_WHITE = "#ECE7DF"
-DARK_GROUND = "#1D1B18"
+DARK_BACKGROUNDS: tuple[str, ...] = ("#191D1C", "#212625", "#223A40", "#274046")
+OFF_WHITE = "#E5EAE8"
+DARK_GROUND = "#191D1C"
 WHITE = "#FFFFFF"
 
 # Files whose light neutral letters sit on a dark backplate that rule 1 flips.

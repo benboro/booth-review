@@ -49,12 +49,12 @@ function crewsSubtitle(state) {
   return lo === hi ? `Season ${lo}` : `Seasons ${lo}–${hi}`;
 }
 
-/** The This weekend subtitle (18-UI-SPEC): `Week 9 · Sat. Oct. 31 · All times ET`. */
+/** The This weekend subtitle (18-UI-SPEC): `Week 9, Sat. Oct. 31, all times ET`. */
 function weekendSubtitle(state) {
   const week = currentData ? selectedWeek(currentData, state) : null;
   if (!week) return '';
   const day = selectedDay(weekDays(currentData, week).days, state.day);
-  return [weekDisplay(week), day ? dayLabel(day) : null, 'All times ET'].filter(Boolean).join(' · ');
+  return [weekDisplay(week), day ? dayLabel(day) : null, 'all times ET'].filter(Boolean).join(', ');
 }
 
 /** The hint the module subtitle rests on: the Map's prompt until a subject (announcer, school or crew) is picked (04.18 D-02); the season range on Crews. */

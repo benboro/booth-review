@@ -131,8 +131,8 @@ function summaryText(rows) {
   const rated = rows.filter((r) => r.viewers != null).length;
   const lo = Math.min(...seasons);
   const hi = Math.max(...seasons);
-  let text = `${rows.length} ${rows.length === 1 ? 'game' : 'games'} · ${lo === hi ? lo : `${lo}–${hi}`}`;
-  if (rated > 0) text += ` · ${rated} rated`;
+  let text = `${rows.length} ${rows.length === 1 ? 'game' : 'games'}, ${lo === hi ? lo : `${lo}–${hi}`}`;
+  if (rated > 0) text += `, ${rated} rated`;
   return text;
 }
 

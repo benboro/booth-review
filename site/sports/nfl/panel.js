@@ -15,15 +15,13 @@ import { currentTheme } from '../../modules/pill.js';
 import { apKickoff } from '../../modules/weekend.js';
 import {
   causeCopy,
-  dateLongText,
   flagLabels,
-  kickoffText,
   scoreText,
   slotLabel,
-  viewersText,
+  viewersProseText,
 } from './game-format.js';
 
-const WINDOW_NOTE = ' · Window-level figure (all Sunday afternoon games).';
+const WINDOW_NOTE = '; window-level figure (all Sunday afternoon games).';
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -53,7 +51,7 @@ function crewSection(row) {
 
 function viewersNodes(row) {
   if (row.unplayed) return [el('p', 'panel-unplayed', 'Not played yet.')];
-  const v = viewersText(row);
+  const v = viewersProseText(row);
   if (v == null) return [el('p', null, `Viewers: not available (${causeCopy(row).panel})`)];
   const nodes = [el('p', null, `Viewers: ${v}${row.scope === 'window' ? WINDOW_NOTE : ''}`)];
   if (row.era != null) nodes.push(el('p', null, `Measured under ${row.era}.`));
@@ -156,7 +154,7 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
     // A panel opened from This weekend writes the kickoff as that view does (18-UI-REVIEW item 8).
     const dateP = el('p', null, row.weekend
       ? apKickoff(row.date, row.kickoff, noTime)
-      : `${dateLongText(row)} · ${kickoffText(row) ?? noTime}`);
+      : apKickoff(row.date, row.kickoff, row.unplayed ? noTime : noTime.toLowerCase(), { year: true }));
     const noNetwork = row.unplayed ? 'Network TBA' : 'Network not recorded.';
     const network = row.network == null
       ? el('p', null, noNetwork)

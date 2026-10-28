@@ -128,7 +128,7 @@ def test_heights_hold_on_hover_focus_sort_and_mode_switch(app: Page, width: int)
 @pytest.mark.parametrize("width", WIDTHS)
 def test_module_gaps_are_8_and_16(app: Page, width: int) -> None:
     _at(app, width)
-    assert measure_gap(app, "#toolbar", "#selection-row") == pytest.approx(8, abs=0.5)
+    assert measure_gap(app, "#toolbar", "#selection-bar") == pytest.approx(8, abs=0.5)
     assert measure_gap(app, "#chart-tabs", "#chart-module") == pytest.approx(16, abs=0.5)
     assert element_height(app, "#crews-panel") > 0
 

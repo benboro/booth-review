@@ -1323,7 +1323,7 @@ async () => {
 # Calibrated (04.13-17) against the real band: the open-symbol band differs from its SVG
 # reference by far more; filled rings stay under this.
 # 13-24: re-measured on the Phase 13 chart frame (2,077 differing pixels at 1280px with the
-# #F4F0E8 surface); the open-symbol failure this guards is an order of magnitude larger.
+# #EBEFED surface); the open-symbol failure this guards is an order of magnitude larger.
 _REAL_BAND_MAX_DIFF = 2500
 
 
