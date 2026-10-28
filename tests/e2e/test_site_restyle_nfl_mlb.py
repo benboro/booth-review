@@ -430,3 +430,39 @@ def test_mlb_band_chips_and_clear(
     assert picked["clearVisible"]
     gutter = 0
     assert picked["clearRightGap"] == gutter
+
+
+_FRAME_JS = """(id) => {
+  const cs = getComputedStyle(document.getElementById(id));
+  return { border: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+    borderColor: cs.borderTopColor, radius: cs.borderTopLeftRadius, shadow: cs.boxShadow,
+    padding: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft],
+    marginBottom: cs.marginBottom };
+}"""
+
+
+@pytest.mark.parametrize("theme", ["light", "dark"])
+@pytest.mark.parametrize(("width", "pad"), [(1440, ("20px", "24px")), (390, ("16px", "16px"))])
+def test_mlb_matched_games_has_cfbs_module_frame(
+    mlb_guarded_page: Page,
+    open_mlb_app: Callable[..., None],
+    width: int,
+    pad: tuple[str, str],
+    theme: str,
+) -> None:
+    """Answer 10a: the same frame as CFB's Matched games module."""
+    page = mlb_guarded_page
+    page.set_viewport_size({"width": width, "height": 900})
+    open_mlb_app(page, "?sport=mlb&view=apple")
+    page.evaluate("() => document.fonts.ready")
+    set_theme(page, theme)
+    mlb: dict[str, Any] = page.evaluate(_FRAME_JS, "mlb-matched-games")
+    assert mlb["border"] == ["1px"] * 4
+    assert mlb["radius"] == "0px" and mlb["shadow"] == "none"
+    assert mlb["padding"] == [pad[0], pad[1], pad[0], pad[1]]
+    assert mlb["marginBottom"] == "32px"
+    # Same border colour as the other modules (the --rule token).
+    chart = page.evaluate(
+        "() => getComputedStyle(document.querySelector('#mlb-chart-area .module')).borderTopColor"
+    )
+    assert mlb["borderColor"] == chart

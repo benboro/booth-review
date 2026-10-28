@@ -4323,9 +4323,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   min-width: 0;
 }
 
+#nfl-matched-games {
+  padding: var(--space-lg) var(--space-lg) var(--space-xl);
+}
+
+/* MLB's Matched games takes the CFB module frame (.module: 1px rule, 20/24px padding, 16px on
+   a phone, 32px below); only the scroll box is added here. */
 #nfl-matched-games,
 #mlb-matched-games {
-  padding: var(--space-lg) var(--space-lg) var(--space-xl);
   overflow-x: auto;
   max-width: 100%;
 }

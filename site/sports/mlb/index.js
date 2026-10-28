@@ -128,7 +128,7 @@ function buildRegions(footerEl) {
   chartModule.append(moduleHead, viewHost, status);
   chartArea.append(tabHost, chartModule);
 
-  const matched = el('section', 'nfl-region');
+  const matched = el('section', 'nfl-region module');
   matched.id = 'mlb-matched-games';
 
   footerEl.before(toolbar, selection, chartArea, matched);
