@@ -62,6 +62,7 @@ from booth_review.resolve.networks import (
     load_network_rarity,
     load_networks,
 )
+from booth_review.resolve.teams import load_team_crosswalk
 from booth_review.transport.cache import atomic_write_bytes
 
 if TYPE_CHECKING:
@@ -601,7 +602,14 @@ def build_site_data(
     ]
     conference_index = {name: i for i, name in enumerate(sorted(conference_is_fbs))}
 
-    teams = [{"name": name} for name in sorted(team_names)]
+    # A `cfbd` crosswalk row renames a CFBD spelling for display only (the okina in
+    # Hawai'i); the index order above stays the CFBD names' sorted order.
+    display_names = {
+        row.variant: row.canonical
+        for row in load_team_crosswalk(reference_directory)
+        if row.source == "cfbd"
+    }
+    teams = [{"name": display_names.get(name, name)} for name in sorted(team_names)]
     conferences = [
         {"name": name, "is_fbs": conference_is_fbs[name]} for name in sorted(conference_is_fbs)
     ]

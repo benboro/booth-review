@@ -1,4 +1,5 @@
 source,variant,canonical,cfbd_team_id,season_from,season_to,note
+cfbd,Hawai'i,Hawaiʻi,62,,,CFBD spells the okina as an apostrophe; the site shows the okina
 ratingsref,cfb-alabama-am,Alabama A&M,2010,,,RR slug omits the ampersand
 ratingsref,cfb-appalachian-state,App State,2026,,,CFBD's own current short name
 ratingsref,cfb-fiu,Florida International,2229,,,RR slug uses the FIU initialism
@@ -147,8 +148,8 @@ smw,GA ST,Georgia State,2247,2021,2021,SMW 2021 chart abbreviation
 smw,GA TECH,Georgia Tech,59,2021,2021,SMW 2021 chart abbreviation
 smw,GRAMB,Grambling,2755,2021,2021,SMW 2021 chart abbreviation
 smw,GT,Georgia Tech,59,2021,2021,SMW 2021 chart abbreviation
-smw,HAW,Hawai'i,62,2021,2021,SMW 2021 chart abbreviation
-smw,HI,Hawai'i,62,2021,2021,SMW 2021 chart abbreviation
+smw,HAW,Hawaiʻi,62,2021,2021,SMW 2021 chart abbreviation
+smw,HI,Hawaiʻi,62,2021,2021,SMW 2021 chart abbreviation
 smw,HOU,Houston,248,2021,2021,SMW 2021 chart abbreviation
 smw,IA ST,Iowa State,66,2021,2021,SMW 2021 chart abbreviation
 smw,ILL,Illinois,356,2021,2021,SMW 2021 chart abbreviation
@@ -250,7 +251,7 @@ tvrg,Cinicnnati,Cincinnati,2132,2021,2021,TVRG misspelling
 tvrg,FL,Florida,57,,,TVRG abbreviation
 tvrg,FL St,Florida State,52,,,TVRG abbreviation
 tvrg,GA,Georgia,61,,,TVRG abbreviation
-tvrg,HI,Hawai'i,62,,,TVRG abbreviation
+tvrg,HI,Hawaiʻi,62,,,TVRG abbreviation
 tvrg,Housotn,Houston,248,2021,2021,TVRG misspelling
 tvrg,IA,Iowa,2294,,,TVRG abbreviation
 tvrg,IA St.,Iowa State,66,,,TVRG abbreviation

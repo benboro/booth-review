@@ -451,3 +451,66 @@ def test_clean_team_text_second_sources_strip_rank_and_footnote() -> None:
     assert clean_team_text("No. 5 Foxhollow*", "smw") == "Foxhollow"
     assert clean_team_text("#12 Foxhollow", "aa") == "Foxhollow"
     assert clean_team_text("Foxhollow", "espnpr") == "Foxhollow"
+
+
+# -- Hawaii: the display name carries the okina, every source spelling still joins ---------
+
+REAL_REFERENCE = Path(__file__).parents[1] / "data" / "reference"
+HAWAII_ID = 62
+HAWAII_DISPLAY = "Hawai\u02bbi"
+
+
+def _hawaii_resolver() -> TeamResolver:
+    games = {
+        2021: [
+            _game(
+                1,
+                season=2021,
+                home_id=HAWAII_ID,
+                home_team="Hawai'i",
+                away_id=9202,
+                away_team="Lakeview",
+            )
+        ],
+        2025: [
+            _game(
+                2,
+                season=2025,
+                home_id=HAWAII_ID,
+                home_team="Hawai'i",
+                away_id=9202,
+                away_team="Lakeview",
+            )
+        ],
+    }
+    rows = [r for r in load_team_crosswalk(REAL_REFERENCE) if r.cfbd_team_id == HAWAII_ID]
+    return TeamResolver(games, rows)
+
+
+@pytest.mark.parametrize(
+    ("source", "raw", "season"),
+    [
+        ("cfbd", "Hawai'i", 2025),
+        ("cfbd", "Hawai\u02bbi", 2025),
+        ("sports506", "Hawaii", 2025),
+        ("sports506", "Hawai'i", 2025),
+        ("sports506", "Hawai\u02bbi", 2025),
+        ("ratingsref", "cfb-hawaii", 2025),
+        ("smw", "HAW", 2021),
+        ("smw", "HI", 2021),
+        ("tvrg", "HI", 2025),
+    ],
+)
+def test_every_hawaii_source_spelling_resolves_to_the_okina_team(
+    source: str, raw: str, season: int
+) -> None:
+    resolved = _hawaii_resolver().resolve(source, raw, season)  # type: ignore[arg-type]
+    assert resolved.team_id == HAWAII_ID
+
+
+def test_the_crosswalk_names_the_okina_as_the_hawaii_display_name() -> None:
+    rows = [r for r in load_team_crosswalk(REAL_REFERENCE) if r.cfbd_team_id == HAWAII_ID]
+    assert {r.canonical for r in rows} == {HAWAII_DISPLAY}
+    display = [r for r in rows if r.source == "cfbd"]
+    assert [(r.variant, r.canonical) for r in display] == [("Hawai'i", HAWAII_DISPLAY)]
+    assert _hawaii_resolver().resolve("cfbd", "Hawai'i", 2025).canonical == HAWAII_DISPLAY

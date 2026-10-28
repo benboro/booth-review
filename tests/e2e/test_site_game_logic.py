@@ -242,6 +242,32 @@ def test_search_matches_spaced_and_hyphenated(
     assert loaded.evaluate(_MATCH_JS, [[name, query]]) == [hit]
 
 
+_TEAM_SEARCH_JS = """
+async (queries) => {
+  const D = await import('./modules/data.js');
+  const raw = await (await fetch('site-data.json')).json();
+  const listed = new Set([...raw.telecasts.home_team, ...raw.telecasts.away_team]);
+  const index = [...listed][0];
+  raw.lookups.teams[index].name = 'Hawai\\u02BBi';
+  const data = D.prepareData(raw);
+  const team = data.teamKeys.find((t) => t.index === index);
+  return {
+    name: team.name,
+    hits: queries.map((q) => team.keys.some((k) => k.includes(D.normalizeName(q)))),
+  };
+}
+"""
+
+
+def test_school_search_finds_the_okina_name_by_every_spelling(loaded: Page) -> None:
+    """The okina display name is found typing the apostrophe, the okina or neither."""
+    result = loaded.evaluate(
+        _TEAM_SEARCH_JS, ["hawai", "hawaii", "Hawai'i", "Hawai\u02bbi", "hawai\u2019i", "xyz"]
+    )
+    assert result["name"] == "Hawai\u02bbi"
+    assert result["hits"] == [True, True, True, True, True, False]
+
+
 _ROW_TITLE_JS = """
 async () => {
   const F = await import('./modules/format.js');

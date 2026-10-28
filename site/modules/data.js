@@ -113,6 +113,24 @@ function buildVenueKeys(venues) {
 }
 
 /**
+ * Search keys for a team name: the name itself, plus the okina read as each apostrophe and with
+ * the mark dropped, so "Hawaiʻi" is found by "hawaii", "hawai'i" and "hawai\u2019i" alike.
+ * @param {string} name
+ * @returns {string[]}
+ */
+export function teamSearchKeys(name) {
+  const key = normalizeName(name);
+  return [
+    ...new Set([
+      key,
+      key.replace(/\u02BB/g, "'"),
+      key.replace(/\u02BB/g, '\u2019'),
+      key.replace(/[\u02BB'\u2018\u2019]/g, ''),
+    ]),
+  ];
+}
+
+/**
  * Search-key normalizer for named games: normalizeName, then U+02BB and
  * apostrophes (U+0027, U+2018, U+2019) removed, and every other run of
  * characters that is not a letter or digit (hyphens, dashes, commas,
@@ -382,7 +400,7 @@ export function prepareData(raw) {
       index,
       slug: teamSlugs[index],
       name: team.name,
-      keys: [normalizeName(team.name)],
+      keys: teamSearchKeys(team.name),
     }))
     .filter((team) => listedTeams.has(team.index));
 

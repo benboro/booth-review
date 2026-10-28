@@ -2591,3 +2591,44 @@ def test_scheduled_build_is_byte_identical(
         small_tables, _weeks_four_to_six(), {102: ("net-a", ["net-a"])}, build_reference
     )
     assert json.dumps(first, sort_keys=True) == json.dumps(second, sort_keys=True)
+
+
+# -- team display names (a cfbd crosswalk row renames a CFBD spelling for display) ----------
+
+
+def _display_reference(tmp_path: Path, build_reference: Path, rows: str) -> Path:
+    reference = tmp_path / "reference"
+    shutil.copytree(build_reference, reference)
+    path = reference / "team_crosswalk.csv"
+    path.write_text(path.read_text(encoding="utf-8") + rows, encoding="utf-8")
+    return reference
+
+
+def _display_tables() -> BuildTables:
+    return _build_tables(
+        games_rows=[_game_row(home_team="Fixture Home", away_team="Maui's Own")],
+        telecast_rows=[_telecast_row()],
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+
+
+def test_cfbd_crosswalk_row_sets_the_team_display_name(
+    tmp_path: Path, build_reference: Path
+) -> None:
+    ref = _display_reference(
+        tmp_path, build_reference, "cfbd,Maui's Own,Maui\u02bbs Own,200,,,display name\n"
+    )
+    payload = _site(_display_tables(), ref)
+    names = [t["name"] for t in payload["lookups"]["teams"]]
+    assert "Maui\u02bbs Own" in names
+    assert "Maui's Own" not in names
+    away = payload["telecasts"]["away_team"][0]
+    assert names[away] == "Maui\u02bbs Own"
+
+
+def test_team_without_a_cfbd_row_keeps_its_cfbd_name(build_reference: Path) -> None:
+    payload = _site(_display_tables(), build_reference)
+    names = [t["name"] for t in payload["lookups"]["teams"]]
+    assert names == ["Fixture Home", "Maui's Own"]
