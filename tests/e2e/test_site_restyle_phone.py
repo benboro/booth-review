@@ -272,3 +272,19 @@ def test_every_chip_decides_on_its_own(mobile_page: Page, open_app: Callable[...
     assert texts[2].startswith("Role: ")
     # The strip is one fixed line: it scrolls sideways and never grows.
     assert mobile_page.locator("#filter-chips").bounding_box()["height"] == 60  # type: ignore[index]
+
+
+def test_clicking_a_chip_keeps_the_filters_sheet_open_and_reaches_its_section(
+    mobile_page: Page, open_app: Callable[..., None]
+) -> None:
+    open_app(mobile_page, TWO_PEOPLE)
+    _open_sheet(mobile_page)
+    chip = mobile_page.locator("#filter-chips .filter-chip").first
+    # The chip is not a popover control: it must not target the sheet it sits in.
+    assert chip.get_attribute("popovertarget") is None
+    chip.click()
+    mobile_page.evaluate("() => new Promise((r) => requestAnimationFrame(r))")
+    assert mobile_page.evaluate(SHEET_OPEN) is True
+    focused = mobile_page.evaluate("() => document.activeElement.closest('[id^=filter-]')?.id")
+    assert focused == "filter-announcers"
+

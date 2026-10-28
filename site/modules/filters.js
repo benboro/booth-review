@@ -1210,6 +1210,16 @@ export function initFilters({ data, getState, setState }) {
   placeSections(mobileMedia.matches);
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
 
+  // A chip lives inside the open sheet: it takes the visitor to its filter section and never closes it.
+  els.filterChips.addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.filter-chip');
+    const heading = chip ? document.getElementById(chip.dataset.section)?.querySelector('h3') : null;
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({ block: 'start' });
+  });
+
   // The changed-filter chips re-decide their wording whenever their strip's width changes: opening
   // the panel, a rotation, or a resize (a closed panel measures 0 and is skipped).
   new ResizeObserver(() => fitFilterChips()).observe(els.filterChips);
@@ -1605,8 +1615,8 @@ function renderFiltersButton(data, state, view) {
     const chip = document.createElement('button');
     chip.type = 'button';
     chip.className = 'filter-chip';
-    chip.setAttribute('popovertarget', 'filters-sheet');
-    chip.setAttribute('aria-haspopup', 'dialog');
+    // The chip sits inside the open sheet, so it must not toggle the sheet: it jumps to its section.
+    chip.dataset.section = TRIGGER_SECTIONS[name] ?? '';
     // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
     const resting = name === 'crew' ? 'Crew' : (restingLabels.get(name) ?? label);
     const value = name === 'crew' ? label.slice('Crew'.length) : triggerValue(name, label, true);

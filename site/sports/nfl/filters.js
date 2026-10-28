@@ -857,8 +857,14 @@ export function renderNflFilters(ctx) {
     const li = el('li');
     const chip = el('button', 'filter-chip');
     chip.type = 'button';
-    chip.setAttribute('popovertarget', 'nfl-filters-sheet');
-    chip.setAttribute('aria-haspopup', 'dialog');
+    // Inside the open sheet the chip must not toggle it: it jumps to its own section instead.
+    chip.addEventListener('click', () => {
+      const heading = document.querySelector(`#nfl-filter-${key}-sheet > .section-head h3`);
+      if (!heading) return;
+      heading.tabIndex = -1;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: 'start' });
+    });
     chip.setAttribute('aria-label', full);
     chip.title = full;
     const text = el('span', 'chip-text');

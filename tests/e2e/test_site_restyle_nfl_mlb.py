@@ -301,6 +301,23 @@ def test_nfl_phone_chip_wording_follows_the_fit(
         assert "·" not in text
 
 
+def test_nfl_clicking_a_chip_keeps_the_sheet_open_and_reaches_its_section(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    open_nfl_app(page)
+    _set(page, {"teams": ["f-gulls"]})
+    page.click("#nfl-filters-button")
+    page.wait_for_selector("#nfl-filters-sheet:popover-open")
+    chip = page.locator("#nfl-filter-chips .filter-chip").first
+    assert chip.get_attribute("popovertarget") is None
+    chip.click()
+    page.evaluate(WAIT_TWO_FRAMES)
+    assert page.evaluate("() => document.getElementById('nfl-filters-sheet').matches(':popover-open')")
+    focused = page.evaluate("() => document.activeElement.closest('[id^=nfl-filter-]')?.id")
+    assert focused == "nfl-filter-team-sheet"
+
+
 def test_nfl_clearing_all_filters_leaves_no_dot_wording(
     nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
