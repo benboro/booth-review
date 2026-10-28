@@ -85,6 +85,14 @@ _GITHUB_BLOB_BASE = "https://github.com/benboro/booth-review/blob/main/"
 _EN_DASH = "\N{EN DASH}"
 
 
+def keep_tail_together(text: str) -> str:
+    """Bind "Week" to its number and the last two words together, so a narrow footer line never
+    leaves a lone "7" on its last row (the JS twin is `keepTailTogether` in modules/format.js)."""
+    bound = re.sub(r"\bWeek (\d)", "Week\u00a0\\1", text)
+    head, sep, tail = bound.rpartition(" ")
+    return f"{head}\u00a0{tail}" if sep else bound
+
+
 def freshness_stamps(freshness: Freshness) -> tuple[str, str]:
     """The two footer freshness lines (UI-SPEC Copywriting Contract)."""
     crews = (
@@ -135,7 +143,7 @@ def footer_html(freshness: Freshness) -> str:
         '<a href="fonts/OFL-roboto-condensed.txt">Roboto Condensed</a> '
         "(copyright 2011 Google Inc.), used under the SIL Open Font License 1.1."
     )
-    freshness_line = (
+    freshness_line = keep_tail_together(
         f"{html.escape(crews_stamp)}; "
         f"{html.escape(viewership_stamp[0].lower() + viewership_stamp[1:])}"
     )

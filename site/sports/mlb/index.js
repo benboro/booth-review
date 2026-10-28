@@ -21,6 +21,7 @@ import * as postseasonView from './views/postseason.js';
 import * as scatterView from './views/scatter.js';
 import { showToolsFor } from './tools.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
+import { keepTailTogether } from '../../modules/format.js';
 
 // View id -> module (mount, render, resize, testModel); the tab bar renders from this map.
 const VIEW_MODULES = { apple: appleView, postseason: postseasonView, scatter: scatterView };
@@ -211,7 +212,7 @@ function swapFooter(footerEl) {
     footerRefs = { freshness, credit };
     credit.replaceChildren(...creditNodes());
   }
-  if (model) freshness.replaceChildren(document.createTextNode(freshnessText()));
+  if (model) freshness.replaceChildren(document.createTextNode(keepTailTogether(freshnessText())));
 }
 
 function restoreFooter() {

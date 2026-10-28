@@ -68,7 +68,9 @@ _SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad4
 # cache restore (pageshow), which changes the inlined script and its CSP hash.
 # Re-pinned at Phase 26 Plan 12: the type credit names Latin Modern (footer line).
 # Re-pinned at Phase 26 Plan 05: footer credit blocks, spaced nav, semicolon freshness, title.
-_COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58eeec"
+# Re-pinned at Phase 26 Plan 10 (sign-off): the freshness line binds "Week" to its number and the
+# last two words with no-break spaces.
+_COVERAGE_SHA256 = "c0475d22f70cef579abe5008fa44e1f4996e12313a291e250ffbecc95dd720e6"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -98,7 +100,8 @@ _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58
 # and the phone changed-filter chips move into the Filters sheet.
 # Re-pinned at Phase 26 Plan 08: the retired toolbar measuring script's preload and script tag
 # removed (2 removed lines).
-_INDEX_PRE_PHASE_SHA256 = "eb60f97cc32febf4e5f1f81457628dd5710e3a94152ee6b08498f9481975bdbb"
+# Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
+_INDEX_PRE_PHASE_SHA256 = "11b5b64019f60fbdbb336b771c400e243a2dbaac8098c1445cc574f7dc9be767"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

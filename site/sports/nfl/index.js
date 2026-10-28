@@ -26,6 +26,7 @@ import * as weekend from './views/weekend.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
+import { keepTailTogether } from '../../modules/format.js';
 
 const VIEW_MODULES = { special: teamBars, crews, viewership, scatter, weekend };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
@@ -230,7 +231,7 @@ function swapFooter(footerEl) {
     footerRefs = { freshness, credit };
     credit.replaceChildren(...creditNodes());
   }
-  freshness.replaceChildren(document.createTextNode(freshnessText()));
+  freshness.replaceChildren(document.createTextNode(keepTailTogether(freshnessText())));
 }
 
 function restoreFooter() {

@@ -766,3 +766,16 @@ export function summaryCopy(summary) {
   }
   return { count: '', detail: '' };
 }
+
+/**
+ * A footer freshness line with "Week" bound to its number and the last two words bound together,
+ * so a narrow line never leaves a lone "7" (or "progress") on its last row. Pairs with
+ * `text-wrap: pretty` on `.freshness`.
+ * @param {string} text
+ * @returns {string}
+ */
+export function keepTailTogether(text) {
+  const bound = text.replace(/\bWeek (\d)/g, 'Week\u00a0$1');
+  const i = bound.lastIndexOf(' ');
+  return i < 0 ? bound : `${bound.slice(0, i)}\u00a0${bound.slice(i + 1)}`;
+}

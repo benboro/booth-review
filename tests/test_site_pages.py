@@ -69,13 +69,13 @@ def test_footer_freshness_line_joins_with_a_semicolon_and_nav_has_no_separator()
         Freshness(season=2026, crews_through_week="8", viewership_through_week="7")
     )
     assert (
-        '<p class="freshness">Crews and scores through Week 8; viewership through Week 7</p>'
-        in footer
+        '<p class="freshness">Crews and scores through Week\u00a08; '
+        "viewership through\u00a0Week\u00a07</p>" in footer
     )
     empty = footer_html(Freshness(season=2026))
     assert (
         "Crews and scores: not yet available this season; "
-        "viewership: not yet available this season" in empty
+        "viewership: not yet available this\u00a0season" in empty
     )
     assert "</a> <a" in footer
     assert "·" not in footer
@@ -422,7 +422,8 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 26 Plan 10 (critique): each Markdown table sits in a .table-scroll box.
 # Re-pinned at Phase 26 Plan 10 (sign-off): the 27 em-dashes in methodology.md and the
 # known-gaps text it splices in become commas, colons, semicolons and parentheses.
-_METHODOLOGY_FLAG_OFF_SHA256 = "df103651c6763b56cca877531068fb15a4397c07c8e95f6791d642cfd140d024"
+# Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
+_METHODOLOGY_FLAG_OFF_SHA256 = "f96bea18dab8fbd62d196cc7011a4cce943bb0bbdb3d688c0c15e0d508da4d0c"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

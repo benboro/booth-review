@@ -3453,6 +3453,12 @@ dialog.detail-panel {
   display: block;
 }
 
+/* "Week" and its number are bound with a no-break space (pages.py, keepTailTogether), and
+   `pretty` keeps a short last line from holding a single word. */
+.site-footer .freshness {
+  text-wrap: pretty;
+}
+
 .trademark-line,
 .type-line {
   margin: var(--space-xs) 0;

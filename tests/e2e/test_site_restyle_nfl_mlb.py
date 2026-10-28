@@ -434,7 +434,8 @@ def test_mlb_band_chips_and_clear(
 
 _FRAME_JS = """(id) => {
   const cs = getComputedStyle(document.getElementById(id));
-  return { border: [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+  const b = [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth];
+  return { border: b,
     borderColor: cs.borderTopColor, radius: cs.borderTopLeftRadius, shadow: cs.boxShadow,
     padding: [cs.paddingTop, cs.paddingRight, cs.paddingBottom, cs.paddingLeft],
     marginBottom: cs.marginBottom };
