@@ -242,13 +242,13 @@ def test_the_source_line_credits_wikipedia_and_stadium_locations_only_in_map_mod
     page.set_viewport_size({"width": 1440, "height": 900})
     _open(page, open_nfl_app, query="")
     timeline = page.locator(".wk-source").inner_text()
-    assert "Networks: Wikipedia (CC BY-SA 4.0)" in timeline
+    assert "networks: Wikipedia (CC BY-SA 4.0)" in timeline
     assert "stadium locations" not in timeline
     page.click('[data-wk-id="wview:map"]')
     _drawn(page)
     source = page.locator(".wk-source")
     text = source.inner_text()
-    assert "Networks and stadium locations: Wikipedia (CC BY-SA 4.0)" in text
+    assert "networks and stadium locations: Wikipedia (CC BY-SA 4.0)" in text
     assert "nflverse" in text
     assert "506 Sports" in text
     assert "CollegeFootballData" not in text
