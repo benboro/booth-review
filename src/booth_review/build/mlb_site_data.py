@@ -764,8 +764,8 @@ def mlb_site_payload_bytes(site: MlbSiteData) -> bytes:
     )
 
 
-def write_mlb_site_data(paths: DataPaths, site: MlbSiteData) -> str:
-    """Write `processed/mlb-data.json` atomically; returns its vault-relative path."""
+def check_mlb_serif(site: MlbSiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
     lookups = site.lookups
     for lookup, rows, fields in (
         ("clubs", lookups.clubs, ("name",)),
@@ -774,6 +774,11 @@ def write_mlb_site_data(paths: DataPaths, site: MlbSiteData) -> str:
         ("people", lookups.people, ("name",)),
     ):
         check_serif_text(lookup_names(rows, *fields), where=f"mlb-data.json lookups.{lookup}")
+
+
+def write_mlb_site_data(paths: DataPaths, site: MlbSiteData) -> str:
+    """Write `processed/mlb-data.json` atomically; returns its vault-relative path."""
+    check_mlb_serif(site)
     atomic_write_bytes(paths.vault / MLB_SITE_DATA_PATH, mlb_site_payload_bytes(site))
     return MLB_SITE_DATA_PATH
 

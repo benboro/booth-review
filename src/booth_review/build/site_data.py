@@ -972,10 +972,8 @@ def _contract_error_summary(exc: ValidationError) -> str:
     return f"site data failed the contract: {len(errors)} error(s): {'; '.join(parts)}{suffix}"
 
 
-def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:
-    """Write `processed/site-data.json`: compact JSON (",", ":" separators,
-    sorted keys), atomically. Returns its vault-relative path.
-    """
+def check_site_serif(site: SiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
     lookups = site.lookups
     for lookup, rows in (
         ("teams", lookups.teams),
@@ -987,6 +985,13 @@ def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:
         ("people", lookups.people),
     ):
         check_serif_text(lookup_names(rows, "name"), where=f"site-data.json lookups.{lookup}")
+
+
+def write_site_data(paths: DataPaths, site: SiteData) -> list[str]:
+    """Write `processed/site-data.json`: compact JSON (",", ":" separators,
+    sorted keys), atomically. Returns its vault-relative path.
+    """
+    check_site_serif(site)
     payload = site.model_dump(mode="json")
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     atomic_write_bytes(paths.processed / "site-data.json", body)

@@ -843,8 +843,8 @@ def nfl_site_payload_bytes(site: NflSiteData) -> bytes:
     )
 
 
-def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:
-    """Write `processed/nfl-data.json` atomically; returns its vault-relative path."""
+def check_nfl_serif(site: NflSiteData) -> None:
+    """Raise SiteBuildError when a lookup name uses a character the serif subset lacks."""
     lookups = site.lookups
     for lookup, rows, fields in (
         ("franchises", lookups.franchises, ("name",)),
@@ -853,5 +853,10 @@ def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:
         ("people", lookups.people, ("name",)),
     ):
         check_serif_text(lookup_names(rows, *fields), where=f"nfl-data.json lookups.{lookup}")
+
+
+def write_nfl_site_data(paths: DataPaths, site: NflSiteData) -> str:
+    """Write `processed/nfl-data.json` atomically; returns its vault-relative path."""
+    check_nfl_serif(site)
     atomic_write_bytes(paths.vault / NFL_SITE_DATA_PATH, nfl_site_payload_bytes(site))
     return NFL_SITE_DATA_PATH

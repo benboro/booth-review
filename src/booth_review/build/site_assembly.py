@@ -28,7 +28,9 @@ from typing import Any, cast
 from pydantic import BaseModel, ValidationError
 
 from booth_review.build import logos_dark, pages
-from booth_review.build.site_data import _contract_error_summary
+from booth_review.build.mlb_site_data import check_mlb_serif
+from booth_review.build.nfl_site_data import check_nfl_serif
+from booth_review.build.site_data import _contract_error_summary, check_site_serif
 from booth_review.config import load_cfbd_key
 from booth_review.contract.mlb_models import MlbSiteData, validate_mlb_site_data
 from booth_review.contract.models import SiteData, validate_site_data
@@ -201,6 +203,7 @@ def load_site_payload(source: Path) -> tuple[SiteData, bytes]:
         site = validate_site_data(raw)
     except ValidationError as exc:
         raise SiteBuildError(_contract_error_summary(exc)) from None
+    check_site_serif(site)
     payload = site.model_dump(mode="json")
     body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
     return site, body
@@ -237,6 +240,11 @@ def sport_payload_from_bytes(
         model = spec.validate(parsed)
     except ValidationError as exc:
         raise SiteBuildError(_contract_error_summary(exc)) from None
+    # The same heading-glyph guard the writers run: assembly also reads files and live blobs.
+    if sport_id == "nfl":
+        check_nfl_serif(cast(NflSiteData, model))
+    elif sport_id == "mlb":
+        check_mlb_serif(cast(MlbSiteData, model))
     payload = model.model_dump(mode="json")
     try:
         # NaN or Infinity would be invalid JSON (WR-04); the contract rejects
