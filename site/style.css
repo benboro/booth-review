@@ -3698,11 +3698,12 @@ dialog.detail-panel {
     width: 100%;
   }
 
-  /* 13-19: the module frame (border and 12px padding) took 26px from this row, so the
-     buttons trim their side padding to 1px and the caption sits flush (no column gap); the full labels
-     still fit at 360px in the wide font. */
+  /* 13-19: the module frame (border and, since the restyle, 16px padding at 480px and under) takes
+     34px from this row, so the buttons drop their side padding and the caption sits flush (no
+     column gap); the grid still spreads spare width, and the full labels fit at 360px in the wide
+     font. */
   #y-toggle button {
-    padding: 0 1px;
+    padding: 0;
   }
 
   #axis-toggle .axis-long {
