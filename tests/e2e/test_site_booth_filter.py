@@ -198,7 +198,7 @@ def test_phone_sheet_carries_booth_with_44px_rows(
 ) -> None:
     _open(mobile_page, serve_booths, open_app, "?booth=a")
     expect(mobile_page.locator("#trigger-booth")).to_be_hidden()
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
     mobile_page.click("#filters-button")
     mobile_page.wait_for_function(
         "document.getElementById('filters-sheet').matches(':popover-open')"

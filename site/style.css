@@ -491,7 +491,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
   gap: var(--space-sm);
 }
 
-.lbl-short {
+.lbl-long {
   display: none;
 }
 
@@ -554,22 +554,14 @@ li[role="option"][aria-selected="true"] .option-check::after {
   }
 }
 
-@media (min-width: 481px) {
-  .lbl-long {
-    display: none;
-  }
-
-  .lbl-short {
-    display: inline;
-  }
-}
-
-@media (min-width: 1104px) {
-  .lbl-long {
+/* Short labels everywhere (the phone strip uses them too); the count line switches to the long
+   names from 1280px while at most three people are picked (more picks make `data-short` true). */
+@media (min-width: 1280px) {
+  #summary:not([data-short="true"]) .lbl-long {
     display: inline;
   }
 
-  .lbl-short {
+  #summary:not([data-short="true"]) .lbl-short {
     display: none;
   }
 }
@@ -678,21 +670,100 @@ li[role="option"][aria-selected="true"] .option-check::after {
   white-space: nowrap;
 }
 
-/* D-21/D-20: the summary is one line at every width and never wraps: the
-   count shows in full and the detail ellipsizes (its title holds the full
-   text). `column-gap` keeps the count and detail from touching. */
+/* The count line (Phase 26 Round 3): one fixed band, 32px, that holds the count and its detail
+   on the left and every selection action on the right, Clear all filters last. Nothing in it
+   changes the band's height, so no pick, chip or toggle moves anything below. Below 1104px the
+   actions drop to a second fixed 32px row (72px band). */
 #summary {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   column-gap: var(--space-sm);
   text-align: left;
-  /* The 24px fixed box, 8px below the selection row. A flex container with
-     only empty text collapses, so the height is explicit. */
   box-sizing: border-box;
-  height: 24px;
-  margin-top: var(--space-sm);
+  height: 32px;
+  margin-top: 12px;
+  overflow: visible;
+}
+
+#summary .sum-left {
+  display: flex;
+  align-items: center;
+  column-gap: var(--space-sm);
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+}
+
+#summary .sum-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-left: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 32px;
+}
+
+/* Person chips and the crew chip: transparent, ruled, 3px radius (Round 3b). */
+#summary #chips {
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  min-width: 0;
   overflow: hidden;
+}
+
+#summary #chips > .chip {
+  box-sizing: border-box;
+  height: 28px;
+  min-width: 64px;
+  max-width: 160px;
+  flex: 0 1 auto;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: transparent;
+}
+
+#summary #chips > .chip.chip-crew {
+  min-width: 96px;
+  max-width: 280px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#summary .toggle-group {
+  flex-wrap: nowrap;
+  flex: none;
+}
+
+#summary .toggle,
+#summary #clear-selection {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
+#summary .clear-all {
+  margin-left: 0;
+  flex: none;
+}
+
+@media (max-width: 1103px) {
+  #summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 32px 32px;
+    row-gap: var(--space-sm);
+    height: 72px;
+  }
+
+  #summary .sum-right {
+    justify-self: end;
+    max-width: 100%;
+  }
 }
 
 /* The detail stays one line and ends in an ellipsis when it does not fit
@@ -743,7 +814,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 @media (max-width: 480px) {
-  .filter-chips:not([hidden]) {
+  .mobile-only.filter-chips:not([hidden]) {
     display: flex;
   }
 
@@ -776,6 +847,149 @@ li[role="option"][aria-selected="true"] .option-check::after {
 
 .filter-chip b {
   font-weight: var(--weight-semibold);
+}
+
+/* The CFB phone panel's changed-filter chips (Round 3 phone fix): one fixed strip between the
+   sheet header and body, always 60px (44px chips, or the muted note), scrolling sideways, so a
+   pick never moves the sections below. Each chip is as wide as its text, up to the strip. */
+#filter-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex: none;
+  box-sizing: border-box;
+  height: 60px;
+  padding: 0 var(--space-md);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--rule);
+}
+
+#filter-chips > li {
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+}
+
+#filter-chips .filter-chip {
+  display: block;
+  box-sizing: border-box;
+  height: 44px;
+  max-width: 100%;
+  border-radius: 3px;
+}
+
+#filter-chips .chip-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+}
+
+.chip-none {
+  font: var(--font-body);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* A changed section's pick, in the accent beside its heading (phone panel only). */
+.section-pick {
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+  margin-left: var(--space-sm);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-popover .section-pick {
+  display: none;
+}
+
+.sheet-body .section-head {
+  justify-content: flex-start;
+}
+
+.sheet-body .section-head .group-reset {
+  margin-left: auto;
+}
+
+.sheet-group-label {
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  color: var(--ink);
+  margin: 20px 0 var(--space-sm);
+  padding-bottom: var(--space-xs);
+  border-bottom: 2px solid var(--ink);
+}
+
+.sheet-group-label:first-child {
+  margin-top: var(--space-xs);
+}
+
+/* Compare people, Called together and Clear selection, under the Announcers heading: chips
+   (44px), 8px, the three buttons (44px), 16px -- 112px whether or not anyone is picked. */
+.people-strip {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  height: 112px;
+  padding-bottom: var(--space-md);
+}
+
+.people-strip #chips {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  flex: none;
+  gap: var(--space-sm);
+  height: 44px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.people-strip #chips > .chip {
+  box-sizing: border-box;
+  height: 44px;
+  flex: none;
+  max-width: 240px;
+  padding: 0 var(--space-sm);
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: transparent;
+}
+
+.people-strip #chips > .chip.chip-crew {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.people-strip .toggle-group {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--space-sm);
+  height: 44px;
+  flex: none;
+}
+
+.people-strip .toggle-group > button {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.people-strip #clear-selection:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .desktop-only {
@@ -3319,12 +3533,20 @@ dialog.detail-panel {
     padding-block: 0;
   }
 
-  .lbl-long {
-    display: none;
+  /* The count line is one fixed 24px line: count and detail; the actions live in the panel. */
+  #summary {
+    display: flex;
+    height: 24px;
+    margin-top: var(--space-sm);
+    overflow: hidden;
   }
 
-  .lbl-short {
-    display: inline;
+  #summary .sum-left {
+    height: 24px;
+  }
+
+  #summary .sum-right {
+    display: none;
   }
 
   /* D-25: a narrower gutter than the desktop `--space-lg` (24px), still

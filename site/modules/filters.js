@@ -952,22 +952,59 @@ function placeSections(isMobile) {
   }
   if (isMobile) {
     els.sheetClearSlot.appendChild(els.clearFilters);
-    for (const [sectionId] of SECTION_POPOVERS) {
-      els.sheetBody.appendChild(document.getElementById(sectionId));
+    els.sheetBody.replaceChildren();
+    for (const group of SHEET_GROUPS) {
+      const label = document.createElement('div');
+      label.className = 'sheet-group-label';
+      label.textContent = group.label;
+      els.sheetBody.appendChild(label);
+      for (const sectionId of group.sections) els.sheetBody.appendChild(document.getElementById(sectionId));
     }
+    // The people strip sits under the Announcers heading: chips (row A), then the three buttons (row B).
+    const strip = document.createElement('div');
+    strip.className = 'people-strip';
+    strip.id = 'people-strip';
+    strip.append(els.chips, els.toggleGroup);
+    const announcers = document.getElementById('filter-announcers');
+    announcers.querySelector('.section-head').after(strip);
   } else {
-    els.selectionRow.appendChild(els.clearFilters);
+    document.getElementById('people-strip')?.remove();
+    els.sheetBody.replaceChildren();
+    els.sumRight.append(els.chips, els.toggleGroup, els.clearFilters);
     for (const [sectionId, popoverId] of SECTION_POPOVERS) {
       document.getElementById(popoverId).appendChild(document.getElementById(sectionId));
     }
   }
 }
 
+/** The phone Filters panel's groups, in the order the desktop bar shows them (Round 3b). */
+const SHEET_GROUPS = [
+  { label: 'Broadcast', sections: ['filter-announcers', 'filter-networks', 'filter-booth', 'filter-role'] },
+  { label: 'Matchup', sections: ['filter-conference', 'filter-school', 'filter-game'] },
+  { label: 'Calendar', sections: ['filter-seasons', 'filter-slots', 'filter-postseason'] },
+];
+
+/** Each trigger's panel section id, for the pick shown beside a changed section's heading. */
+const TRIGGER_SECTIONS = {
+  announcers: 'filter-announcers',
+  seasons: 'filter-seasons',
+  networks: 'filter-networks',
+  kickoff: 'filter-slots',
+  role: 'filter-role',
+  conference: 'filter-conference',
+  school: 'filter-school',
+  postseason: 'filter-postseason',
+  game: 'filter-game',
+  booth: 'filter-booth',
+};
+
 /** Binds every toolbar/popover/sheet DOM event listener once. `getState` always returns the latest state. */
 export function initFilters({ data, getState, setState }) {
   els = {
     toolbar: document.getElementById('toolbar'),
-    selectionRow: document.getElementById('selection-row'),
+    sumRight: document.querySelector('#summary .sum-right'),
+    chips: document.getElementById('chips'),
+    toggleGroup: document.querySelector('#summary .toggle-group'),
     filterChips: document.getElementById('filter-chips'),
     seasonFrom: document.getElementById('season-from'),
     seasonTo: document.getElementById('season-to'),
@@ -1168,6 +1205,10 @@ export function initFilters({ data, getState, setState }) {
   const mobileMedia = window.matchMedia(PHONE_QUERY);
   placeSections(mobileMedia.matches);
   mobileMedia.addEventListener('change', (ev) => placeSections(ev.matches));
+
+  // The changed-filter chips re-decide their wording whenever their strip's width changes: opening
+  // the panel, a rotation, or a resize (a closed panel measures 0 and is skipped).
+  new ResizeObserver(() => fitFilterChips()).observe(els.filterChips);
 }
 
 /** Sum of `facets.seasons` over the inclusive range [from, to]. */
@@ -1490,7 +1531,7 @@ function triggerValue(name, label, active) {
 
 /**
  * The control keys that differ from a clean load, in toolbar order (SHELL-03).
- * One predicate for the desktop accent, the phone "Filters · N changed" label and
+ * One predicate for the desktop accent, the phone "Filters (N changed)" label and
  * the phone chips. It reads the same per-control facts `triggerInfo` shows, not
  * `activeFilterCount`, which also counts each selected person (Pitfall 10).
  */
@@ -1543,11 +1584,11 @@ function renderTriggers(data, state, view) {
   }
 }
 
-/** Renders the phone `#filters-button` label and the changed-control chips (SHELL-03 Phone). */
+/** Renders the phone `#filters-button` label, the changed-control chips and each section's pick (SHELL-03 Phone). */
 function renderFiltersButton(data, state, view) {
   const changed = changedControls(data, state, view);
   const n = changed.length;
-  els.filtersButton.textContent = n > 0 ? `Filters · ${n} changed` : 'Filters';
+  els.filtersButton.textContent = n > 0 ? `Filters (${n} changed)` : 'Filters';
   els.filtersButton.classList.toggle('is-changed', n > 0);
   // Clear all filters looks and reads as disabled while nothing it would reset is changed: a
   // changed toolbar control, the map's venue filter (its chip sits in the table heading row),
@@ -1555,7 +1596,7 @@ function renderFiltersButton(data, state, view) {
   const live = clearAllActive(changed, state, els.gameSearch.value);
   els.clearFilters.setAttribute('aria-disabled', live ? 'false' : 'true');
   const chips = changed.map((name) => {
-    const { label } = triggerInfo(name, data, state, view);
+    const { label, items } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -1563,17 +1604,66 @@ function renderFiltersButton(data, state, view) {
     chip.setAttribute('popovertarget', 'filters-sheet');
     chip.setAttribute('aria-haspopup', 'dialog');
     // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
-    const resting = name === 'crew' ? 'Crew:' : (restingLabels.get(name) ?? label);
-    const strong = document.createElement('b');
-    strong.textContent = resting;
-    const value = name === 'crew' ? label.slice(resting.length) : triggerValue(name, label, true);
-    chip.append(strong, document.createTextNode(value));
+    const resting = name === 'crew' ? 'Crew' : (restingLabels.get(name) ?? label);
+    const value = name === 'crew' ? label.slice('Crew'.length) : triggerValue(name, label, true);
+    const count = name === 'crew' ? crewPickNames(data, state).length : items.length;
+    const text = document.createElement('span');
+    text.className = 'chip-text';
+    text.dataset.name = resting;
+    text.dataset.value = value;
+    text.dataset.count = String(count);
+    chip.append(text);
     chip.setAttribute('aria-label', label);
+    chip.title = label;
     li.append(chip);
     return li;
   });
+  if (chips.length === 0) {
+    const none = document.createElement('li');
+    none.className = 'chip-none';
+    none.textContent = 'No filters changed';
+    chips.push(none);
+  }
   els.filterChips.replaceChildren(...chips);
-  els.filterChips.hidden = chips.length === 0;
+  fitFilterChips();
+  for (const name of TRIGGER_NAMES) {
+    const section = document.getElementById(TRIGGER_SECTIONS[name]);
+    const head = section?.querySelector(':scope > .section-head');
+    if (!head) continue;
+    let pick = head.querySelector(':scope > .section-pick');
+    if (!pick) {
+      pick = document.createElement('span');
+      pick.className = 'section-pick';
+      head.querySelector('h3').after(pick);
+    }
+    const on = changed.includes(name);
+    pick.hidden = !on;
+    pick.textContent = on ? entryValue(name, data, state, view) : '';
+  }
+}
+
+/**
+ * Chooses each changed-filter chip's wording by measuring: the long form "Announcers: A, B" when it
+ * fits on the chip, otherwise "Announcers (2)" (the filter name and the pick count, no middle dot).
+ * The long form is set first and kept unless it overflows the chip.
+ */
+function fitFilterChips() {
+  if (!els?.filterChips) return;
+  for (const text of els.filterChips.querySelectorAll('.chip-text')) {
+    const { name, value, count } = text.dataset;
+    text.replaceChildren();
+    const strong = document.createElement('b');
+    strong.textContent = name;
+    text.append(strong, document.createTextNode(value));
+    text.dataset.form = 'long';
+    // A closed panel has no width to measure; the next resize event decides.
+    if (text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
+      const short = document.createElement('b');
+      short.textContent = name;
+      text.replaceChildren(short, document.createTextNode(` (${count})`));
+      text.dataset.form = 'short';
+    }
+  }
 }
 
 /** Dims each group's Reset button (`aria-disabled`) while that group is at its default (A4). */

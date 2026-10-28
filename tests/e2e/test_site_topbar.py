@@ -105,6 +105,14 @@ def _add_person_by_query(page: Page, query: str, index: int = 0) -> None:
     option.click()
 
 
+def _show_chips(page: Page) -> None:
+    """Person chips show on the count line only in compare mode; turn it on without changing
+    who is picked."""
+    assert page.locator("#chips .chip").count() == 0
+    page.evaluate("window.__testHooks.setState({ compare: true })")
+    page.wait_for_function("document.querySelectorAll('#chips .chip').length > 0")
+
+
 def test_search_dale_harlow_shows_two_options_and_click_adds_chip(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -123,9 +131,10 @@ def test_search_dale_harlow_shows_two_options_and_click_adds_chip(
     options.nth(0).click()
     guarded_page.wait_for_function("location.search === '?people=dale-harlow'")
 
+    _show_chips(guarded_page)
     chips = guarded_page.locator("#chips .chip")
     expect(chips).to_have_count(1)
-    assert chips.first.inner_text().startswith("Dale Harlow")
+    assert "Dale Harlow" in chips.first.inner_text()
 
     assert sorted(_highlight_customdata(guarded_page)) == [0, 8]
     assert (
@@ -151,9 +160,10 @@ def test_kristopher_query_keyboard_path_adds_kris_venn(
     guarded_page.press("#person-search", "Enter")
     guarded_page.wait_for_function("location.search === '?people=kris-venn'")
 
+    _show_chips(guarded_page)
     chips = guarded_page.locator("#chips .chip")
     expect(chips).to_have_count(1)
-    assert chips.first.inner_text().startswith("Kris Venn")
+    assert "Kris Venn" in chips.first.inner_text()
 
 
 def test_venn_query_lists_kris_and_jax_as_separate_options(
@@ -259,11 +269,12 @@ def test_announcer_pick_clears_search_and_refocuses(
     option.click()
     guarded_page.wait_for_function("location.search === '?people=dale-harlow,kris-venn'")
 
+    _show_chips(guarded_page)
     chips = guarded_page.locator("#chips .chip")
     expect(chips).to_have_count(2)
-    assert chips.nth(0).inner_text().startswith("Dale Harlow")
-    assert not chips.nth(0).inner_text().startswith("Dale Harlow Jr.")
-    assert chips.nth(1).inner_text().startswith("Kris Venn")
+    assert "Dale Harlow" in chips.nth(0).inner_text()
+    assert "Dale Harlow Jr." not in chips.nth(0).inner_text()
+    assert "Kris Venn" in chips.nth(1).inner_text()
     assert guarded_page.locator("#pop-announcers").evaluate("(el) => el.matches(':popover-open')")
 
 
@@ -282,9 +293,10 @@ def test_announcer_uncheck_removes_person(
     expect(dale_row).to_have_attribute("aria-selected", "true")
     dale_row.click()
     guarded_page.wait_for_function("location.search === '?people=kris-venn'")
+    _show_chips(guarded_page)
     chips = guarded_page.locator("#chips .chip")
     expect(chips).to_have_count(1)
-    assert chips.first.inner_text().startswith("Kris Venn")
+    assert "Kris Venn" in chips.first.inner_text()
     assert guarded_page.evaluate("() => document.activeElement.id") == "person-search"
 
     kris_row = guarded_page.locator("#person-results li[role='option'][data-person-id='kris-venn']")
@@ -294,7 +306,7 @@ def test_announcer_uncheck_removes_person(
     for _ in range(6):
         guarded_page.press("#person-search", "ArrowDown")
     guarded_page.press("#person-search", "Enter")
-    guarded_page.wait_for_function("location.search === ''")
+    guarded_page.wait_for_function("!location.search.includes('people=')")
     expect(guarded_page.locator("#chips .chip")).to_have_count(0)
 
 
@@ -356,8 +368,8 @@ def test_compare_mode_assigns_shapes_and_shows_shared_booth(
     }
 
     chips = guarded_page.locator("#chips .chip")
-    assert chips.nth(0).inner_text().startswith("●")
-    assert chips.nth(1).inner_text().startswith("■")
+    assert "●" in chips.nth(0).inner_text()
+    assert "■" in chips.nth(1).inner_text()
 
     assert "Shared booth" in guarded_page.inner_text("#shape-legend")
 
@@ -431,14 +443,15 @@ def test_removing_a_person_below_two_turns_called_together_off(
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
     _click_together(guarded_page)
+    _click_compare(guarded_page)
 
     guarded_page.click('button[aria-label="Remove Sam Delgado"]')
-    guarded_page.wait_for_function("location.search === '?people=kris-venn'")
+    guarded_page.wait_for_function("!location.search.includes('sam-delgado')")
     assert guarded_page.get_attribute("#together-toggle", "aria-pressed") == "false"
     assert guarded_page.is_disabled("#together-toggle")
 
     _add_person_by_query(guarded_page, "Sam Delgado")
-    guarded_page.wait_for_function("location.search === '?people=kris-venn,sam-delgado'")
+    guarded_page.wait_for_function("location.search.includes('people=kris-venn,sam-delgado')")
     assert _highlight_customdata(guarded_page) == [1, 2, 6, 9, 10]
 
 
@@ -462,9 +475,12 @@ def test_remove_chip_and_clear_selection_reset_state(
     _add_person_by_query(guarded_page, "Dale Harlow")
     # The chip sits under the open popover; close it first so the click is deterministic.
     _close_announcers(guarded_page)
+    # Person chips show on the count line only in compare mode.
+    assert guarded_page.locator("#chips .chip").count() == 0
+    _click_compare(guarded_page)
 
     guarded_page.click('button[aria-label="Remove Dale Harlow"]')
-    guarded_page.wait_for_function("location.search === ''")
+    guarded_page.wait_for_function("!location.search.includes('people=')")
     assert _highlight_customdata(guarded_page) == []
     assert (
         guarded_page.inner_text("#summary-count")
@@ -669,9 +685,9 @@ def test_compare_toggle_pressed_state_is_unmistakable(
 def test_toggling_compare_does_not_shift_the_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-30: every person chip reserves its compare-shape icon slot
-    (`.chip-glyph`, always present, fixed width) so toggling Compare moves
-    no chip or toggle button, and Compare never gains/loses a glyph slot."""
+    """D-30 / Round 3: person chips appear on the count line only in compare mode, to the left of
+    the right-anchored toggles, so turning Compare on moves no toggle or Clear all filters; each
+    chip reserves its shape-icon slot (`.chip-glyph`)."""
     open_app(guarded_page, "")
     _add_person_by_query(guarded_page, "Kris Venn")
     _add_person_by_query(guarded_page, "Sam Delgado")
@@ -686,6 +702,7 @@ def test_toggling_compare_does_not_shift_the_row(
         "compare: rect(document.getElementById('compare-toggle')), "
         "together: rect(document.getElementById('together-toggle')), "
         "clear: rect(document.getElementById('clear-selection')), "
+        "clearAll: rect(document.getElementById('clear-filters')), "
         "}; }"
     )
     glyph_counts_js = (
@@ -693,21 +710,14 @@ def test_toggling_compare_does_not_shift_the_row(
         ".map((el) => el.querySelectorAll('.chip-glyph').length)"
     )
 
-    glyphs_before = guarded_page.evaluate(glyph_counts_js)
-    assert glyphs_before == [1, 1, 1]
-
     before = guarded_page.evaluate(rects_js)
+    assert before["chips"] == []
     _click_compare(guarded_page)
     after = guarded_page.evaluate(rects_js)
 
-    glyphs_after = guarded_page.evaluate(glyph_counts_js)
-    assert glyphs_after == [1, 1, 1]
-
-    assert len(before["chips"]) == len(after["chips"]) == 3
-    for b, a in zip(before["chips"], after["chips"], strict=True):
-        assert abs(b["x"] - a["x"]) <= 0.5
-        assert abs(b["width"] - a["width"]) <= 0.5
-    for key in ("compare", "together", "clear"):
+    assert guarded_page.evaluate(glyph_counts_js) == [1, 1, 1]
+    assert len(after["chips"]) == 3
+    for key in ("compare", "together", "clear", "clearAll"):
         assert abs(before[key]["x"] - after[key]["x"]) <= 0.5, key
         assert abs(before[key]["width"] - after[key]["width"]) <= 0.5, key
 
@@ -852,8 +862,8 @@ def test_facet_announcers_scroll_survives_unrelated_renders(
 def test_header_structure_and_selection_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Header: title link, page links, theme slot. Selection row: always rendered,
-    Clear all filters at its right end; summary is a fixed 24px box."""
+    """Header: title link, page links, theme slot. Count line: always rendered,
+    Clear all filters at its right end, a fixed 32px band."""
     page = guarded_page
     open_app(page, "")
     header = page.locator("#topbar.site-header")
@@ -864,14 +874,14 @@ def test_header_structure_and_selection_row(
     # The slot holds an icon-only toggle: no visible text.
     assert page.locator("#theme-slot").inner_text() == ""
     # Always rendered, with no people picked.
-    row = page.locator("#selection-row")
+    assert page.locator("#selection-row").count() == 0
+    row = page.locator("#summary")
     expect(row).to_be_visible()
     row_box = row.bounding_box()
     clear = page.locator("#clear-filters").bounding_box()
     assert row_box is not None and clear is not None
     assert clear["x"] + clear["width"] >= row_box["x"] + row_box["width"] - 1
     assert row_box["height"] == 32
-    assert page.evaluate("document.getElementById('summary').getBoundingClientRect().height") == 24
 
 
 def test_chip_truncates_with_full_name_in_title_and_label(
@@ -880,6 +890,7 @@ def test_chip_truncates_with_full_name_in_title_and_label(
     page = guarded_page
     open_app(page, "")
     _add_person_by_query(page, "Dale Harlow")
+    _show_chips(page)
     chip = page.locator("#chips .chip").first
     expect(chip).to_have_count(1)
     assert chip.get_attribute("title") == "Dale Harlow"
@@ -893,4 +904,4 @@ def test_compare_note_sits_inside_the_summary(
 ) -> None:
     page = guarded_page
     open_app(page, "")
-    assert page.evaluate("document.getElementById('compare-note').parentElement.id") == "summary"
+    assert page.evaluate("document.getElementById('compare-note').closest('#summary') !== null")

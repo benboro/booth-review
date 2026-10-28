@@ -184,10 +184,11 @@ def test_role_tag_styles_follow_d02(
         for role in ("pbp", "analyst", "unknown")
     }
     pbp, analyst, side = tags["pbp"], tags["analyst"], tags["unknown"]
-    assert pbp["bg"] == "rgb(35, 32, 27)"
-    assert pbp["color"] == "rgb(251, 249, 245)"
+    ink = _token(guarded_page, "--ink")
+    assert pbp["bg"] == ink
+    assert pbp["color"] == _token(guarded_page, "--bg")
     assert pbp["label"] == "PBP, play-by-play"
-    assert (analyst["bw"], analyst["bs"], analyst["bc"]) == ("1px", "solid", "rgb(35, 32, 27)")
+    assert (analyst["bw"], analyst["bs"], analyst["bc"]) == ("1px", "solid", ink)
     assert analyst["bg"] == "rgba(0, 0, 0, 0)"
     assert analyst["label"] == "Analyst"
     assert (side["bs"], side["bw"]) == ("dashed", "1px")
@@ -256,19 +257,19 @@ def test_role_filter_popover_pills(
     assert guarded_page.get_by_role("checkbox", name="Analyst").count() == 1
 
 
-def test_selection_row_box(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
+def test_count_line_has_no_box(guarded_page: Page, open_app: Callable[[Page, str], None]) -> None:
     open_app(guarded_page, "?people=dale-harlow")
-    row = guarded_page.locator("#selection-row")
+    assert guarded_page.locator("#selection-row").count() == 0
+    row = guarded_page.locator("#summary")
     style = row.evaluate(
         "(el) => { const c = getComputedStyle(el); return { w: c.borderTopWidth, "
         "col: c.borderTopColor, r: c.borderTopLeftRadius, p: c.paddingTop }; }"
     )
-    # D-03: the selection row is no longer a box; chips and toggles sit on the page.
+    # D-03: the count line is no box; chips and toggles sit on the page.
     assert style["w"] == "0px"
     assert style["r"] == "0px"
     assert style["p"] == "0px"
-    assert row.locator("#summary").count() == 0
-    assert row.locator("#compare-note").count() == 0
+    assert row.locator("#compare-note").count() == 1
 
 
 _SHOW_TOOLTIP_JS = """

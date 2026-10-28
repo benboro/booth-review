@@ -87,13 +87,13 @@ def test_phone_filters_badge_agrees_with_networks_trigger(
     the pick stays in the URL and the Reset stays live (D-15)."""
     open_app(mobile_page, "?people=kris-venn&networks=net-a,net-b,net-c")
     expect(_value(mobile_page)).to_have_text("All")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
     assert "networks=net-a,net-b,net-c" in mobile_page.evaluate("location.search")
     reset = mobile_page.locator(".group-reset[data-reset='networks']")
     assert reset.get_attribute("aria-disabled") == "false"
     mobile_page.evaluate("window.__testHooks.setState({ networks: ['net-b'] })")
     expect(_value(mobile_page)).to_have_text("Beta Network")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 2 changed")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (2 changed)")
 
 
 def test_networks_count_ignores_hidden_family_chip_toggle(

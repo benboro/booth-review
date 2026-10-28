@@ -32,7 +32,6 @@
 
 <nav id="toolbar" aria-label="Filters">
   <button type="button" id="filters-button" class="mobile-only" popovertarget="filters-sheet" aria-haspopup="dialog" aria-expanded="false">Filters</button>
-  <ul id="filter-chips" class="filter-chips mobile-only" aria-label="Changed filters" hidden></ul>
   <div class="fgroup" data-g="broadcast" role="group" aria-labelledby="fgroup-broadcast">
     <span class="fgroup-label" id="fgroup-broadcast">Broadcast</span>
     <div class="fgroup-row">
@@ -62,24 +61,23 @@
 <script src="toolbar-fit.js"></script>
 
 <section id="selection-bar" aria-label="Selected announcers and match summary">
-  <div id="selection-row" class="selection-row">
-    <ul id="chips" aria-label="Selected people"></ul>
-
-    <div class="toggle-group">
-      <button type="button" id="compare-toggle" class="toggle" aria-pressed="false" aria-describedby="compare-help" aria-label="Compare people" title="Compare people"><span class="lbl-long">Compare people</span><span class="lbl-short">Compare</span></button>
-      <span id="compare-help" class="visually-hidden">Compare up to 4 people — each gets its own shape.</span>
-      <button type="button" id="together-toggle" class="toggle" aria-pressed="false" aria-describedby="together-help" aria-label="Called together" title="Called together"><span class="lbl-long">Called together</span><span class="lbl-short">Together</span></button>
-      <span id="together-help" class="visually-hidden">Show only games where everyone selected shared the booth.</span>
-      <button type="button" id="clear-selection" aria-label="Clear selection" title="Clear selection"><span class="lbl-long">Clear selection</span><span class="lbl-short">Clear</span></button>
-    </div>
-
-    <button type="button" id="clear-filters" class="clear-all">Clear all filters</button>
-  </div>
-
   <div id="summary" aria-live="polite">
-    <span id="summary-count" class="summary-count"></span>
-    <span id="summary-detail"></span>
-    <span id="compare-note" hidden>Compare mode holds up to 4 people.</span>
+    <div class="sum-left">
+      <span id="summary-count" class="summary-count"></span>
+      <span id="summary-detail"></span>
+      <span id="compare-note" hidden>Compare mode holds up to 4 people.</span>
+    </div>
+    <div class="sum-right">
+      <ul id="chips" aria-label="Selected people"></ul>
+      <div class="toggle-group">
+        <button type="button" id="compare-toggle" class="toggle" aria-pressed="false" aria-describedby="compare-help" aria-label="Compare people" title="Compare people"><span class="lbl-long">Compare people</span><span class="lbl-short">Compare</span></button>
+        <span id="compare-help" class="visually-hidden">Compare up to 4 people — each gets its own shape.</span>
+        <button type="button" id="together-toggle" class="toggle" aria-pressed="false" aria-describedby="together-help" aria-label="Called together" title="Called together"><span class="lbl-long">Called together</span><span class="lbl-short">Together</span></button>
+        <span id="together-help" class="visually-hidden">Show only games where everyone selected shared the booth.</span>
+        <button type="button" id="clear-selection" aria-label="Clear selection" title="Clear selection"><span class="lbl-long">Clear selection</span><span class="lbl-short">Clear people</span></button>
+      </div>
+      <button type="button" id="clear-filters" class="clear-all">Clear all filters</button>
+    </div>
   </div>
 </section>
 
@@ -229,6 +227,7 @@
     <h2 id="filters-sheet-title">Filters</h2>
     <div class="sheet-clear-slot"></div>
   </div>
+  <ul id="filter-chips" class="filter-chips" aria-label="Changed filters"></ul>
   <div class="sheet-body"></div>
   <div class="sheet-footer">
     <button type="button" id="filters-show-results">Show games</button>

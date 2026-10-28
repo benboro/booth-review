@@ -1,5 +1,5 @@
-"""Announcers popover width, fixed selection band, and special Announcers button
-(D-32, D-33, D-34), proven against the fixture build."""
+"""Announcers popover width, the fixed count line, and special Announcers button
+(D-32, D-33, D-34; Phase 26 Plan 07 turned the selection band into the count line)."""
 
 from __future__ import annotations
 
@@ -124,11 +124,18 @@ def test_phone_announcers_list_has_no_horizontal_scroll(
     assert sizes[0] <= sizes[1]
 
 
-# 13-UI-SPEC C2: the selection band is a fixed 64px (32px row, 8px, 24px summary line)
-# at every width and font. Below 1104px the toggles use their short labels.
-BAND_PX = 64
-LONG_LABEL_MIN_WIDTH = 1104
-TIER_WIDTHS = [1280, LONG_LABEL_MIN_WIDTH, LONG_LABEL_MIN_WIDTH - 1, 800, 481]
+# Phase 26 Round 3: the count line is one fixed 32px band from 1104px; below it the actions drop
+# to a second fixed row (72px). The count line never changes height with the picks, and the long
+# toggle labels need 1280px and at most three people.
+LONG_LABEL_MIN_WIDTH = 1280
+ONE_ROW_MIN_WIDTH = 1104
+TIER_WIDTHS = [1280, ONE_ROW_MIN_WIDTH, ONE_ROW_MIN_WIDTH - 1, 800, 481]
+
+
+def _line_px(width: int) -> int:
+    return 32 if width >= ONE_ROW_MIN_WIDTH else 72
+
+
 FONTS = ["default", "dejavu", "wide"]
 
 # The fixture person with the longest name (the widest one-person chip).
@@ -138,38 +145,38 @@ FOUR_PICKS = "?people=dale-harlow,kris-venn,sam-delgado,pat-rowan&mode=compare"
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
 @pytest.mark.parametrize("width", TIER_WIDTHS)
-def test_selection_band_height_is_fixed(
+def test_count_line_height_is_fixed(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
-    """0, 1 and 4 picks all give a 64px band with a 32px row, and the legend row
-    (the next block down) never moves."""
+    """0, 1 and 4 picks all give the same count line and band, and the legend row (the next
+    block down) never moves."""
     guarded_page.set_viewport_size({"width": width, "height": 800})
     open_app(guarded_page, "")
     y0 = _y(guarded_page, "#legend-chips")
-    assert _height(guarded_page, "#selection-bar") == BAND_PX
-    assert _height(guarded_page, "#selection-row") == 32
+    band = _height(guarded_page, "#selection-bar")
+    assert _height(guarded_page, "#summary") == _line_px(width)
     for query in ("?people=dale-harlow", LONGEST_NAME_QUERY, FOUR_PICKS):
         open_app(guarded_page, query)
         assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5, query
-        assert _height(guarded_page, "#selection-bar") == BAND_PX, query
-        assert _height(guarded_page, "#selection-row") == 32, query
+        assert _height(guarded_page, "#selection-bar") == band, query
+        assert _height(guarded_page, "#summary") == _line_px(width), query
     guarded_page.click("#clear-selection")
     assert abs(_y(guarded_page, "#legend-chips") - y0) <= 0.5
 
 
-def test_selection_row_has_no_box(
+def test_the_selection_row_is_gone_and_the_count_line_has_no_box(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-03: chips and toggles sit directly on the page, no violet box around the row."""
+    """D-03 / Round 3: no reserved selection row; chips and toggles sit on the page."""
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "?people=dale-harlow")
+    assert guarded_page.locator("#selection-row").count() == 0
     style = guarded_page.eval_on_selector(
-        "#selection-row",
-        "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.borderTopStyle,"
-        " s.backgroundColor, s.paddingTop]; }",
+        "#summary",
+        "el => { const s = getComputedStyle(el); return [s.borderTopWidth, s.backgroundColor]; }",
     )
     assert style[0] == "0px"
-    assert style[2] == "rgba(0, 0, 0, 0)"
+    assert style[1] == "rgba(0, 0, 0, 0)"
 
 
 @pytest.mark.parametrize("width", [1280, 481])
@@ -189,16 +196,16 @@ def test_chips_truncate_between_64_and_160px_with_the_full_name(
         name = chip.get_attribute("title")
         assert name
         assert name in (chip.get_attribute("aria-label") or "")
-    row = guarded_page.locator("#selection-row").bounding_box()
+    row = guarded_page.locator("#summary").bounding_box()
     assert row is not None
-    assert row["height"] == 32
+    assert row["height"] == _line_px(width)
 
 
 @pytest.mark.parametrize(
     ("width", "long_labels"),
     [(LONG_LABEL_MIN_WIDTH, True), (LONG_LABEL_MIN_WIDTH - 1, False), (800, False)],
 )
-def test_toggles_switch_to_short_labels_below_1104px(
+def test_toggles_switch_to_short_labels_below_1280px(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int, long_labels: bool
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
@@ -206,7 +213,7 @@ def test_toggles_switch_to_short_labels_below_1104px(
     expected = (
         ["Compare people", "Called together", "Clear selection"]
         if long_labels
-        else ["Compare", "Together", "Clear"]
+        else ["Compare", "Together", "Clear people"]
     )
     for selector, label in zip(
         ["#compare-toggle", "#together-toggle", "#clear-selection"], expected, strict=True
@@ -223,8 +230,7 @@ def test_compare_note_sits_inside_the_summary_box_without_a_new_row(
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, FOUR_PICKS)
     assert guarded_page.locator("#summary #compare-note").count() == 1
-    assert _height(guarded_page, "#selection-bar") == BAND_PX
-    assert _height(guarded_page, "#summary") == 24
+    assert _height(guarded_page, "#summary") == 32
 
 
 def _gap_under_summary(page: Page) -> float:
@@ -258,40 +264,46 @@ def test_phone_summary_gap_is_reclaimed(
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-@pytest.mark.parametrize("width", [1280, LONG_LABEL_MIN_WIDTH])
-def test_summary_sits_under_the_row_with_polite_live_region(
+@pytest.mark.parametrize("width", [1280, ONE_ROW_MIN_WIDTH])
+def test_actions_share_the_count_line_with_a_polite_live_region(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
     guarded_page.set_viewport_size({"width": width, "height": 800})
     open_app(guarded_page, LONGEST_NAME_QUERY)
-    row = guarded_page.locator("#selection-row").bounding_box()
-    summary = guarded_page.locator("#summary").bounding_box()
-    assert row is not None
-    assert summary is not None
-    assert summary["y"] >= row["y"] + row["height"] - 0.5
+    left = guarded_page.locator("#summary .sum-left").bounding_box()
+    right = guarded_page.locator("#summary .sum-right").bounding_box()
+    assert left is not None
+    assert right is not None
+    assert abs(left["y"] - right["y"]) <= 0.5
+    assert right["x"] >= left["x"]
     assert guarded_page.get_attribute("#summary", "aria-live") == "polite"
     detail = guarded_page.locator("#summary-detail")
     assert detail.get_attribute("title") == detail.inner_text()
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-def test_below_the_breakpoint_the_summary_sits_under_the_box(
+def test_below_1104px_the_actions_drop_to_a_second_fixed_row(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    guarded_page.set_viewport_size({"width": LONG_LABEL_MIN_WIDTH - 8, "height": 800})
+    guarded_page.set_viewport_size({"width": ONE_ROW_MIN_WIDTH - 8, "height": 800})
     open_app(guarded_page, LONGEST_NAME_QUERY)
-    row = guarded_page.locator("#selection-row").bounding_box()
-    summary = guarded_page.locator("#summary").bounding_box()
-    assert row is not None
-    assert summary is not None
-    assert summary["y"] >= row["y"] + row["height"] - 0.5
+    left = guarded_page.locator("#summary .sum-left").bounding_box()
+    right = guarded_page.locator("#summary .sum-right").bounding_box()
+    assert left is not None
+    assert right is not None
+    assert right["y"] >= left["y"] + left["height"] - 0.5
+    assert _height(guarded_page, "#summary") == 72
 
 
 @pytest.mark.parametrize("font_setting", FONTS, indirect=True)
-def test_phone_selection_buttons_share_one_row(
+def test_phone_strip_buttons_share_one_row_in_the_filters_panel(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(mobile_page, "?people=dale-harlow")
+    mobile_page.click("#filters-button")
+    mobile_page.wait_for_function(
+        "document.getElementById('filters-sheet').matches(':popover-open')"
+    )
     ids = ["#compare-toggle", "#together-toggle", "#clear-selection"]
     boxes = [mobile_page.locator(i).bounding_box() for i in ids]
     for box in boxes:
@@ -300,7 +312,11 @@ def test_phone_selection_buttons_share_one_row(
         assert boxes[0] is not None
         assert abs(box["y"] - boxes[0]["y"]) <= 1
     texts = [mobile_page.locator(i).inner_text().strip() for i in ids]
-    assert [t.lstrip("\u2713\u00d7 ").strip() for t in texts] == ["Compare", "Together", "Clear"]
+    assert [t.lstrip("\u2713\u00d7 ").strip() for t in texts] == [
+        "Compare",
+        "Together",
+        "Clear people",
+    ]
     names = ["Compare people", "Called together", "Clear selection"]
     for i, name in zip(ids, names, strict=True):
         assert mobile_page.get_attribute(i, "aria-label") == name
@@ -323,17 +339,17 @@ def test_desktop_selection_buttons_show_long_labels(
         assert label in guarded_page.locator(sel).inner_text()
 
 
-def test_phone_compare_row_may_grow_without_horizontal_overflow(
+def test_phone_compare_picks_leave_the_page_summary_and_width_alone(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """Four Compare people grow the band without widening the page."""
+    """Four Compare people live in the panel strip: the page's summary and width do not move."""
     open_app(mobile_page, "?people=dale-harlow")
-    one = _height(mobile_page, "#selection-bar")
+    one = _height(mobile_page, "#summary")
     open_app(
         mobile_page,
         "?people=dale-harlow,kris-venn,sam-delgado,pat-rowan&mode=compare",
     )
-    assert _height(mobile_page, "#selection-bar") > one
+    assert _height(mobile_page, "#summary") == one == 24
     overflow = mobile_page.evaluate(
         "document.documentElement.scrollWidth - document.documentElement.clientWidth"
     )
@@ -390,11 +406,10 @@ def test_phone_summary_stays_one_line(
     # CI renders in DejaVu Sans, where dale-harlow's detail line (two networks since his
     # unrated game) is wider than a 390px phone; it must stay one line, not grow the band.
     open_app(mobile_page, "")
-    h0 = _height(mobile_page, "#summary")
+    assert _height(mobile_page, "#summary") == 24
     open_app(mobile_page, "?people=dale-harlow")
-    # The 20px count and 16px detail share a baseline, so one line may gain ~2px; a
-    # second line would add a whole 24px line.
-    assert _height(mobile_page, "#summary") - h0 <= 4
+    # The summary is a fixed 24px box; a second line would be clipped, never grow it.
+    assert _height(mobile_page, "#summary") == 24
     detail = mobile_page.locator("#summary-detail")
     assert detail.get_attribute("title") == detail.inner_text()
 
@@ -405,7 +420,8 @@ def test_summary_title_is_smaller(
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "?people=dale-harlow")
     size = guarded_page.eval_on_selector("#summary-count", "el => getComputedStyle(el).fontSize")
-    assert size == "20px"
+    # Latin Modern at the +1 step (Round 1: 22/27px) replaced the 20px Crimson Text title.
+    assert size == "22px"
 
 
 def test_announcers_trigger_is_a_plain_filter_that_takes_the_accent_when_changed(

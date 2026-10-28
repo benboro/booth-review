@@ -94,7 +94,9 @@ _COVERAGE_SHA256 = "672b65953b2e5713d18f880f2c0e6840dafeb2c96858ab395ff392b07b58
 # Re-pinned at Phase 26 Plan 12: Latin Modern preload replaces the old serif (1 changed line).
 # Re-pinned at Phase 26 Plan 05: the page title takes a colon (1 changed line).
 # Re-pinned at Phase 26 Plan 06: the ten CFB filter triggers move into three .fgroup wrappers.
-_INDEX_PRE_PHASE_SHA256 = "65a365b2d3d160bee7b5382960ce21e1b94e96cf0a95d0b43d8a8bd643b533bb"
+# Re-pinned at Phase 26 Plan 07: the selection row goes, #summary gains .sum-left and .sum-right,
+# and the phone changed-filter chips move into the Filters sheet.
+_INDEX_PRE_PHASE_SHA256 = "0ca8ce28ef3ccc5d2e8f078ffe5c514e977ff76ac861b53d1538d284a153a3e2"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

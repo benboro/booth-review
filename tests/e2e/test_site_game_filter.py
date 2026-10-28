@@ -321,12 +321,12 @@ def test_phone_sheet_section_badge_and_touch_targets(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(mobile_page, "?game=lakeshore")
-    assert mobile_page.locator("#filters-button").inner_text() == "Filters · 1 changed"
+    assert mobile_page.locator("#filters-button").inner_text() == "Filters (1 changed)"
     mobile_page.click("#filters-button")
     sibling = mobile_page.evaluate(
         "() => document.getElementById('filter-game').previousElementSibling.id"
     )
-    assert sibling == "filter-postseason"
+    assert sibling == "filter-school"  # Matchup: Conference, School, Game
     mobile_page.locator("#game-search").scroll_into_view_if_needed()
     assert mobile_page.locator("#game-search").bounding_box()["height"] >= 44  # type: ignore[index]
     heights = mobile_page.evaluate(

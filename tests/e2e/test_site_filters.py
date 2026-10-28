@@ -520,9 +520,9 @@ def test_clear_all_filters_also_clears_people(
     assert state["school"] == []
     assert state["compare"] is False
     assert state["together"] is False
-    # The selection row is always rendered now (C1); it keeps Clear all filters
+    # The count line is always rendered (Round 3); it keeps Clear all filters
     # and drops the chips.
-    expect(guarded_page.locator("#selection-row")).to_be_visible()
+    expect(guarded_page.locator("#summary")).to_be_visible()
     expect(guarded_page.locator("#chips li")).to_have_count(0)
     assert guarded_page.locator("#toolbar .is-changed").count() == 0
 
@@ -534,7 +534,7 @@ def test_phone_filters_button_count_includes_selected_people(
     as a changed control, since the Announcers picker lives inside the same
     Filters sheet."""
     open_app(mobile_page, "?people=dale-harlow")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
 
 
 def test_toolbar_order_and_clear_all_contrast(
@@ -565,8 +565,8 @@ def test_toolbar_order_and_clear_all_contrast(
         "trigger-postseason",
     ]
 
-    # Clear all filters sits inside the selection row, after the chips and toggles.
-    assert guarded_page.locator("#selection-row > #clear-filters").count() == 1
+    # Clear all filters sits at the end of the count line, after the chips and toggles.
+    assert guarded_page.locator("#summary .sum-right > #clear-filters:last-child").count() == 1
     assert guarded_page.locator("#toolbar #clear-filters").count() == 0
 
     styles = guarded_page.evaluate(
@@ -1019,24 +1019,25 @@ def test_mobile_filters_sheet(mobile_page: Page, open_app: Callable[[Page, str],
     mobile_page.wait_for_function("document.activeElement.id === 'clear-filters'")
 
     section_order = mobile_page.evaluate(
-        "() => Array.from(document.querySelector('.sheet-body').children).map((el) => el.id)"
+        "() => Array.from(document.querySelectorAll('.sheet-body > section')).map((el) => el.id)"
     )
+    # Grouped like the bar: Broadcast, Matchup, Calendar.
     assert section_order == [
         "filter-announcers",
-        "filter-seasons",
         "filter-networks",
-        "filter-slots",
+        "filter-booth",
         "filter-role",
         "filter-conference",
         "filter-school",
-        "filter-postseason",
         "filter-game",
-        "filter-booth",
+        "filter-seasons",
+        "filter-slots",
+        "filter-postseason",
     ]
 
     mobile_page.check("input[name='slot'][value='prime']")
     mobile_page.wait_for_function("location.search.includes('slot=prime')")
-    expect(filters_button).to_have_text("Filters · 1 changed")
+    expect(filters_button).to_have_text("Filters (1 changed)")
     expect(mobile_page.locator("#filters-show-results")).to_have_text("Show games")
 
     mobile_page.click("#filters-show-results")
@@ -1061,7 +1062,8 @@ def test_mobile_filters_button_badge_reflects_school_filter(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(mobile_page, "?school=northfield")
-    expect(mobile_page.locator("#filters-button")).to_have_text("Filters · 1 changed")
+    expect(mobile_page.locator("#filters-button")).to_have_text("Filters (1 changed)")
+    mobile_page.click("#filters-button")
     chips = mobile_page.locator("#filter-chips li")
     expect(chips).to_have_count(1)
     assert "School" in chips.first.inner_text()
@@ -2233,7 +2235,7 @@ def test_phone_filters_button_and_chips_follow_changed_controls(
     mobile_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     """SHELL-03 phone: a clean load reads "Filters" with no chips and no accent;
-    two changed controls read "Filters · 2 changed" in the accent, with one
+    two changed controls read "Filters (2 changed)" in the accent, with one
     accent chip per changed control, in toolbar order."""
     open_app(mobile_page, "")
     button = mobile_page.locator("#filters-button")
@@ -2242,12 +2244,14 @@ def test_phone_filters_button_and_chips_follow_changed_controls(
     expect(mobile_page.locator("#filter-chips")).to_be_hidden()
 
     open_app(mobile_page, "?school=northfield&seasons=2019-2025")
-    expect(button).to_have_text("Filters · 2 changed")
+    expect(button).to_have_text("Filters (2 changed)")
+    expect(mobile_page.locator("#filter-chips")).to_be_hidden()
     styles = button.evaluate(
         "el => { const s = getComputedStyle(el);"
         " return [s.borderTopColor, s.backgroundColor, s.color]; }"
     )
     assert styles == ["rgb(27, 79, 92)", "rgb(227, 237, 239)", "rgb(27, 79, 92)"]
+    button.click()
     chips = mobile_page.locator("#filter-chips li button")
     expect(chips).to_have_count(2)
     texts = chips.all_inner_texts()
@@ -2299,19 +2303,21 @@ def test_changed_predicate_matches_a_clean_load(
     assert guarded_page.evaluate("window.__testHooks.getState()") == clean
 
 
-def test_clear_all_filters_sits_at_the_right_end_of_the_selection_row(
+def test_clear_all_filters_sits_at_the_right_end_of_the_count_line(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """C1: Clear all filters is the last item in the always-rendered selection
-    row, flush with its right edge, and resets every control to its clean-load
+    """C1: Clear all filters is the last item in the always-rendered count
+    line, flush with its right edge, and resets every control to its clean-load
     value (changed state included)."""
     open_app(guarded_page, "?school=northfield&seasons=2019-2025&people=dale-harlow")
     assert guarded_page.locator("#toolbar .is-changed").count() >= 3
     box = guarded_page.locator("#clear-filters").bounding_box()
-    row = guarded_page.locator("#selection-row").bounding_box()
+    row = guarded_page.locator("#summary").bounding_box()
     assert box is not None and row is not None
     assert abs((box["x"] + box["width"]) - (row["x"] + row["width"])) <= 1
-    last = guarded_page.evaluate("document.querySelector('#selection-row').lastElementChild.id")
+    last = guarded_page.evaluate(
+        "document.querySelector('#summary .sum-right').lastElementChild.id"
+    )
     assert last == "clear-filters"
     guarded_page.click("#clear-filters")
     guarded_page.wait_for_function("location.search === ''")
