@@ -4341,6 +4341,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   max-width: 100%;
 }
 
+/* The framed module sits on the same gutter as the chart module above it. */
+#mlb-matched-games {
+  margin-inline: var(--space-lg);
+}
+
+
 .nfl-status {
   position: relative;
   min-height: 520px;

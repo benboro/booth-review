@@ -467,3 +467,11 @@ def test_mlb_matched_games_has_cfbs_module_frame(
         "() => getComputedStyle(document.querySelector('#mlb-chart-area .module')).borderTopColor"
     )
     assert mlb["borderColor"] == chart
+    # Same left and right edges as the chart module above it, not edge to edge.
+    edges = page.evaluate(
+        """() => { const r = (e) => e.getBoundingClientRect();
+          const a = r(document.querySelector('#mlb-chart-area .module'));
+          const b = r(document.getElementById('mlb-matched-games'));
+          return [Math.round(a.left - b.left), Math.round(a.right - b.right)]; }"""
+    )
+    assert edges == [0, 0]
