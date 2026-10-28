@@ -592,6 +592,7 @@ function controlInfo(model, state) {
   const picks = (label, noneWord, names) => ({
     active: names.length > 0,
     items: names,
+    count: names.length,
     value: names.length === 0 ? noneWord : names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`,
     full: names.length === 0 ? label : `${label}: ${names.join(', ')}`,
   });
@@ -602,6 +603,7 @@ function controlInfo(model, state) {
     seasons: {
       active: seasonsChanged,
       items: [range],
+      count: null,
       value: range,
       full: seasonsChanged ? `Seasons: ${range}` : 'Seasons',
     },
@@ -853,7 +855,7 @@ export function renderNflFilters(ctx) {
   for (const btn of [ui.clear, ui.sheetClear]) btn.setAttribute('aria-disabled', changed.length > 0 ? 'false' : 'true');
   const chips = changed.map((key) => {
     const label = TRIGGERS.find((t) => t.key === key).label;
-    const { full, items } = info[key];
+    const { full, count } = info[key];
     const li = el('li');
     const chip = el('button', 'filter-chip');
     chip.type = 'button';
@@ -870,7 +872,8 @@ export function renderNflFilters(ctx) {
     const text = el('span', 'chip-text');
     text.dataset.name = label;
     text.dataset.value = full.slice(label.length);
-    text.dataset.count = String(key === 'seasons' ? 1 : items.length);
+    // A Seasons range has no count: it keeps the long form.
+    text.dataset.count = count == null ? '' : String(count);
     chip.append(text);
     li.append(chip);
     return li;
@@ -904,7 +907,7 @@ function fitFilterChips() {
     text.replaceChildren(el('b', null, name), document.createTextNode(value));
     text.dataset.form = 'long';
     // A closed sheet has no width to measure; the next resize event decides.
-    if (text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
+    if (count !== '' && text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
       text.replaceChildren(el('b', null, name), document.createTextNode(` (${count})`));
       text.dataset.form = 'short';
     }

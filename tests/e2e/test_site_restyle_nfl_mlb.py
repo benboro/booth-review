@@ -301,6 +301,24 @@ def test_nfl_phone_chip_wording_follows_the_fit(
         assert "·" not in text
 
 
+def test_nfl_seasons_chip_never_collapses_to_a_count(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    page = nfl_mobile_page
+    open_nfl_app(page)
+    page.set_viewport_size({"width": 240, "height": 800})
+    _set(page, {"seasons": [2025, 2026], "people": ["p00", "p01", "p02"]})
+    page.click("#nfl-filters-button")
+    page.wait_for_selector("#nfl-filters-sheet:popover-open")
+    page.evaluate(WAIT_TWO_FRAMES)
+    seasons = page.locator("#nfl-filter-chips .chip-text[data-name='Seasons']")
+    assert seasons.get_attribute("data-count") == ""
+    assert seasons.get_attribute("data-form") == "long"
+    assert "(1)" not in seasons.inner_text()
+    people = page.locator("#nfl-filter-chips .chip-text[data-name='Announcers']")
+    assert people.get_attribute("data-count") == "3"
+
+
 def test_nfl_clicking_a_chip_keeps_the_sheet_open_and_reaches_its_section(
     nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
@@ -313,7 +331,9 @@ def test_nfl_clicking_a_chip_keeps_the_sheet_open_and_reaches_its_section(
     assert chip.get_attribute("popovertarget") is None
     chip.click()
     page.evaluate(WAIT_TWO_FRAMES)
-    assert page.evaluate("() => document.getElementById('nfl-filters-sheet').matches(':popover-open')")
+    assert page.evaluate(
+        "() => document.getElementById('nfl-filters-sheet').matches(':popover-open')"
+    )
     focused = page.evaluate("() => document.activeElement.closest('[id^=nfl-filter-]')?.id")
     assert focused == "nfl-filter-team-sheet"
 

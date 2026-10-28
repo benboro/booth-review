@@ -288,3 +288,52 @@ def test_clicking_a_chip_keeps_the_filters_sheet_open_and_reaches_its_section(
     focused = mobile_page.evaluate("() => document.activeElement.closest('[id^=filter-]')?.id")
     assert focused == "filter-announcers"
 
+
+H2H_QUERY = "?school=northfield,lakeview&h2h=1&networks=none&seasons=2019-2025"
+
+
+def _chip_counts(page: Page) -> dict[str, str]:
+    """data-count by chip name, for every changed-filter chip."""
+    out: dict[str, str] = page.evaluate(
+        """() => Object.fromEntries([...document.querySelectorAll('#filter-chips .chip-text')]
+            .map((t) => [t.dataset.name, t.dataset.count]))"""
+    )
+    return out
+
+
+def test_chip_count_is_the_number_of_picks_not_the_number_of_display_strings(
+    mobile_page: Page, open_app: Callable[..., None]
+) -> None:
+    open_app(mobile_page, H2H_QUERY)
+    _open_sheet(mobile_page)
+    counts = _chip_counts(mobile_page)
+    # Head-to-head shows one "A vs B" string but is two schools; no network is checked.
+    assert counts["School"] == "2"
+    assert counts["Networks"] == "0"
+    # A range never collapses to a count.
+    assert counts["Seasons"] == ""
+    # Narrow the strip so the long forms no longer fit (the fixture's school names are short).
+    mobile_page.evaluate("() => { document.getElementById('filter-chips').style.width = '110px'; }")
+    mobile_page.wait_for_function(
+        "document.querySelector('#filter-chips .chip-text[data-name=School]').dataset.form"
+        " === 'short'"
+    )
+    texts = mobile_page.locator("#filter-chips .chip-text").all_inner_texts()
+    assert "School (2)" in texts
+    assert "Networks (0)" in texts
+    seasons = mobile_page.locator("#filter-chips .chip-text[data-name=Seasons]")
+    assert seasons.get_attribute("data-form") == "long"
+    assert seasons.inner_text().startswith("Seasons: ")
+    assert all("\u00b7" not in t and "(1)" not in t for t in texts)
+
+
+def test_a_single_crew_pick_counts_once(mobile_page: Page, open_app: Callable[..., None]) -> None:
+    open_app(mobile_page, "")
+    key = mobile_page.evaluate(
+        """() => import('./modules/crew-groups.js').then((G) =>
+            [...G.crewIndex(window.__testHooks.data).crews.keys()][0])"""
+    )
+    assert key
+    open_app(mobile_page, f"?crew={key}")
+    _open_sheet(mobile_page)
+    assert _chip_counts(mobile_page)["Crew"] == "1"

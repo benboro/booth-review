@@ -1463,14 +1463,17 @@ const restingLabels = new Map();
  */
 function triggerInfo(name, data, state, view) {
   const resting = restingLabels.get(name) ?? name;
-  const info = (items) => ({
+  // `count` is how many things the visitor picked, which differs from `items.length` when one display
+  // string covers several picks (head-to-head) or none (Networks "None"). null: a range, no count.
+  const info = (items, count = items.length) => ({
     label: items.length > 0 ? `${resting}: ${items.join(', ')}` : resting,
     active: items.length > 0,
     items,
+    count,
   });
   if (name === 'crew') {
     // Not a toolbar trigger: only `changedControls` asks, so the phone count and chips list it.
-    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null, items: [] };
+    return { label: `Crew: ${crewPickNames(data, state).join(' / ')}`, active: state.crew != null, items: [], count: 1 };
   }
   if (name === 'announcers') {
     return info(
@@ -1483,13 +1486,13 @@ function triggerInfo(name, data, state, view) {
   if (name === 'seasons') {
     if (state.seasons == null) return info([]);
     const [a, b] = state.seasons;
-    return info([`${a}–${b}`]);
+    return info([`${a}–${b}`], null);
   }
   if (name === 'networks') {
     if (state.networks == null) return info([]);
     const { shown, checked, names } = shownNetworkCounts(data, state, view);
     if (checked === shown) return info([]);
-    return info(names.length > 0 ? names : ['None']);
+    return info(names.length > 0 ? names : ['None'], names.length);
   }
   if (name === 'kickoff') {
     return info(state.slots == null ? [] : state.slots.map((slot) => SLOT_SHORT_LABELS[slot]));
@@ -1502,7 +1505,7 @@ function triggerInfo(name, data, state, view) {
   }
   if (name === 'school') {
     const names = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
-    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs ${names[1]}`]);
+    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs ${names[1]}`], 2);
     return info(names);
   }
   if (name === 'postseason') {
@@ -1610,7 +1613,7 @@ function renderFiltersButton(data, state, view) {
   const live = clearAllActive(changed, state, els.gameSearch.value);
   els.clearFilters.setAttribute('aria-disabled', live ? 'false' : 'true');
   const chips = changed.map((name) => {
-    const { label, items } = triggerInfo(name, data, state, view);
+    const { label, count: picks } = triggerInfo(name, data, state, view);
     const li = document.createElement('li');
     const chip = document.createElement('button');
     chip.type = 'button';
@@ -1620,12 +1623,12 @@ function renderFiltersButton(data, state, view) {
     // The crew pick has no toolbar trigger, so no resting label: bold its "Crew:" prefix.
     const resting = name === 'crew' ? 'Crew' : (restingLabels.get(name) ?? label);
     const value = name === 'crew' ? label.slice('Crew'.length) : triggerValue(name, label, true);
-    const count = name === 'crew' ? crewPickNames(data, state).length : items.length;
+    const count = picks == null ? '' : String(picks);
     const text = document.createElement('span');
     text.className = 'chip-text';
     text.dataset.name = resting;
     text.dataset.value = value;
-    text.dataset.count = String(count);
+    text.dataset.count = count;
     chip.append(text);
     chip.setAttribute('aria-label', label);
     chip.title = label;
@@ -1671,7 +1674,8 @@ function fitFilterChips() {
     text.append(strong, document.createTextNode(value));
     text.dataset.form = 'long';
     // A closed panel has no width to measure; the next resize event decides.
-    if (text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
+    // A Seasons range has no count, so it keeps the long form.
+    if (count !== '' && text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
       const short = document.createElement('b');
       short.textContent = name;
       text.replaceChildren(short, document.createTextNode(` (${count})`));
