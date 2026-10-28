@@ -224,6 +224,40 @@ def test_the_open_game_button_opens_the_panel_and_escape_returns_focus(
     )
 
 
+# Whether a viewport point is under the tap card, or within 40 px of any tappable venue dot or
+# edge marker (a tap there would be a click on that venue, not on the background).
+_NOT_BACKGROUND = """([x, y]) => {
+  const hit = document.elementFromPoint(x, y);
+  if (hit && hit.closest('#chart-tooltip')) return true;
+  const gd = document.querySelector('.wk-map-box');
+  const r = gd.getBoundingClientRect();
+  const xa = gd._fullLayout.xaxis;
+  const ya = gd._fullLayout.yaxis;
+  return gd._fullData.some((t) => ['venue-hits', 'markers'].includes(t.name) && t.x.some(
+    (tx, i) => Math.hypot(
+      x - (r.left + xa._offset + xa.c2p(tx)), y - (r.top + ya._offset + ya.c2p(t.y[i])),
+    ) < 40,
+  ));
+}"""
+
+
+def _background_point(page: Page, box: dict[str, float]) -> tuple[float, float]:
+    """A point 6 px inside a corner of the map box that is plain map background. The tap card sits
+    above the tapped dot and can lie over the top-left corner (the NFL day's dot is low in the
+    box), and the NFL day has an edge marker near another corner; a tap on either is not a
+    background tap."""
+    corners = [
+        (box["x"] + 6, box["y"] + 6),
+        (box["x"] + box["width"] - 6, box["y"] + 6),
+        (box["x"] + 6, box["y"] + box["height"] - 6),
+        (box["x"] + box["width"] - 6, box["y"] + box["height"] - 6),
+    ]
+    for corner in corners:
+        if not page.evaluate(_NOT_BACKGROUND, list(corner)):
+            return corner
+    raise AssertionError("no corner of the map box is plain background")
+
+
 @pytest.mark.parametrize("sport", SPORTS)
 def test_a_background_tap_clears_only_the_card(request: pytest.FixtureRequest, sport: str) -> None:
     page = _open_sport(request, sport, mobile=True)
@@ -232,7 +266,8 @@ def test_a_background_tap_clears_only_the_card(request: pytest.FixtureRequest, s
     _card_visible(page)
     box = page.locator(".wk-map-box").bounding_box()
     assert box is not None
-    page.touchscreen.tap(box["x"] + 6, box["y"] + 6)
+    x, y = _background_point(page, box)
+    page.touchscreen.tap(x, y)
     page.wait_for_selector("#chart-tooltip", state="hidden", timeout=5000)
     expect(page.locator("dialog[open]")).to_have_count(0)
     assert page.evaluate(_RINGS) == 0
@@ -276,7 +311,8 @@ def test_a_tap_keeps_the_shading_and_dismissing_the_card_does_too(
     assert page.evaluate(_SHADED) is True
     box = page.locator(".wk-map-box").bounding_box()
     assert box is not None
-    page.touchscreen.tap(box["x"] + 6, box["y"] + 6)
+    x, y = _background_point(page, box)
+    page.touchscreen.tap(x, y)
     page.wait_for_selector("#chart-tooltip", state="hidden", timeout=5000)
     assert page.evaluate(_RINGS) == 0
     assert page.evaluate(_SHADED) is True
