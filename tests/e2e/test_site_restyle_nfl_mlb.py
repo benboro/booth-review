@@ -334,10 +334,13 @@ def test_nfl_scatter_tooltip_date_matches_the_panel(
           for (const tr of gd.data) {
             for (const k of tr.customdata ?? []) {
               if (!Number.isInteger(k)) continue;
-              gd.emit('plotly_hover', { points: [{ customdata: k }], event: { clientX: 300, clientY: 200 } });
+              const event = { clientX: 300, clientY: 200 };
+              gd.emit('plotly_hover', { points: [{ customdata: k }], event });
               const tip = document.getElementById('chart-tooltip');
               if (!tip || tip.hidden) continue;
-              for (const c of tip.children) if (/, Week \\d+$/.test(c.textContent)) seen.add(c.textContent);
+              for (const c of tip.children) {
+                if (/, Week \\d+$/.test(c.textContent)) seen.add(c.textContent);
+              }
             }
           }
           return [...seen];
