@@ -18,8 +18,8 @@ LIGHT_SNAPSHOT: dict[str, Any] = {
     "DIVIDER": "#DAE0DD",
     "FAMILY_COLORS": {
         "disney": "#0072B2",
-        "fox": "#009E73",
-        "cbs": "#B77F00",
+        "fox": "#009970",
+        "cbs": "#B37C00",
         "nbc": "#C972A2",
         "cw": "#1D96DB",
         "wbd": "#D55E00",
@@ -72,24 +72,24 @@ LIGHT_SNAPSHOT: dict[str, Any] = {
             "#CCE3F0",
         ],
         "fox": [
-            "#009E73",
-            "#66C5AB",
-            "#005F45",
-            "#A6DDCE",
-            "#003728",
-            "#33B18F",
-            "#007E5C",
-            "#CCECE3",
+            "#009970",
+            "#66C2A9",
+            "#005C43",
+            "#A6DBCD",
+            "#003627",
+            "#33AD8D",
+            "#007A5A",
+            "#CCEBE2",
         ],
         "cbs": [
-            "#B77F00",
-            "#D4B266",
-            "#6E4C00",
-            "#E6D2A6",
-            "#402C00",
-            "#C59933",
-            "#926600",
-            "#F1E5CC",
+            "#B37C00",
+            "#D1B066",
+            "#6B4A00",
+            "#E4D1A6",
+            "#3F2B00",
+            "#C29633",
+            "#8F6300",
+            "#F0E5CC",
         ],
         "nbc": [
             "#C972A2",
@@ -316,7 +316,7 @@ def test_bar_tones_dark(app: Page) -> None:
         assert _ratio(app, tones["b"], _PAGE) >= 3.0, fam
         assert _ratio(app, tones["a"], tones["b"]) >= 1.15, fam
     light = _ev(app, "bar-chart.js", "return M.barTones({ family: 'fox' }, 'light');")
-    mixed = _ev(app, "palette.js", "return M.mixHex('#009E73', M.PAGE_BG.light, 0.55);")
+    mixed = _ev(app, "palette.js", "return M.mixHex('#009970', M.PAGE_BG.light, 0.55);")
     assert light["b"] == mixed
 
 
@@ -345,3 +345,16 @@ def test_makepill_dark(app: Page) -> None:
     assert got[0] == ["rgb(255, 255, 255)", "rgb(10, 123, 192)"]
     assert got[1] == ["rgb(0, 0, 0)", "rgb(228, 223, 214)"]
     assert got[2][0] == "rgb(255, 255, 255)"
+
+
+@pytest.mark.parametrize("family", ["fox", "cbs"])
+def test_fox_and_cbs_light_marks_hold_3_to_1_on_the_surface_and_the_page(
+    app: Page, family: str
+) -> None:
+    """Phase 26 panel F4: the green-gray SURFACE dropped FOX to 2.949 and CBS to 2.992 on the
+    unrated strip. (NBC and Other were already under 3:1 on main; the 2px ring rule covers them.)"""
+    color = _ev(app, "palette.js", "return M.FAMILY_COLORS.light[arg];", family)
+    surface = _ev(app, "palette.js", "return M.SURFACE.light;")
+    page_bg = _ev(app, "palette.js", "return M.PAGE_BG.light;")
+    assert _ratio(app, color, surface) >= 3.0, (family, color)
+    assert _ratio(app, color, page_bg) >= 3.0, (family, color)

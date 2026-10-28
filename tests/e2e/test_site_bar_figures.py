@@ -555,7 +555,7 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
             accent: P.SPECIAL.light,
             accentMix: P.mixHex(P.SPECIAL.light, P.PAGE_BG.light, 0.55),
             mainTones: F.barTones({ family: null, mainFamily: 'fox' }, 'light'),
-            mainMix: P.mixHex('#009E73', P.PAGE_BG.light, 0.55),
+            mainMix: P.mixHex('#009970', P.PAGE_BG.light, 0.55),
           };
         }"""
     )
@@ -573,7 +573,7 @@ def test_palette_helpers(guarded_page: Page, site_url: str) -> None:
     assert out["plainTones"] == {"a": out["heroInk"], "b": out["heroMix"]}
     assert out["matchedTones"] == {"a": "#1B4F5C", "b": out["accentMix"]}
     assert out["accent"] == "#1B4F5C"
-    assert out["mainTones"] == {"a": "#009E73", "b": out["mainMix"]}  # D-31
+    assert out["mainTones"] == {"a": "#009970", "b": out["mainMix"]}  # D-31
 
 
 def test_channel_shades(guarded_page: Page, site_url: str) -> None:
@@ -817,8 +817,8 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert any(v == 0 for v in rated["x"]) and any(v > 0 for v in unrated["x"])
     # D-31: Northfield's games are all net-a (Disney), so announcer bars are Disney blue.
     # (the crews of the unrated FOX games take the FOX family's green)
-    assert set(rated["marker"]["color"]) == {"#0072B2", "#009E73"}
-    assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,158,115,0.25)"}
+    assert set(rated["marker"]["color"]) == {"#0072B2", "#009970"}
+    assert set(unrated["marker"]["color"]) == {"rgba(0,114,178,0.25)", "rgba(0,153,112,0.25)"}
     # Both parts carry a 1.5px border in the full tone, so they look equally thick (notes-2 #2);
     # a zero-length part has border width 0.
     for trace, xs in ((rated, rated["x"]), (unrated, unrated["x"])):
@@ -912,8 +912,8 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
 
 
 _MAIN_FAMILY_LIGHT = [
-    "#009E73", "#8B8B8B", "#0072B2", "#009E73", "#0072B2",
-    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#000000", "#009E73",
+    "#009970", "#8B8B8B", "#0072B2", "#009970", "#0072B2",
+    "#0072B2", "#0072B2", "#0072B2", "#0072B2", "#000000", "#009970",
 ]  # fmt: skip
 
 
@@ -1056,8 +1056,8 @@ def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> Non
     out = _figure(guarded_page, site_url, {"school": ["northfield"], "by": "network"})
     first = out["figure"]["traces"][0]
     # Shade 0 is each row's family color: ABC/ESPN blue, FOX/FS1/BTN green.
-    assert set(first["marker"]["color"]) == {"#0072B2", "#009E73"}
-    assert set(first["marker"]["line"]["color"]) == {"#0072B2", "#009E73"}  # border in its own tone
+    assert set(first["marker"]["color"]) == {"#0072B2", "#009970"}
+    assert set(first["marker"]["line"]["color"]) == {"#0072B2", "#009970"}  # border in its own tone
 
 
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
@@ -1631,7 +1631,7 @@ def test_family_stack_figure_shape(
         line = t["marker"]["line"]  # 1.5px border in the piece's own shade (notes-2 #2)
         assert line["width"] == [1.5 if v > 0 else 0 for v in t["x"]]
     colors = {c for t in pieces for c in t["marker"]["color"] if c.startswith("#")}
-    assert colors == {"#0072B2", "#66AAD1", "#009E73"}  # net-a, net-e shade 1, FOX family
+    assert colors == {"#0072B2", "#66AAD1", "#009970"}  # net-a, net-e shade 1, FOX family
     assert {c for t in pieces for c in t["marker"]["line"]["color"]} == colors
     assert all(
         c.startswith("rgba(") and c.endswith(",0.25)")

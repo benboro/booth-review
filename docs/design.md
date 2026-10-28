@@ -220,7 +220,10 @@ records only where the site settles or applies them.
   #009B71, cbs #B77F00 to #B57E00, nbc #C972A2 to #C16D9C, cw #1D96DB to #1C90D2, other
   #8B8B8B to #888888); dark is unchanged. Phase 26 then re-derived the light set against the
   green-gray land by the same deepen rule: fox #009970, cbs #B37C00, nbc #BF6C9A, cw #1C8FD0,
-  other #878787 (disney, wbd and conference are unchanged). The kickoff
+  other #878787 (disney, wbd and conference are unchanged). The chart's own light FOX and CBS
+  (`FAMILY_COLORS.light`) took the same #009970 and #B37C00 in the Phase 26 panel, so they hold
+  3:1 on the unrated strip's SURFACE (3.13 and 3.12) and the page ground; NBC and Other on that
+  strip were already under 3:1 on the old ground and rely on the 2px ring rule. The kickoff
   window is the shape: CFB circle (noon), square (afternoon), diamond (prime), triangle
   (late); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
   game is an open ring in its family colour, still listed in the Time TBA strip. Games at

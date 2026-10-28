@@ -529,7 +529,7 @@ def test_chart_tabs_slot_holds_three_tabs(
 # text, every other family needs black).
 _PILL_CONTRAST = {
     "disney": ("rgb(0, 114, 178)", "rgb(255, 255, 255)"),
-    "fox": ("rgb(0, 158, 115)", "rgb(0, 0, 0)"),
+    "fox": ("rgb(0, 153, 112)", "rgb(0, 0, 0)"),
     "conference": ("rgb(0, 0, 0)", "rgb(255, 255, 255)"),
     "other": ("rgb(139, 139, 139)", "rgb(0, 0, 0)"),
 }
@@ -595,7 +595,7 @@ def test_networks_filter_fades_and_fade_filters_keep_family_color(
     fox = next(t for t in _inert_traces(traces) if t["meta"] == "inert:fox")
     assert len(fox["x"]) == 3
     assert fox["opacity"] == tiers["inert"]
-    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
+    assert _marker_color(guarded_page, "inert:fox") == "#009970"
 
     full = guarded_page.evaluate(
         "() => document.getElementById('chart')._fullData"
@@ -701,7 +701,7 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert (
         '<span style="color:#8B8B8B">Other Network</span>'
         '/<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009E73">Beta Network</span>'
+        '/<span style="color:#009970">Beta Network</span>'
     ) in dot7
 
 
@@ -718,7 +718,7 @@ def test_hover_text_network_line_is_slash_joined_primary_first(
     dot4 = _hover_text(traces, 4)
     assert (
         '<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009E73">Beta Network</span>'
+        '/<span style="color:#009970">Beta Network</span>'
     ) in dot4
     assert "(also" not in dot4
     assert " / " not in dot4
@@ -2155,7 +2155,7 @@ def test_no_halo_trace_with_no_selection(
 _BORDER_COLOR = {
     "light": {
         "disney": "rgb(0, 114, 178)",
-        "fox": "rgb(0, 158, 115)",
+        "fox": "rgb(0, 153, 112)",
         "other": "rgb(139, 139, 139)",
     },
 }
@@ -2582,7 +2582,7 @@ def test_fade_mode_tiers_without_an_announcer(
     conference = next(t for t in _family_traces(traces) if t["meta"] == "family:conference")
     assert conference["customdata"] == [2]
     assert conference["opacity"] == tiers["active"]
-    assert _marker_color(guarded_page, "inert:fox") == "#009E73"
+    assert _marker_color(guarded_page, "inert:fox") == "#009970"
 
 
 def test_fade_mode_tiers_with_an_announcer_on_a_filter(

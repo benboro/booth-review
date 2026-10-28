@@ -102,10 +102,11 @@ export const PILL_TEXT_COLOR = {
  * @type {{light: Record<string, string>, dark: Record<string, string>}}
  */
 export const FAMILY_COLORS = {
+  // Light FOX and CBS are the map-family values (Phase 26 panel F4): 3:1 or more on SURFACE.light.
   light: {
     disney: '#0072B2',
-    fox: '#009E73',
-    cbs: '#B77F00',
+    fox: '#009970',
+    cbs: '#B37C00',
     nbc: '#C972A2',
     cw: '#1D96DB',
     wbd: '#D55E00',
