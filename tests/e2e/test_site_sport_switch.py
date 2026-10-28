@@ -157,9 +157,11 @@ def _assert_layout_stable(page: Page, open_cfb: Callable[..., None]) -> None:
     _click(page, "nfl")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert abs(_bar_height(page) - bar) <= 1
-    assert measure_gap(page, "#nfl-toolbar", "#nfl-selection-row") == 8
+    assert measure_gap(page, "#nfl-toolbar", "#nfl-selection-bar") == 8
     assert measure_gap(page, "#nfl-chart-tabs", "#nfl-chart-area .nfl-chart-module") == 16
-    nfl_rows = page.evaluate(_ROWS, "#nfl-toolbar > button")
+    nfl_rows = page.evaluate(
+        _ROWS, "#nfl-toolbar > button, #nfl-toolbar .fgroup-row .filter-trigger"
+    )
     assert element_height(page, "#nfl-toolbar") > 0
     assert page.evaluate("getComputedStyle(document.getElementById('toolbar')).display") == "none"
     # Each sport owns its row count; neither is forced to the other's height.

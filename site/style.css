@@ -411,16 +411,6 @@ li[role="option"][aria-selected="true"] .option-check::after {
   min-width: 0;
 }
 
-.selection-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  /* D-03: no box; chips and toggles sit on the page. Always rendered, 32px:
-     with no pick it holds only Clear all filters at the right end (C1). */
-  min-height: 32px;
-}
-
 #chips {
   list-style: none;
   margin: 0;
@@ -495,19 +485,11 @@ li[role="option"][aria-selected="true"] .option-check::after {
   display: none;
 }
 
-/* 481px and up: the selection row never wraps (C2). Chips truncate (64-160px,
-   full name in title and aria-label); below 1104px the toggles use their short
-   labels; Clear all filters stays at the right end. */
+/* 481px and up: the count line never wraps (C2). Chips truncate (64-160px, full name in title and
+   aria-label). The CFB and NFL chips take their look from the count line's rules; the MLB chips are
+   square like them. */
 @media (min-width: 481px) {
-  .selection-row {
-    flex-wrap: nowrap;
-    height: 32px;
-    min-height: 0;
-    box-sizing: border-box;
-  }
-
   #chips,
-  #nfl-chips,
   #mlb-chips {
     flex-wrap: nowrap;
     flex: 0 1 auto;
@@ -516,7 +498,6 @@ li[role="option"][aria-selected="true"] .option-check::after {
   }
 
   #chips > .chip,
-  #nfl-chips > .chip,
   #mlb-chips > .chip {
     box-sizing: border-box;
     height: 28px;
@@ -524,8 +505,9 @@ li[role="option"][aria-selected="true"] .option-check::after {
     max-width: 160px;
     flex: 0 1 auto;
     padding: 0 var(--space-sm);
-    border-radius: 14px;
-    background: var(--bg);
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    background: transparent;
   }
 
   #chips > .chip.chip-crew {
@@ -533,23 +515,10 @@ li[role="option"][aria-selected="true"] .option-check::after {
     max-width: 280px;
   }
 
-  .selection-row .toggle-group {
-    flex-wrap: nowrap;
-    flex: none;
-  }
-
-  .selection-row .toggle,
-  .selection-row #clear-selection,
   .mlb-selection-area .toggle {
     box-sizing: border-box;
     height: 28px;
     padding: 0 12px;
-    white-space: nowrap;
-  }
-
-  .selection-row .clear-all {
-    margin-left: auto;
-    flex: none;
     white-space: nowrap;
   }
 }
@@ -581,11 +550,6 @@ li[role="option"][aria-selected="true"] .option-check::after {
    check slot below. `font-weight` stays unchanged so bolding the label text
    never resizes the button (which would itself shift the row this fix is
    meant to stop moving). */
-.selection-row .toggle,
-.selection-row #clear-selection {
-  padding: 4px 12px;
-}
-
 .toggle[aria-pressed="true"] {
   background: var(--accent);
   color: var(--bg);
@@ -674,7 +638,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
    on the left and every selection action on the right, Clear all filters last. Nothing in it
    changes the band's height, so no pick, chip or toggle moves anything below. Below 1104px the
    actions drop to a second fixed 32px row (72px band). */
-#summary {
+#summary,
+#nfl-summary-band {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -686,7 +651,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   overflow: visible;
 }
 
-#summary .sum-left {
+#summary .sum-left,
+#nfl-summary-band .sum-left {
   display: flex;
   align-items: center;
   column-gap: var(--space-sm);
@@ -695,7 +661,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   height: 32px;
 }
 
-#summary .sum-right {
+#summary .sum-right,
+#nfl-summary-band .sum-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -707,14 +674,16 @@ li[role="option"][aria-selected="true"] .option-check::after {
 }
 
 /* Person chips and the crew chip: transparent, ruled, 3px radius (Round 3b). */
-#summary #chips {
+#summary #chips,
+#nfl-summary-band #nfl-chips {
   flex: 0 1 auto;
   flex-wrap: nowrap;
   min-width: 0;
   overflow: hidden;
 }
 
-#summary #chips > .chip {
+#summary #chips > .chip,
+#nfl-summary-band #nfl-chips > .chip {
   box-sizing: border-box;
   height: 28px;
   min-width: 64px;
@@ -726,33 +695,39 @@ li[role="option"][aria-selected="true"] .option-check::after {
   background: transparent;
 }
 
-#summary #chips > .chip.chip-crew {
+#summary #chips > .chip.chip-crew,
+#nfl-summary-band #nfl-chips > .chip.chip-crew {
   min-width: 96px;
   max-width: 280px;
   border-color: var(--accent);
   background: var(--accent-soft);
 }
 
-#summary .toggle-group {
+#summary .toggle-group,
+#nfl-summary-band .toggle-group {
   flex-wrap: nowrap;
   flex: none;
 }
 
 #summary .toggle,
-#summary #clear-selection {
+#summary #clear-selection,
+#nfl-summary-band .toggle,
+#nfl-summary-band #nfl-clear-selection {
   box-sizing: border-box;
   height: 28px;
   padding: 0 12px;
   white-space: nowrap;
 }
 
-#summary .clear-all {
+#summary .clear-all,
+#nfl-summary-band .clear-all {
   margin-left: 0;
   flex: none;
 }
 
 @media not all and (min-width: 1104px) {
-  #summary {
+  #summary,
+  #nfl-summary-band {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: 32px 32px;
@@ -760,7 +735,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
     height: 72px;
   }
 
-  #summary .sum-right {
+  #summary .sum-right,
+  #nfl-summary-band .sum-right {
     justify-self: end;
     max-width: 100%;
   }
@@ -849,10 +825,11 @@ li[role="option"][aria-selected="true"] .option-check::after {
   font-weight: var(--weight-semibold);
 }
 
-/* The CFB phone panel's changed-filter chips (Round 3 phone fix): one fixed strip between the
+/* The CFB and NFL phone panels' changed-filter chips (Round 3 phone fix): one fixed strip between the
    sheet header and body, always 60px (44px chips, or the muted note), scrolling sideways, so a
    pick never moves the sections below. Each chip is as wide as its text, up to the strip. */
-#filter-chips {
+#filter-chips,
+#nfl-filter-chips {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -866,13 +843,15 @@ li[role="option"][aria-selected="true"] .option-check::after {
   border-bottom: 1px solid var(--rule);
 }
 
-#filter-chips > li {
+#filter-chips > li,
+#nfl-filter-chips > li {
   flex: none;
   min-width: 0;
   max-width: 100%;
 }
 
-#filter-chips .filter-chip {
+#filter-chips .filter-chip,
+#nfl-filter-chips .filter-chip {
   display: block;
   box-sizing: border-box;
   height: 44px;
@@ -880,7 +859,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   border-radius: 3px;
 }
 
-#filter-chips .chip-text {
+#filter-chips .chip-text,
+#nfl-filter-chips .chip-text {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -942,7 +922,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   padding-bottom: var(--space-md);
 }
 
-.people-strip #chips {
+.people-strip #chips,
+.people-strip #nfl-chips {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -954,7 +935,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   scrollbar-width: none;
 }
 
-.people-strip #chips > .chip {
+.people-strip #chips > .chip,
+.people-strip #nfl-chips > .chip {
   box-sizing: border-box;
   height: 44px;
   flex: none;
@@ -965,7 +947,8 @@ li[role="option"][aria-selected="true"] .option-check::after {
   background: transparent;
 }
 
-.people-strip #chips > .chip.chip-crew {
+.people-strip #chips > .chip.chip-crew,
+.people-strip #nfl-chips > .chip.chip-crew {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
@@ -987,11 +970,26 @@ li[role="option"][aria-selected="true"] .option-check::after {
   white-space: nowrap;
 }
 
-.people-strip #clear-selection {
+.people-strip #clear-selection,
+.people-strip #nfl-clear-selection {
   padding: 0 4px;
 }
 
-.people-strip #clear-selection:disabled {
+.people-strip #nfl-clear-selection {
+  box-sizing: border-box;
+  flex: none;
+  height: 44px;
+}
+
+/* With nothing to clear the button stays in its row, dimmed, so the strip never shows a blank band. */
+.people-strip #nfl-clear-selection[hidden] {
+  display: block;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.people-strip #clear-selection:disabled,
+.people-strip #nfl-clear-selection:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -1071,7 +1069,8 @@ body.app {
 
 /* ---------- Toolbar ---------- */
 
-#toolbar {
+#toolbar,
+#nfl-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1207,42 +1206,14 @@ body.app {
   white-space: nowrap;
 }
 
-/* NFL bar only (Plan 08 retires it): its filter bar is a grid of equal cells fitted by
-   toolbar-fit.js, which writes `--toolbar-cell-min` and `--toolbar-cols`. The CFB bar is the
-   three-group ledger below and is never measured. */
-@media (min-width: 481px) {
-  .filter-trigger {
-    width: 100%;
-    min-width: 0;
-    max-width: none;
-  }
-}
-
-/* toolbar-fit.js's offscreen probes: laid out for measuring, never seen. */
-.toolbar-measure {
-  position: absolute;
-  top: 0;
-  left: -10000px;
-  visibility: hidden;
-  pointer-events: none;
-  white-space: nowrap;
-}
-
-.toolbar-measure > span {
-  display: inline-block;
-  box-sizing: content-box;
-  border-color: transparent;
-  white-space: nowrap;
-}
-
-/* ---------- CFB filter bar: the ledger (Phase 26, Round 3b) ----------
+/* ---------- Filter bar: the ledger (CFB and NFL) (Phase 26, Round 3b) ----------
    Ten boxless label-over-value entries in three groups (Broadcast, Matchup, Calendar), split
    by the tables' 1px column-group rule. Layout depends only on the viewport width: one row
    from 1280px (fixed 40/30/30% groups, an 82px bar), two rows to 767px, three to 481px; no
    control's value ever moves a rule, an entry or the bar's bottom. Phone (480px and under)
    keeps the Filters button; the groups are not shown there. */
 @media (min-width: 481px) {
-  #toolbar {
+  :is(#toolbar, #nfl-toolbar) {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
@@ -1251,7 +1222,7 @@ body.app {
     padding: 8px var(--space-lg) 10px;
   }
 
-  #toolbar .fgroup {
+  :is(#toolbar, #nfl-toolbar) .fgroup {
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -1262,48 +1233,48 @@ body.app {
     border-top: 1px solid var(--rule);
   }
 
-  #toolbar .fgroup[data-g="broadcast"] {
+  :is(#toolbar, #nfl-toolbar) .fgroup[data-g="broadcast"] {
     padding-top: 0;
     border-top: 0;
   }
 
-  #toolbar .fgroup-label {
+  :is(#toolbar, #nfl-toolbar) .fgroup-label {
     font: var(--font-caption);
     line-height: 17px;
     color: var(--ink);
   }
 
-  #toolbar .fgroup-row {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row {
     display: flex;
     gap: 16px;
     min-width: 0;
   }
 
-  #toolbar .fgroup-row .filter-trigger {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger {
     flex: 1 1 0;
     width: auto;
     min-width: 0;
     max-width: none;
   }
 
-  #toolbar .fgroup-row #trigger-announcers {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row #trigger-announcers {
     flex-grow: 1.7;
   }
 
   /* Two rows: Broadcast takes a row, Matchup and Calendar share the next one. */
   @media (min-width: 768px) {
-    #toolbar .fgroup[data-g="matchup"],
-    #toolbar .fgroup[data-g="calendar"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="matchup"],
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="calendar"] {
       flex: 0 0 50%;
       border-top: 0;
       padding-top: 0;
     }
 
-    #toolbar .fgroup[data-g="matchup"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="matchup"] {
       padding-right: 20px;
     }
 
-    #toolbar .fgroup[data-g="calendar"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="calendar"] {
       padding-left: 20px;
       border-left: 1px solid var(--rule);
     }
@@ -1311,29 +1282,29 @@ body.app {
 
   /* One row: fixed 40/30/30% groups with 20px each side of a rule. */
   @media (min-width: 1280px) {
-    #toolbar {
+    :is(#toolbar, #nfl-toolbar) {
       flex-wrap: nowrap;
     }
 
-    #toolbar .fgroup[data-g="broadcast"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="broadcast"] {
       flex: 0 0 40%;
       padding-right: 20px;
     }
 
-    #toolbar .fgroup[data-g="matchup"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="matchup"] {
       flex: 0 0 30%;
       padding-left: 20px;
       padding-right: 20px;
       border-left: 1px solid var(--rule);
     }
 
-    #toolbar .fgroup[data-g="calendar"] {
+    :is(#toolbar, #nfl-toolbar) .fgroup[data-g="calendar"] {
       flex: 0 0 30%;
     }
   }
 
   /* An entry: a small label over its value on a ruled line. */
-  #toolbar .fgroup-row .filter-trigger {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger {
     height: 44px;
     padding: 0 0 5px;
     border: 0;
@@ -1344,12 +1315,12 @@ body.app {
     line-height: 1.25;
   }
 
-  #toolbar .fgroup-row .filter-trigger:hover {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger:hover {
     background: transparent;
     border-bottom-color: var(--ink);
   }
 
-  #toolbar .fgroup-row .filter-trigger .filter-text {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger .filter-text {
     display: flex;
     flex-direction: column;
     flex: 1 1 0;
@@ -1358,8 +1329,8 @@ body.app {
     white-space: normal;
   }
 
-  #toolbar .fgroup-row .filter-trigger .filter-label,
-  #toolbar .fgroup-row .filter-trigger .filter-value {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger .filter-label,
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger .filter-value {
     display: block;
     min-width: 0;
     overflow: hidden;
@@ -1367,17 +1338,17 @@ body.app {
     white-space: nowrap;
   }
 
-  #toolbar .fgroup-row .filter-trigger .filter-label {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger .filter-label {
     font: var(--font-caption);
     line-height: 1.25;
     color: var(--muted);
   }
 
-  #toolbar .fgroup-row .filter-trigger .filter-value {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger .filter-value {
     color: var(--ink);
   }
 
-  #toolbar .fgroup-row .filter-trigger::after {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger::after {
     width: 5px;
     height: 5px;
     /* `auto` pins the caret to the entry's right edge before the entry's text is rendered,
@@ -1388,58 +1359,115 @@ body.app {
   }
 
   /* Changed: the pick itself in the accent, a 2px accent line, no fill. The box stays 44px. */
-  #toolbar .fgroup-row .filter-trigger.is-changed {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger.is-changed {
     background: transparent;
     border-bottom: 2px solid var(--accent);
     padding-bottom: 4px;
     color: var(--accent);
   }
 
-  #toolbar .fgroup-row .filter-trigger.is-changed .filter-label {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger.is-changed .filter-label {
     font-weight: 400;
     color: var(--accent);
   }
 
-  #toolbar .fgroup-row .filter-trigger.is-changed .filter-value {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger.is-changed .filter-value {
     font-weight: var(--weight-semibold);
     color: var(--accent);
   }
 
-  #toolbar .fgroup-row .filter-trigger.is-changed::after {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger.is-changed::after {
     border-right-color: var(--accent);
     border-bottom-color: var(--accent);
   }
 
   /* Open: a 2px ink line (accent means changed only). */
-  #toolbar .fgroup-row .filter-trigger[aria-expanded="true"] {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-expanded="true"] {
     border-bottom: 2px solid var(--ink);
     padding-bottom: 4px;
   }
 
   /* Greyed (This weekend): label, value, caret and line all quiet; it does not open. */
-  #toolbar .fgroup-row .filter-trigger[aria-disabled="true"],
-  #toolbar .fgroup-row .filter-trigger[aria-disabled="true"].is-changed {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-disabled="true"],
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-disabled="true"].is-changed {
     border-bottom: 1px solid var(--rule);
     padding-bottom: 5px;
     color: var(--disabled);
     cursor: not-allowed;
   }
 
-  #toolbar .fgroup-row .filter-trigger[aria-disabled="true"] .filter-label,
-  #toolbar .fgroup-row .filter-trigger[aria-disabled="true"] .filter-value {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-disabled="true"] .filter-label,
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-disabled="true"] .filter-value {
     font-weight: 400;
     color: var(--disabled);
   }
 
-  #toolbar .fgroup-row .filter-trigger[aria-disabled="true"]::after {
+  :is(#toolbar, #nfl-toolbar) .fgroup-row .filter-trigger[aria-disabled="true"]::after {
     border-right-color: var(--disabled);
     border-bottom-color: var(--disabled);
   }
 }
 
 @media (max-width: 480px) {
-  #toolbar .fgroup {
+  :is(#toolbar, #nfl-toolbar) .fgroup {
     display: none;
+  }
+}
+
+/* The NFL bar is the same ledger with its own fixed widths: 148px entries (Announcers 250px),
+   groups left-aligned and split by the same 1px rule. One row from 1024px, Broadcast on its own
+   row from 768px, one group per row below. Widths depend on the viewport only. */
+@media (min-width: 481px) {
+  #nfl-toolbar .fgroup-row .filter-trigger {
+    flex: 0 0 148px;
+    width: 148px;
+  }
+
+  #nfl-toolbar .fgroup-row #nfl-trigger-announcers {
+    flex-basis: 250px;
+    width: 250px;
+  }
+
+  @media (min-width: 768px) {
+    #nfl-toolbar .fgroup[data-g="broadcast"] {
+      flex: 0 0 100%;
+      padding-right: 0;
+    }
+
+    #nfl-toolbar .fgroup[data-g="matchup"],
+    #nfl-toolbar .fgroup[data-g="calendar"] {
+      flex: 0 0 auto;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    #nfl-toolbar .fgroup[data-g="matchup"] {
+      padding-left: 0;
+      padding-right: 16px;
+      border-left: 0;
+    }
+
+    #nfl-toolbar .fgroup[data-g="calendar"] {
+      padding-left: 16px;
+      padding-right: 0;
+      border-left: 1px solid var(--rule);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    #nfl-toolbar {
+      flex-wrap: nowrap;
+    }
+
+    #nfl-toolbar .fgroup[data-g="broadcast"] {
+      flex: 0 0 auto;
+      padding-right: 16px;
+    }
+
+    #nfl-toolbar .fgroup[data-g="matchup"] {
+      padding-left: 16px;
+      border-left: 1px solid var(--rule);
+    }
   }
 }
 
@@ -3515,41 +3543,28 @@ dialog.detail-panel {
 /* ---------- Phones (≤480px) ---------- */
 
 @media (max-width: 480px) {
-  .selection-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: var(--space-xs);
-    padding: var(--space-xs);
-  }
-
   .toggle-group {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-xs);
   }
 
-  .selection-row .toggle,
-  .selection-row #clear-selection {
-    padding: 0 4px;
-  }
-
-  .selection-row .chip {
-    padding-block: 0;
-  }
-
   /* The count line is one fixed 24px line: count and detail; the actions live in the panel. */
-  #summary {
+  #summary,
+  #nfl-summary-band {
     display: flex;
     height: 24px;
     margin-top: var(--space-sm);
     overflow: hidden;
   }
 
-  #summary .sum-left {
+  #summary .sum-left,
+  #nfl-summary-band .sum-left {
     height: 24px;
   }
 
-  #summary .sum-right {
+  #summary .sum-right,
+  #nfl-summary-band .sum-right {
     display: none;
   }
 
@@ -3979,34 +3994,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: none;
 }
 
-#nfl-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-sm);
-  margin-bottom: var(--gap-filters-band);
-  min-height: 48px;
-  padding: var(--space-sm) var(--space-lg);
-  background: transparent;
-  border-bottom: 1px solid var(--rule);
-}
-
 .nfl-filter-layer {
   display: contents;
-}
-
-/* Same equal-cell grid as #toolbar (set after the flex base above, which it
-   must outrank); `.filter-trigger` sizing is shared. */
-@media (min-width: 481px) {
-  #nfl-toolbar {
-    display: grid;
-    grid-template-columns: repeat(
-      var(--toolbar-cols, auto-fill),
-      minmax(min(100%, max(116px, var(--toolbar-cell-min, 116px))), 1fr)
-    );
-    gap: var(--space-sm);
-    align-items: center;
-  }
 }
 
 #nfl-filters-button {
@@ -4227,6 +4216,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   text-overflow: ellipsis;
 }
 
+/* In the NFL count line the summary is the left side of the band, which sets the spacing. */
+#nfl-summary-band .nfl-summary {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
 /* The NFL and MLB headline is the module title now (module-head). */
 #nfl-headline,
 #mlb-chart-title {
@@ -4256,6 +4252,17 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+#mlb-selection-area #mlb-clear-selection {
+  margin-left: auto;
+}
+
+/* MLB chips are square like the count line's (Round 3b), at every width. */
+#mlb-chips > .chip {
+  border: 1px solid var(--rule-strong);
+  border-radius: 3px;
+  background: transparent;
 }
 
 #nfl-chips,

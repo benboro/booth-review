@@ -9,10 +9,10 @@
  * textContent only (no markup strings). Every write goes through ctx.setState, which
  * runs canonicalNflState before the URL is written.
  *
- * `chipsHost` is accepted for the documented signature; the people chips are
- * rendered by index.js's selection bar, which already owns `#nfl-chips`.
- * `clearHost` is the always-rendered selection row, where Clear all filters sits
- * at the right end (C1). The bar itself is fixed: Booths is always visible (D-11).
+ * `chipsHost` is `#nfl-chips`, rendered by index.js; `clearHost` is the count line's right side
+ * (`.sum-right`), where Clear all filters sits last (C1). On a phone this module moves the chips
+ * and Clear selection into the sheet's people strip. The bar itself is fixed: Booths is always
+ * visible (D-11), and its entries are grouped Broadcast, Matchup, Calendar like the CFB bar.
  */
 import { makeRolePill } from '../../modules/pill.js';
 import { CATEGORY_OPTIONS, boothGames, defaultNflState } from './state.js';
@@ -24,6 +24,13 @@ const TRIGGERS = [
   { key: 'category', label: 'Category' },
   { key: 'team', label: 'Team' },
   { key: 'booths', label: 'Booths' },
+];
+
+/** The bar's three ruled groups, left to right (UI-SPEC decision 8); the phone sheet uses the same. */
+const GROUPS = [
+  { key: 'broadcast', label: 'Broadcast', keys: ['announcers', 'booths'] },
+  { key: 'matchup', label: 'Matchup', keys: ['team', 'category'] },
+  { key: 'calendar', label: 'Calendar', keys: ['seasons'] },
 ];
 
 const UNUSED_ON_WEEKEND = ['seasons', 'category'];
@@ -43,6 +50,7 @@ let ui = null; // { clear, filtersButton, triggers: Map, sheet, popovers: Map }
 let built = false; // sections need the loaded model
 let updaters = [];
 let mobileMql = null;
+let chipsEl = null;
 
 // ---- section builders (one copy per container) ----
 
@@ -568,19 +576,38 @@ function triggerText(label, value) {
 }
 
 /**
- * Per control: whether it differs from a clean load (defaultNflState) and its value text.
- * One predicate for the desktop accent, the phone "Filters · N changed" label and the chips.
+ * Per control: whether it differs from a clean load (defaultNflState), the entry's value line
+ * (a default word or the pick itself), the full text for the title and the chips, and the pick
+ * names. One predicate for the desktop accent, the phone "Filters (N changed)" label and the chips.
  */
 function controlInfo(model, state) {
   const d = defaultNflState(model);
-  const n = (list) => (list.length ? ` · ${list.length}` : '');
+  const personName = (id) => {
+    const idx = model.personIndex.get(id);
+    return idx == null ? id : model.people[idx].name;
+  };
+  const teamName = (id) => model.franchises.find((f) => f.id === id)?.name ?? id;
+  const boothName = (key) => model.boothIndex.get(key)?.label ?? key;
+  const catName = (key) => CATEGORY_OPTIONS.find((o) => o.key === key)?.label ?? key;
+  const picks = (label, noneWord, names) => ({
+    active: names.length > 0,
+    items: names,
+    value: names.length === 0 ? noneWord : names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`,
+    full: names.length === 0 ? label : `${label}: ${names.join(', ')}`,
+  });
   const seasonsChanged = state.seasons[0] !== d.seasons[0] || state.seasons[1] !== d.seasons[1];
+  const range = `${state.seasons[0]}–${state.seasons[1]}`;
   return {
-    announcers: { active: state.people.length > 0, value: n(state.people) },
-    seasons: { active: seasonsChanged, value: seasonsChanged ? ` ${state.seasons[0]}–${state.seasons[1]}` : '' },
-    category: { active: state.cats.length > 0, value: n(state.cats) },
-    team: { active: state.teams.length > 0, value: n(state.teams) },
-    booths: { active: state.booths.length > 0, value: n(state.booths) },
+    announcers: picks('Announcers', 'Any', state.people.map(personName)),
+    seasons: {
+      active: seasonsChanged,
+      items: [range],
+      value: range,
+      full: seasonsChanged ? `Seasons: ${range}` : 'Seasons',
+    },
+    category: picks('Category', 'All', state.cats.map(catName)),
+    team: picks('Team', 'Any', state.teams.map(teamName)),
+    booths: picks('Booths', 'Any', state.booths.map(boothName)),
   };
 }
 
@@ -616,12 +643,27 @@ function buildShell(ctx) {
 
   const triggers = new Map();
   const popovers = new Map();
-  const filterChips = el('ul', 'filter-chips mobile-only');
+  const filterChips = el('ul', 'filter-chips');
   filterChips.id = 'nfl-filter-chips';
   filterChips.setAttribute('aria-label', 'Changed filters');
-  filterChips.hidden = true;
-  const nodes = [filtersButton, filterChips];
-  for (const t of TRIGGERS) {
+  const nodes = [filtersButton];
+  const rows = new Map();
+  for (const g of GROUPS) {
+    const group = el('div', 'fgroup');
+    group.dataset.g = g.key;
+    group.setAttribute('role', 'group');
+    const groupLabel = el('span', 'fgroup-label', g.label);
+    groupLabel.id = `nfl-fgroup-${g.key}`;
+    group.setAttribute('aria-labelledby', groupLabel.id);
+    const row = el('div', 'fgroup-row');
+    group.append(groupLabel, row);
+    rows.set(g.key, row);
+    nodes.push(group);
+  }
+  const rowOf = (key) => rows.get(GROUPS.find((g) => g.keys.includes(key)).key);
+  // Triggers are created in bar order (the groups', left to right), so Tab follows what is drawn.
+  const inBarOrder = GROUPS.flatMap((g) => g.keys.map((key) => TRIGGERS.find((t) => t.key === key)));
+  for (const t of inBarOrder) {
     const btn = el('button', 'filter-trigger desktop-only');
     btn.append(triggerText(t.label, ''));
     btn.type = 'button';
@@ -630,7 +672,7 @@ function buildShell(ctx) {
     btn.setAttribute('aria-haspopup', 'dialog');
     btn.setAttribute('aria-expanded', 'false');
     triggers.set(t.key, btn);
-    nodes.push(btn);
+    rowOf(t.key).append(btn);
 
     const pop = el('div', 'filter-popover nfl-filter-popover');
     pop.id = `nfl-pop-${t.key}`;
@@ -684,7 +726,7 @@ function buildShell(ctx) {
     if (sheet.matches(':popover-open')) sheet.hidePopover();
   });
   footer.appendChild(show);
-  sheet.append(header, body, footer);
+  sheet.append(header, filterChips, body, footer);
   sheet.addEventListener('toggle', (e) => {
     filtersButton.setAttribute('aria-expanded', e.newState === 'open' ? 'true' : 'false');
   });
@@ -697,31 +739,64 @@ function buildShell(ctx) {
 }
 
 function buildSections(ctx) {
+  const sheetRoots = new Map();
   for (const t of TRIGGERS) {
     const popSection = BUILDERS[t.key](ctx, 'pop');
     ui.popovers.get(t.key).appendChild(popSection.root);
     const sheetSection = BUILDERS[t.key](ctx, 'sheet');
-    ui.sheetBody.appendChild(sheetSection.root);
+    sheetRoots.set(t.key, sheetSection.root);
     updaters.push(popSection.update, sheetSection.update);
+  }
+  // The phone sheet follows the bar: Broadcast, Matchup, Calendar, each under a ruled label.
+  for (const g of GROUPS) {
+    ui.sheetBody.appendChild(el('div', 'sheet-group-label', g.label));
+    for (const key of g.keys) ui.sheetBody.appendChild(sheetRoots.get(key));
   }
   for (const btn of [ui.filtersButton, ...ui.triggers.values()]) btn.disabled = false;
   built = true;
+  placeSelection(mobileMql.matches);
+}
+
+/**
+ * Moves the selection chips and Clear selection between the count line (desktop) and the people
+ * strip under the phone sheet's Announcers heading, and keeps Clear all filters last on the count line.
+ */
+function placeSelection(isMobile) {
+  const chips = chipsEl;
+  const clearSel = clearHost?.querySelector('#nfl-clear-selection') ?? document.getElementById('nfl-clear-selection');
+  if (!chips || !clearSel) return;
+  if (isMobile) {
+    const head = document.querySelector('#nfl-filter-announcers-sheet > .section-head');
+    if (!head) return;
+    const strip = el('div', 'people-strip');
+    strip.id = 'nfl-people-strip';
+    strip.append(chips, clearSel);
+    head.after(strip);
+  } else {
+    document.getElementById('nfl-people-strip')?.remove();
+    if (clearHost) clearHost.append(chips, clearSel, ui.clear);
+  }
 }
 
 /**
  * Build the toolbar controls once. The sections wait for the loaded model;
  * until then the triggers are disabled (also the load-error state).
  */
-export function initNflFilters({ toolbar, sheetHost, clearHost: clearRow, ctx }) {
+export function initNflFilters({ toolbar, sheetHost, clearHost: clearRow, chipsHost, ctx }) {
   if (ui) return;
   toolbarEl = toolbar;
   clearHost = clearRow ?? null;
+  chipsEl = chipsHost ?? null;
   layer = sheetHost;
   buildShell(ctx);
   mobileMql = window.matchMedia(PHONE_QUERY);
-  mobileMql.addEventListener('change', () => closeNflFilters());
-  // The bar measures its own cells with the same equal-cell rule as the CFB bar (toolbar-fit.js).
-  if (window.boothToolbarFit) window.boothToolbarFit.register(toolbar);
+  mobileMql.addEventListener('change', (ev) => {
+    closeNflFilters();
+    if (built) placeSelection(ev.matches);
+  });
+  // The changed-filter chips re-decide their wording whenever their strip's width changes: opening
+  // the sheet, a rotation, or a resize (a closed sheet measures 0 and is skipped).
+  new ResizeObserver(() => fitFilterChips()).observe(ui.filterChips);
 }
 
 export function closeNflFilters() {
@@ -738,14 +813,14 @@ export function renderNflFilters(ctx) {
   for (const update of updaters) update(state);
   const info = controlInfo(ctx.model, state);
   for (const [key, btn] of ui.triggers) {
-    const { active, value } = info[key];
+    const { active, value, full } = info[key];
     const label = TRIGGERS.find((t) => t.key === key).label;
     btn.replaceChildren(triggerText(label, value));
     btn.dataset.active = active ? 'true' : 'false';
     btn.classList.toggle('is-changed', active);
-    // The full summary is always available; long values truncate in their cell (C3).
-    btn.setAttribute('title', `${label}${value}`);
-    btn.setAttribute('aria-label', `${label}${value}`);
+    // The full summary is always available; a long pick truncates inside its entry.
+    btn.setAttribute('title', full);
+    btn.setAttribute('aria-label', full);
   }
   // This weekend uses only Team, Announcers and Booths: Seasons and Category are greyed (D-21).
   const weekendView = state.view === 'weekend';
@@ -772,23 +847,60 @@ export function renderNflFilters(ctx) {
     }
   }
   const changed = changedControls(ctx.model, state);
-  ui.filtersButton.textContent = changed.length ? `Filters · ${changed.length} changed` : 'Filters';
+  ui.filtersButton.textContent = changed.length ? `Filters (${changed.length} changed)` : 'Filters';
   ui.filtersButton.classList.toggle('is-changed', changed.length > 0);
   // Clear all filters looks and reads as disabled while nothing is changed (the shared predicate).
   for (const btn of [ui.clear, ui.sheetClear]) btn.setAttribute('aria-disabled', changed.length > 0 ? 'false' : 'true');
-  ui.filterChips.replaceChildren(
-    ...changed.map((key) => {
-      const label = TRIGGERS.find((t) => t.key === key).label;
-      const li = el('li');
-      const chip = el('button', 'filter-chip');
-      chip.type = 'button';
-      chip.setAttribute('popovertarget', 'nfl-filters-sheet');
-      chip.setAttribute('aria-haspopup', 'dialog');
-      chip.setAttribute('aria-label', `${label}${info[key].value}`);
-      chip.append(el('b', null, label), document.createTextNode(info[key].value));
-      li.append(chip);
-      return li;
-    }),
-  );
-  ui.filterChips.hidden = changed.length === 0;
+  const chips = changed.map((key) => {
+    const label = TRIGGERS.find((t) => t.key === key).label;
+    const { full, items } = info[key];
+    const li = el('li');
+    const chip = el('button', 'filter-chip');
+    chip.type = 'button';
+    chip.setAttribute('popovertarget', 'nfl-filters-sheet');
+    chip.setAttribute('aria-haspopup', 'dialog');
+    chip.setAttribute('aria-label', full);
+    chip.title = full;
+    const text = el('span', 'chip-text');
+    text.dataset.name = label;
+    text.dataset.value = full.slice(label.length);
+    text.dataset.count = String(key === 'seasons' ? 1 : items.length);
+    chip.append(text);
+    li.append(chip);
+    return li;
+  });
+  if (chips.length === 0) chips.push(el('li', 'chip-none', 'No filters changed'));
+  ui.filterChips.replaceChildren(...chips);
+  fitFilterChips();
+  // A changed section shows its pick beside its heading in the sheet.
+  for (const key of TRIGGERS.map((t) => t.key)) {
+    const head = document.querySelector(`#nfl-filter-${key}-sheet > .section-head`);
+    if (!head) continue;
+    let pick = head.querySelector(':scope > .section-pick');
+    if (!pick) {
+      pick = el('span', 'section-pick');
+      head.querySelector('h3').after(pick);
+    }
+    const on = changed.includes(key);
+    pick.hidden = !on;
+    pick.textContent = on ? info[key].value : '';
+  }
+}
+
+/**
+ * Chooses each changed-filter chip's wording by measuring: "Announcers: A, B" when it fits the chip,
+ * otherwise "Announcers (2)" (the filter name and the pick count, no middle dot).
+ */
+function fitFilterChips() {
+  if (!ui) return;
+  for (const text of ui.filterChips.querySelectorAll('.chip-text')) {
+    const { name, value, count } = text.dataset;
+    text.replaceChildren(el('b', null, name), document.createTextNode(value));
+    text.dataset.form = 'long';
+    // A closed sheet has no width to measure; the next resize event decides.
+    if (text.clientWidth > 0 && text.scrollWidth > text.clientWidth) {
+      text.replaceChildren(el('b', null, name), document.createTextNode(` (${count})`));
+      text.dataset.form = 'short';
+    }
+  }
 }

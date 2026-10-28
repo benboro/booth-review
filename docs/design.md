@@ -36,6 +36,10 @@ records only where the site settles or applies them.
   Announcer and School both picked, both controls are accented; untouched controls stay
   neutral (Phase 12).
 
+- The NFL bar is the same ledger: Broadcast (Announcers 250px, Booths), Matchup (Team, Category)
+  and Calendar (Seasons), 148px entries, one row from 1024px, and the same count line, square chips
+  and phone panel; MLB has no bar and takes the count line's chip shape (Phase 26).
+
 ## Tables
 
 - A network logo stands alone in its cell. The network-family dot is shown only when

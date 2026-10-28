@@ -909,7 +909,7 @@ def test_chart_labels_drop_a_shared_season_into_the_axis_title(
         assert shared["text"] == ["Name / Last"] * 3
     else:
         assert shared["text"] == [f"Pbp{i} Name and Ana{i} Last" for i in range(3)]
-    assert shared["title"].endswith("\u00b7 2025"), shared
+    assert shared["title"].endswith(", 2025"), shared
     mixed = page.evaluate(_DRAW_JS, [mobile, [2025, 2024, 2025]])
     assert all(t.endswith(("2024", "2025")) and ", " in t for t in mixed["text"]), mixed
     assert "\u00b7" not in mixed["title"], mixed

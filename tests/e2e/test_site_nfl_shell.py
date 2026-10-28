@@ -409,13 +409,13 @@ def test_booth_chip_caption_and_empty(
 
 
 @pytest.mark.parametrize("view", ["special", "crews", "viewership", "scatter"])
-def test_selection_row_and_booths_on_every_tab(
+def test_count_line_and_booths_on_every_tab(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
 ) -> None:
     page = nfl_guarded_page
     open_nfl_app(page, f"?sport=nfl&view={view}")
-    # The selection row is always rendered, with Clear all filters at its right end.
-    row = page.locator("#nfl-selection-row")
+    # The count line is always rendered, with Clear all filters at its right end.
+    row = page.locator("#nfl-summary-band .sum-right")
     assert row.is_visible()
     clear = page.locator("#nfl-clear-filters")
     assert clear.is_visible()

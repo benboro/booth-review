@@ -840,7 +840,8 @@ def test_chips_and_category_filter_resort(app: Page, nfl_fixture_raw: dict[str, 
 
 
 def test_tooltip_keys_and_filters_categories(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
-    """Each category row carries its legend chip's colour; with chips off the tooltip lists only
+    """Each category row carries its legend chip's colour (the chip draws it from `--mark`, so it is
+    read as the dot's computed fill); with chips off the tooltip lists only
     the shown categories, its total counts only them, and the cross-cutting lines drop out."""
     ids = [f["id"] for f in nfl_fixture_raw["lookups"]["franchises"]]
     _vm(app)
@@ -853,7 +854,7 @@ def test_tooltip_keys_and_filters_categories(app: Page, nfl_fixture_raw: dict[st
     chips = dict(
         app.evaluate(
             f"""() => Array.from(document.querySelectorAll('{LEGEND} button.legend-chip')).map((b) =>
-              [b.textContent, b.querySelector('.legend-dot').style.backgroundColor])"""
+              [b.textContent, getComputedStyle(b.querySelector('.legend-dot')).backgroundColor])"""
         )
     )
     assert dots
