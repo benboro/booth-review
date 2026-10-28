@@ -4545,6 +4545,35 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 }
 
+/* Phase 26 critique: from 481 to 767px the 27px title, the sport switch and the page links
+   cannot share one row, and the title wrapped onto two or three lines. Methodology and
+   Coverage are in the footer nav, so the header drops them here as it does on a phone, and
+   the title never wraps. Below 600px the title takes the 22px heading size and the switch
+   buttons lose half their side padding, so CFB, NFL and MLB still fit beside it at 481px. */
+@media (min-width: 481px) and (max-width: 767px) {
+  .header-links {
+    display: none;
+  }
+
+  .site-title {
+    white-space: nowrap;
+  }
+
+  #theme-slot {
+    margin-left: auto;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 599px) {
+  .site-title {
+    font-size: 22px;
+  }
+
+  #sport-switch button {
+    padding-inline: var(--space-sm);
+  }
+}
+
 .nfl-breakdown-lines {
   display: grid;
   gap: var(--space-xs);

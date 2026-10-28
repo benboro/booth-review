@@ -403,3 +403,37 @@ def test_switch_marks_the_current_sport_with_an_ink_underline(
     assert page.evaluate(probe, "nfl")[0] == "600"
     assert page.evaluate(probe, "cfb")[0] != "600"
     assert _pressed(page, "nfl") == "true"
+
+
+_HEADER_JS = """() => {
+  const title = document.querySelector('.site-title').getBoundingClientRect();
+  const sw = document.getElementById('sport-switch');
+  const slot = document.getElementById('theme-slot').getBoundingClientRect();
+  return {
+    titleH: title.height,
+    lineH: parseFloat(getComputedStyle(document.querySelector('.site-title')).lineHeight),
+    titleR: title.right,
+    swL: sw ? sw.getBoundingClientRect().left : null,
+    swR: sw ? sw.getBoundingClientRect().right : null,
+    slotL: slot.left,
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  };
+}"""
+
+
+@pytest.mark.parametrize("width", (481, 540, 600, 700, 767))
+def test_header_keeps_one_row_between_phone_and_tablet(
+    nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None], width: int
+) -> None:
+    """26-10 critique: from 481 to 767px the 27px title wrapped onto two lines beside the sport
+    switch and the page links. The links drop there (they are in the footer nav) and the title
+    stays on one line, clear of the switch and the theme toggle."""
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": width, "height": 900})
+    open_flagon_cfb(page)
+    page.evaluate("() => document.fonts.ready")
+    got = page.evaluate(_HEADER_JS)
+    assert got["titleH"] <= got["lineH"] + 1, got
+    assert got["titleR"] < got["swL"] < got["swR"] < got["slotL"], got
+    assert got["overflow"] <= 0, got
+    assert page.locator(".header-links").is_hidden()

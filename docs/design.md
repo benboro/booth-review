@@ -67,6 +67,12 @@ records only where the site settles or applies them.
   at 480px and under) with 32px between modules.
 - Spacing and size exceptions the owner confirmed in the sketches: an 18px column gap in the
   legend, 10px legend marks, a 5px filter caret, and 2px lines.
+- The header is one row at every width. From 481 to 767px it drops the Methodology and
+  Coverage links (the footer nav carries them, as on a phone), and below 600px the title
+  takes the 22px heading size and the sport-switch buttons half their side padding, so the
+  27px title never wraps beside CFB, NFL and MLB (Phase 26 critique).
+- Methodology tables sit in a `.table-scroll` box and long code strings wrap, so a static
+  page never scrolls sideways on a phone (Phase 26 critique).
 - The six view tabs stay on one row and scroll sideways inside their bar when the window is
   narrow, so the page never scrolls; the tab focus ring sits inside the tab so the bar does
   not clip it (Phase 18).

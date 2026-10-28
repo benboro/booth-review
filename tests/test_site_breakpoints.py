@@ -12,6 +12,8 @@ ALLOWED_MAX_WIDTHS: dict[str, str] = {
     "360": _NARROW,
     "374": _NARROW,
     "420": _NARROW,
+    "599": "header band: the title takes the 22px heading size below 600px (26-10 critique)",
+    "767": "header band: the page links drop from 481 to 767px, matching the 768px filter bar",
     "1279": "desktop-narrow switch of the MLB postseason LDS and LCS round heads (16-UI-SPEC)",
 }
 
