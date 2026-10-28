@@ -218,9 +218,10 @@ def _known_gaps_body(text: str) -> str:
 def _wrap_tables(rendered_html: str) -> str:
     """Put each rendered Markdown table in a `.table-scroll` box, as the coverage tables are,
     so a wide table scrolls inside its box on a phone instead of widening the whole page."""
-    return rendered_html.replace("<table>", '<div class="table-scroll"><table>').replace(
-        "</table>", "</table></div>"
+    opened = re.sub(
+        r"<table\b[^>]*>", lambda m: f'<div class="table-scroll">{m.group(0)}', rendered_html
     )
+    return opened.replace("</table>", "</table></div>")
 
 
 def _rewrite_relative_md_links(rendered_html: str) -> str:
