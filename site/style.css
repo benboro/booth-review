@@ -751,7 +751,7 @@ li[role="option"][aria-selected="true"] .option-check::after {
   flex: none;
 }
 
-@media (max-width: 1103px) {
+@media not all and (min-width: 1104px) {
   #summary {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -985,6 +985,10 @@ li[role="option"][aria-selected="true"] .option-check::after {
   height: 44px;
   padding: 0 4px;
   white-space: nowrap;
+}
+
+.people-strip #clear-selection {
+  padding: 0 4px;
 }
 
 .people-strip #clear-selection:disabled {

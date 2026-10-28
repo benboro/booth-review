@@ -188,11 +188,18 @@ def test_label_contrast(
     serve_ny6: Callable[..., None],
 ) -> None:
     """The label holds AA (4.5:1) on the band tint itself, not the plain popover
-    background (the 8% playoff tint over the 13-05 light surface, about #F4EEE1)."""
+    background (the 8% playoff tint over the popover ground)."""
     _open_with(guarded_page, serve_ny6, open_app, BOTH)
     fg = _rgb_of(guarded_page, ".game-ny6-label", "color")
     tint: list[int] = guarded_page.evaluate(_BAND_TINT_JS, BAND)
-    expected = (0xF4, 0xEE, 0xE1)
+    # The band is the 8% playoff tint over the popover's page-coloured ground (Phase 26 ground).
+    ground = _rgb_of(guarded_page, "body", "backgroundColor")
+    playoff: list[int] = guarded_page.evaluate(
+        "() => { const s = document.createElement('span'); s.style.color = 'var(--game-playoff)';"
+        " document.body.append(s); const c = getComputedStyle(s).color; s.remove();"
+        " return c.match(/[\\d.]+/g).slice(0, 3).map(Number); }"
+    )
+    expected = tuple(0.92 * g + 0.08 * q for g, q in zip(ground, playoff, strict=True))
     assert all(abs(got - want) <= 2 for got, want in zip(tint, expected, strict=True)), tint
     assert _ratio(fg, (float(tint[0]), float(tint[1]), float(tint[2]))) >= 4.5
 

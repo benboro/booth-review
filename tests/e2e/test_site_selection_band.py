@@ -420,7 +420,7 @@ def test_summary_title_is_smaller(
     guarded_page.set_viewport_size({"width": 1280, "height": 800})
     open_app(guarded_page, "?people=dale-harlow")
     size = guarded_page.eval_on_selector("#summary-count", "el => getComputedStyle(el).fontSize")
-    # Latin Modern at the +1 step (Round 1: 22/27px) replaced the 20px Crimson Text title.
+    # Latin Modern at the +1 step (Round 1: 22/27px) replaced the 20px title.
     assert size == "22px"
 
 
