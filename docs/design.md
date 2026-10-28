@@ -144,8 +144,8 @@ records only where the site settles or applies them.
 
 ## Chart marks
 
-- The NFL Special games bars have no value column at the right: the end markers carry
-  each total (notes 15). The bars rank by their bright part: the categories the chips
+- The CFB Bars and the NFL Special games bars have no value column at the right: the end
+  markers carry each total, and the hover repeats it (notes 15; CFB Bars at the 26-10 sign-off). The bars rank by their bright part: the categories the chips
   show and the Category filter keeps in focus, or the matched games under a pick.
 - The NFL Special games hover lists one row per shown category with games, keyed by
   the legend chip's colour dot, the count right-aligned in tabular semibold figures.

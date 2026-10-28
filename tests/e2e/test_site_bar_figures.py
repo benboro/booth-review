@@ -774,16 +774,18 @@ def test_rendered_accent_matches_css_token(
 
 def _end_markers(page: Page, figure: dict[str, Any], fills: list[str], axis: str = "x") -> None:
     """UI-SPEC ranked bars: each row with games has a filled circle in the bar colour, a --bg
-    2px ring, its count centred in 600 text readable on the fill, and the raw value in a
-    right-aligned column (SHELL-06)."""
+    2px ring and its count centred in 600 text readable on the fill. The count is not repeated
+    in a right-hand value column (sign-off 2026-10-27, brief section 4)."""
     layout = figure["layout"]
     anns = layout["annotations"]
     markers = [a for a in anns if a.get("name") == "total"]
-    values = [a for a in anns if a.get("name") == "value"]
+    assert not [a for a in anns if a.get("name") == "value"], (
+        "the marker's count repeats at the right"
+    )
     circles = layout["shapes"]
     assert markers, "ranked bars drew no end markers"
     assert len(circles) == len(markers)
-    assert all(a["captureevents"] is False for a in markers + values)
+    assert all(a["captureevents"] is False for a in markers)
     page_bg = page.evaluate("async () => (await import('./modules/palette.js')).PAGE_BG.light")
     for shape, anno in zip(circles, markers, strict=True):
         assert shape["type"] == "circle" and shape["name"] == "end-marker"
@@ -800,9 +802,6 @@ def _end_markers(page: Page, figure: dict[str, Any], fills: list[str], axis: str
             [anno["font"]["color"], shape["fillcolor"]],
         )
         assert ratio >= 4.5, (anno["text"], anno["font"]["color"], shape["fillcolor"])
-    for v in values:  # the raw value column: right-aligned at the plot's right edge
-        assert (v["xref"], v["x"], v["xanchor"]) == ("paper", 1, "right")
-        assert v["font"]["size"] == 14
 
 
 def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
@@ -839,12 +838,13 @@ def test_simple_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert layout["dragmode"] is False
     assert figure["config"]["displayModeBar"] is False
     assert layout["height"] == n * 32 + 72
+    assert layout["margin"]["r"] == 16  # no value column: the end markers carry each total
     annos = layout["annotations"]
     assert all(a["captureevents"] is True for a in annos[:n])
-    # Row labels, then an end marker per row with games (D-29), then the value column.
+    # Row labels, then an end marker per row with games (D-29); no value column after them.
     totals = [a["text"] for a in annos[n:] if a["name"] == "total"]
     assert totals == [str(r["total"]) for r in rows if r["total"] > 0]
-    assert [a["text"] for a in annos[n:] if a["name"] == "value"] == [str(r["total"]) for r in rows]
+    assert [a["name"] for a in annos[n:]] == ["total"] * len(totals)
     _end_markers(guarded_page, figure, rated["marker"]["color"])
     assert "transition" not in layout
 
@@ -907,7 +907,7 @@ def test_stacked_bar_figure_shape(guarded_page: Page, site_url: str) -> None:
     assert [a["captureevents"] for a in layout["annotations"][:n]] == [
         r["target"] is not None for r in rows
     ]
-    assert all(a["name"] in ("total", "value") for a in layout["annotations"][n:])
+    assert all(a["name"] == "total" for a in layout["annotations"][n:])
     _end_markers(guarded_page, figure, [tones[0]] * n)
 
 
@@ -979,8 +979,7 @@ def test_stacked_totals_on_bars(
         assert a["x"] == int(a["text"])
         assert a["xanchor"] == "center" and a["showarrow"] is False
         assert a["captureevents"] is False
-    values = [a for a in annos[n:] if a["name"] == "value"]
-    assert [a["text"] for a in values] == [str(r["total"]) for r in out["model"]["rows"]]
+    assert not [a for a in annos[n:] if a["name"] == "value"]
     simple = _figure(guarded_page, site_url, {"school": ["northfield"]})
     simple_totals = [
         a for a in simple["figure"]["layout"]["annotations"] if a.get("name") == "total"
@@ -1063,8 +1062,8 @@ def test_network_rows_use_family_color(guarded_page: Page, site_url: str) -> Non
 def test_phone_bar_figure_layout(guarded_page: Page, site_url: str) -> None:
     out = _figure(guarded_page, site_url, {"school": ["northfield"]}, env=_PHONE)
     layout = out["figure"]["layout"]
-    # Labels sit above the bars, so the left margin is 8; the right margin holds the value column.
-    assert layout["margin"]["l"] == 8 and layout["margin"]["r"] > 8
+    # Labels sit above the bars, so the left margin is 8; with no value column the right is 8 too.
+    assert layout["margin"]["l"] == 8 and layout["margin"]["r"] == 8
     n = len(out["model"]["rows"])
     assert layout["height"] == n * 44 + 72
     labels = layout["annotations"][:n]
@@ -2093,15 +2092,8 @@ def test_rendered_stacked_totals_sit_past_the_bar_end(
         if fn != "barsModel":
             assert not any(_overlaps(anno, bar) for bar in out["bars"])
         assert not any(_overlaps(anno, other) for other in others)
-    if fn == "barsModel":  # the value column is right-aligned: every value ends at one x
-        values = [
-            by_index[i]
-            for i, t in enumerate(out["figAnnos"])
-            if i >= first and t["name"] == "value"
-        ]
-        assert len(values) == n
-        assert max(v["r"] for v in values) - min(v["r"] for v in values) <= 1
-        assert all(v["r"] <= out["gdRight"] for v in values)
+    if fn == "barsModel":  # the end marker carries the count: no value column at the right
+        assert not [t for i, t in enumerate(out["figAnnos"]) if i >= first and t["name"] == "value"]
 
 
 def test_rendered_unrated_part_click_resolves_like_the_rated_part(

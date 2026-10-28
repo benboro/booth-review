@@ -99,11 +99,10 @@ const LABEL_LINE = 18;
 const LABEL_GAP = 2;
 
 // Ranked-bar end markers (UI-SPEC "Shared chart frame"): a filled ellipse in the bar's
-// colour with the count inside (600), a --bg ring, and the raw value in a right column.
+// colour with the count inside (600) and a --bg ring; the count is not repeated at the right.
 const MARKER_H = 22;
 const MARKER_PAD = 10;
 const MARKER_RING = 2;
-const VALUE_COL_GAP = 12;
 const HERO_INK_WEIGHT = 0.8;
 const LABEL_MEASURE = { size: 14, family: FRAME_FONT };
 
@@ -240,7 +239,6 @@ export function totalAnnotations(rows, totalOf, side, theme, axis) {
   return out;
 }
 
-const VALUE_FONT = { size: 14, family: FRAME_FONT };
 const MARKER_FONT = { size: 12, weight: 600, family: FRAME_FONT };
 
 /** Width in px of the end marker for a count (a 22px circle that widens for long numbers). */
@@ -318,33 +316,6 @@ export function endMarkerAnnotations(rows, totalOf, fills, theme, axis) {
     });
   });
   return out;
-}
-
-/**
- * The raw-value column: each row's count right-aligned at the plot's right edge (inside the
- * right margin), so values line up whatever the bar length.
- * @param {object[]} rows
- * @param {(row: object) => number} totalOf
- * @param {number} marginR - right margin in px.
- * @param {'light'|'dark'} theme
- * @returns {object[]}
- */
-export function valueColumn(rows, totalOf, marginR, theme) {
-  return rows.map((row, i) => ({
-    name: 'value',
-    xref: 'paper',
-    yref: 'y',
-    x: 1,
-    y: i,
-    xanchor: 'right',
-    xshift: marginR - 8,
-    yanchor: 'middle',
-    text: String(totalOf(row)),
-    showarrow: false,
-    captureevents: false,
-    borderpad: 0,
-    font: { size: 14, color: INK[theme] },
-  }));
 }
 
 /** Integer ticks only: these are counts. */
@@ -630,11 +601,10 @@ export function buildBarFigure(model, rows, env) {
   const bargap = mobile ? gapFor(PHONE_BARS_PITCH, PHONE_BARS_THICKNESS) : DESKTOP_BARGAP;
   const matched = env.matched === true;
   const maxTotal = rows.reduce((m, r) => Math.max(m, r.total), 0);
-  // The right-aligned value column sits in the right margin, wide enough for the largest count.
-  const columnPx = Math.ceil(textWidth(String(Math.max(maxTotal, 1)), VALUE_FONT)) + VALUE_COL_GAP;
+  // No value column at the right (sign-off 2026-10-27): the end markers carry each total.
   const margin = mobile
-    ? { l: 8, r: 8 + columnPx, t: MARGIN_T, b: MARGIN_B }
-    : { l: Math.min(240, 16 + Math.ceil(widest(labels, LABEL_MEASURE))), r: 16 + columnPx, t: MARGIN_T, b: MARGIN_B };
+    ? { l: 8, r: 8, t: MARGIN_T, b: MARGIN_B }
+    : { l: Math.min(240, 16 + Math.ceil(widest(labels, LABEL_MEASURE))), r: 16, t: MARGIN_T, b: MARGIN_B };
 
   const family = stacked && model.rowKind === 'family';
   let traces;
@@ -683,7 +653,6 @@ export function buildBarFigure(model, rows, env) {
   const tones = rows.map((r) => barTones(r, theme, matched).a);
   layout.annotations = layout.annotations.concat(
     endMarkerAnnotations(rows, (r) => r.total, tones, theme, 'x'),
-    valueColumn(rows, (r) => r.total, margin.r, theme),
   );
   layout.shapes = endMarkerShapes(rows, (r) => r.total, tones, theme, 'x');
   return { traces, layout: frameLayout(layout, env), config: frameConfig() };
