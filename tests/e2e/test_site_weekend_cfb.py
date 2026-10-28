@@ -160,6 +160,20 @@ def test_subtitle_and_summary_line(wk: Callable[..., Page]) -> None:
     assert count.startswith("12 of")
 
 
+def test_summary_line_survives_crossing_the_phone_width(wk: Callable[..., Page]) -> None:
+    """26-10 critique: a second, topbar-only render on the phone-width change ran after the app
+    render and put the all-games count ("N rated of M games") back over This weekend's count."""
+    page = wk()
+    before = page.locator("#summary-count").inner_text()
+    assert before.endswith(" games match")
+    for width in (390, 1440):
+        page.set_viewport_size({"width": width, "height": 900})
+        phone = "true" if width == 390 else "false"
+        page.wait_for_function(f"window.matchMedia('(max-width: 480px)').matches === {phone}")
+        page.wait_for_timeout(200)
+        assert page.locator("#summary-count").inner_text() == before, width
+
+
 def test_opening_the_tab_makes_no_request(
     guarded_page: Page,
     serve_weekend: Callable[..., None],

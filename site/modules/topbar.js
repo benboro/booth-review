@@ -220,9 +220,6 @@ function togglePerson(getState, setState, li) {
   }
 }
 
-/** The last render context, so a phone-width change can redraw without a state change. */
-let lastRender = null;
-
 /** Binds every top-bar DOM event listener once. `getState` always returns the latest state. */
 export function initTopbar({ data, getState, setState }) {
   dataRef = data;
@@ -308,10 +305,10 @@ export function initTopbar({ data, getState, setState }) {
     setState({ people: [], compare: false, together: false, crew: null });
   });
 
-  // Crossing the phone width changes which parts render (chips and toggles live in the panel strip).
-  window.matchMedia(PHONE_QUERY).addEventListener('change', () => {
-    if (lastRender) renderTopbar(lastRender);
-  });
+  // Crossing the phone width changes which parts render (chips and toggles live in the panel
+  // strip). app.js re-runs the whole render on that change, which includes renderTopbar; a
+  // second, topbar-only render here ran after it and put the all-games count back over This
+  // weekend's "N of M games match".
 }
 
 /** Renders the chips list in selection order. */
@@ -542,7 +539,6 @@ function renderPersonFacets(state, view) {
 
 /** Pure DOM update from the current state/view, called every render cycle. */
 export function renderTopbar(ctx) {
-  lastRender = ctx;
   const { data, state, view } = ctx;
   // The row always renders (it holds Clear all filters); only its person parts hide.
   const noPeople = state.people.length === 0;
