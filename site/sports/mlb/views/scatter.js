@@ -22,7 +22,7 @@ import { bandLayout, marginFor } from '../../../modules/chart.js';
 import { initBandInfo, positionBandInfo, closeBandNote } from '../../../modules/band-info.js';
 import { mountViewTools } from '../tools.js';
 import { ROUND_LABELS, gameRow } from '../data.js';
-import { dateShortText } from '../format.js';
+import { dateApText } from '../format.js';
 import { MLB_SROUNDS } from '../state.js';
 import { RETROSHEET_NOTICE, RETROSHEET_CONTACT } from '../panel.js';
 import {
@@ -470,7 +470,7 @@ function hoverLines(model, i, hint) {
   if (row.network) {
     lines.push({ kind: 'network', network: { id: row.networkId, name: row.network, family: row.networkFamily } });
   }
-  lines.push({ text: `${row.away} at ${row.home}, ${dateShortText(row)}`, kind: 'title' });
+  lines.push({ text: `${row.away} at ${row.home}, ${dateApText(row)}`, kind: 'title' });
   let viewers = 'No public rating';
   if (row.viewers != null) {
     viewers = `${formatAudienceShort(row.viewers)} viewers${row.scope === 'window' ? ', whole window' : ''}`;

@@ -128,6 +128,13 @@ def test_lineups_nine_batters_and_starter_per_side(mlb: Page) -> None:
     assert link.get_attribute("rel") == "noopener noreferrer"
 
 
+def test_panel_date_is_ap_style_with_the_year(mlb: Page) -> None:
+    _open(mlb, 1)
+    first = mlb.locator("#mlb-detail-panel p").first.inner_text()
+    assert first.startswith("Fri. April 10, 2026"), first
+    assert "Friday," not in first
+
+
 def test_pending_2026_lineup_and_excitement(mlb: Page) -> None:
     _open(mlb, 0)
     text = _panel(mlb)

@@ -217,7 +217,7 @@ def test_hover_tooltip_ring_and_variants(
     assert page.locator("#chart-tooltip .tooltip-networks").count() == 1
     assert (
         " at " in lines[1]
-        and "Apr 10, 2026" in lines[1]
+        and lines[1].endswith(", Fri. April 10, 2026")
         and ", " in lines[1]
         and "·" not in lines[1]
     )

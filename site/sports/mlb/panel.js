@@ -10,7 +10,7 @@
 
 import { externalLink, crewBox, linksList, networksParagraph } from '../../modules/panel-parts.js';
 import { currentTheme } from '../../modules/pill.js';
-import { dateLongText } from './format.js';
+import { dateApText } from './format.js';
 import { CAUSE_COPY, viewersText } from './data.js';
 
 export const RETROSHEET_NOTICE =
@@ -226,7 +226,7 @@ export function createDetailPanel(host, { onClose, getConstants } = {}) {
 
   function renderRow(row) {
     title.textContent = titleText(row);
-    const when = [dateLongText(row)];
+    const when = [dateApText(row)];
     const round = roundLine(row);
     if (round) when.push(round);
     const dateP = el('p', null, when.join(', '));
