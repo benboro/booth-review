@@ -345,3 +345,28 @@ def test_this_weekend_map_does_not_move_the_bar(
     base = layout_snapshot(guarded_page, include=("toolbar_bottom", "group_x"))
     set_state(guarded_page, {"view": "weekend", "wview": "map"})
     assert layout_snapshot(guarded_page, include=("toolbar_bottom", "group_x")) == base
+
+
+def test_widening_from_phone_to_desktop_restores_every_filter_section(
+    guarded_page: Page, open_app: Callable[..., None]
+) -> None:
+    """Resizing a phone-width window to desktop must move the sections back into their popovers.
+
+    The desktop branch of the placement used to empty the sheet body before looking the sections
+    up, so each lookup returned null, the handler threw, and the popovers stayed empty.
+    """
+    errors: list[str] = []
+    guarded_page.on("pageerror", lambda exc: errors.append(str(exc)))
+    _open(guarded_page, open_app, 390)
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    guarded_page.wait_for_timeout(300)
+    assert errors == []
+    missing: list[str] = guarded_page.evaluate(
+        """() => [...document.querySelectorAll('.filter-popover')]
+          .filter((p) => !p.querySelector('section')).map((p) => p.id)"""
+    )
+    assert missing == []
+    sheet_sections = guarded_page.evaluate(
+        "document.querySelectorAll('#filters-sheet section').length"
+    )
+    assert sheet_sections == 0

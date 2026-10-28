@@ -968,12 +968,16 @@ function placeSections(isMobile) {
     const announcers = document.getElementById('filter-announcers');
     announcers.querySelector('.section-head').after(strip);
   } else {
+    // Hold the sections before the sheet body is emptied: clearing it detaches them from the
+    // document, and a later getElementById would then return null (phone to desktop resize).
+    const sections = SECTION_POPOVERS.map(([sectionId, popoverId]) => [
+      document.getElementById(sectionId),
+      document.getElementById(popoverId),
+    ]);
     document.getElementById('people-strip')?.remove();
     els.sheetBody.replaceChildren();
     els.sumRight.append(els.chips, els.toggleGroup, els.clearFilters);
-    for (const [sectionId, popoverId] of SECTION_POPOVERS) {
-      document.getElementById(popoverId).appendChild(document.getElementById(sectionId));
-    }
+    for (const [section, popover] of sections) popover.appendChild(section);
   }
 }
 
