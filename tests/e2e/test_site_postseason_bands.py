@@ -206,7 +206,7 @@ def _blend(css: str, backdrop_hex: str) -> str:
 def test_band_alpha_is_faint(app_page: Page) -> None:
     pal = app_page.evaluate(_PALETTE_JS)
     assert _parse_rgba(pal["band"]["light"])[3] <= 0.10
-    assert pal["band"]["light"] == "rgba(166, 120, 40, 0.07)"
+    assert pal["band"]["light"] == "rgba(166, 120, 40, 0.05)"
 
 
 def _contrast(app_page: Page, a: str, b: str) -> float:
@@ -230,7 +230,7 @@ def test_dots_keep_contrast_on_blended_band(
     blended = _blend(pal["band"][theme], backdrop)
     for family in ("cbs", "other"):
         ratio = _contrast(app_page, pal["fam"][theme][family], blended)
-        # The locked 0.07 tint puts Other at 2.998 (RESEARCH rounds to 3.00); allow 0.01.
+        # The 0.05 tint (re-tuned for the green-gray ground) puts Other at 3.007; allow 0.01.
         assert ratio >= floor - 0.01, (theme, surface, family, ratio)
 
 
@@ -360,7 +360,7 @@ def test_two_bands_after_surface_with_d04_d05_shape(date_page: Page) -> None:
         assert band["y1"] == 1
         assert band["layer"] == "below"
         assert band["line"]["width"] == 0
-        assert band["fillcolor"] == "rgba(166, 120, 40, 0.07)"
+        assert band["fillcolor"] == "rgba(166, 120, 40, 0.05)"
         assert band["index"] > got["surface"] + 1  # after the SURFACE rect and its edge line
 
 
