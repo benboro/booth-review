@@ -14,7 +14,7 @@ import { buildNflCrewRows, sortNflCrewRows, NFL_SORT_SPEC } from '../crew-rows.j
 import { lowNThreshold } from '../mode.js';
 import { createReasonBar, setReason, linkDisabled } from '../reason-bar.js';
 import { mountViewTools } from '../tools.js';
-import { createTableState, el, renderCrewsTable, activeSort } from '../../../modules/crews-table.js';
+import { createTableState, el, excitementCell, renderCrewsTable, activeSort } from '../../../modules/crews-table.js';
 import { networkMark } from '../../../modules/network.js';
 import { formatAudienceTable, MINUS } from '../../../modules/format.js';
 import { hideTooltip } from '../../../modules/tooltip.js';
@@ -213,7 +213,7 @@ function gameRow(ctx, model, row, i) {
   const home = model.teamNames[c.home_name[i]].name;
   const away = model.teamNames[c.away_name[i]].name;
   const matchup = `${away} at ${home}`;
-  const tr = el('tr', 'crews-game');
+  const tr = el('tr', 'crews-game has-exc');
   tr.dataset.game = String(i);
   tr.tabIndex = 0;
   tr.setAttribute('role', 'button');
@@ -243,7 +243,7 @@ function gameRow(ctx, model, row, i) {
       viewers.append(tag);
     }
   }
-  tr.append(matchupTd, netTd, viewers);
+  tr.append(matchupTd, netTd, excitementCell(c.excitement[i]), viewers);
   tr.addEventListener('click', () => ctx.openGame?.(i, tr));
   return tr;
 }
@@ -364,7 +364,7 @@ export function render(ctx) {
     modeKey: built.mode,
     colCount: columns.length + 1,
     tableClasses: ['is-nfl', ...(built.perSeason ? ['has-season'] : [])],
-    gameHeads: ['Date', 'Matchup', 'Network', 'Viewers'],
+    gameHeads: ['Date', 'Matchup', 'Network', 'Excitement', 'Viewers'],
     buildTools: () => document.createDocumentFragment(),
     buildEmpty: () => {
       const note = el('div', 'season-empty-note crews-empty nfl-crews-empty');

@@ -14,7 +14,7 @@ import { NATURAL_DIR, defaultSort, modelBreakSeason, sortCrewRows } from './crew
 import { crewEntries, figureSourceOf, formatAudienceTable, formatMatchup } from './format.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
-import { createTableState, el, renderCrewsTable } from './crews-table.js';
+import { createTableState, el, excitementCell, renderCrewsTable } from './crews-table.js';
 
 /** This sport's table state: paging, open rows and announce memory (shared mechanics in crews-table.js). */
 const ts = createTableState();
@@ -202,14 +202,6 @@ function viewersCell(data, i) {
   return td;
 }
 
-/** One game's CFBD excitement, blank when CFBD has none (as the Avg excitement column leaves it). */
-function excitementCell(data, i) {
-  const td = el('td', 'num crews-game-exc');
-  const e = data.t.excitement[i];
-  if (e != null) td.append(el('span', 'crews-figure', e.toFixed(1)));
-  return td;
-}
-
 function gameRow(row, mode, ctx, i) {
   const { data } = ctx;
   const matchup = formatMatchup(data, i, {});
@@ -232,7 +224,7 @@ function gameRow(row, mode, ctx, i) {
   if (mode !== 'crew') tr.append(el('td', 'crews-game-crew', otherCrew(data, i, row.personSlug)));
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');
-  tr.append(excitementCell(data, i), viewers);
+  tr.append(excitementCell(data.t.excitement[i]), viewers);
   tr.addEventListener('click', (e) => {
     if (e.target instanceof Element && e.target.closest('a')) return;
     ctx.openGame?.(i);

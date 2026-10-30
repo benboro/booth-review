@@ -419,6 +419,11 @@ def test_game_list_ten_newest_first_with_tags(
     sub = page.locator(f"{VIEW} tr.crews-expanded[data-sub-for='{two}']")
     games = sub.locator("tr.crews-game")
     assert games.count() == 10
+    heads = [h.strip() for h in sub.locator("table.crews-games thead th").all_inner_texts()]
+    assert heads == ["Date", "Matchup", "Network", "Excitement", "Viewers"]
+    excitement = [c.strip() for c in sub.locator("td.crews-game-exc").all_inner_texts()]
+    assert len(excitement) == 10
+    assert all(re.fullmatch(r"\d+\.\d", c) for c in excitement), excitement
     dates = sub.locator("td.crews-game-date").all_inner_texts()
     assert dates == sorted(dates, reverse=True)
     more = sub.locator(".crews-games-more")
