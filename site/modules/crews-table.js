@@ -141,7 +141,7 @@ function drawGames(holder, row, tc, count) {
   const table = el('table', 'games-table crews-games');
   const head = el('tr');
   for (const label of tc.gameHeads) {
-    const th = el('th', label === 'Viewers' ? 'num' : null, label);
+    const th = el('th', label === 'Viewers' || label === 'Excitement' ? 'num' : null, label);
     th.scope = 'col';
     head.append(th);
   }

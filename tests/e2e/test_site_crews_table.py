@@ -848,7 +848,7 @@ def test_viewer_cells_and_game_list_figures_show_one_decimal(app: Page) -> None:
     assert viewer_texts, "no viewer figures rendered"
     assert all(pattern.match(t) for t in viewer_texts), viewer_texts
     _rows(app).first.locator(".crews-chevron").click()
-    games = app.locator("#crews-panel .crews-game .crews-figure").all_inner_texts()
+    games = app.locator("#crews-panel .crews-game-viewers .crews-figure").all_inner_texts()
     assert games and all(pattern.match(t) for t in games), games
 
 

@@ -341,7 +341,7 @@ def test_person_mode_lists_partners_by_count_and_the_crew_column(app: Page) -> N
         f"Big Ana ({CASE_BIG['games']}), Big Ana2 ({CASE_BIG['other_games']})"
     )
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Date", "Matchup", "Network", "Crew", "Viewers"]
+    assert heads == ["Date", "Matchup", "Network", "Crew", "Excitement", "Viewers"]
     crews = {c.strip() for c in sub.locator("td.crews-game-crew").all_inner_texts()}
     assert crews == {"Big Ana", "Big Ana2"} or crews <= {"Big Ana", "Big Ana2"}
     assert sub.locator("tr.crews-game .crews-tag").count() == 0
@@ -351,7 +351,15 @@ def test_crew_mode_has_no_worked_with_and_no_crew_column(app: Page) -> None:
     sub = _expand(app, BIG_CREW)
     expect(sub.locator(".crews-worked-label")).to_have_count(0)
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Date", "Matchup", "Network", "Viewers"]
+    assert heads == ["Date", "Matchup", "Network", "Excitement", "Viewers"]
+
+
+def test_each_game_shows_its_excitement_to_one_decimal(app: Page) -> None:
+    sub = _expand(app, BIG_CREW)
+    cells = [c.strip() for c in sub.locator("td.crews-game-exc").all_inner_texts()]
+    assert cells, "every game row has an excitement cell"
+    assert all(re.fullmatch(r"\d+\.\d|", c) for c in cells), cells
+    assert any(cells)
 
 
 def test_unrated_games_say_none_rated_and_rated_ones_show_a_figure(app: Page) -> None:
@@ -469,6 +477,12 @@ def test_phone_sub_row_stays_in_view_and_game_items_are_stacked(app: Page) -> No
     assert matchup and date and viewers
     assert date["y"] > matchup["y"], "line 2 sits under the matchup"
     assert abs(viewers["y"] - date["y"]) <= 2, "viewers is on line 2 with the date"
+    exc = game.locator("td.crews-game-exc")
+    exc_box = exc.bounding_box()
+    assert exc_box and exc_box["y"] > date["y"] + 2, "excitement gets its own line under line 2"
+    assert abs(exc_box["x"] - date["x"]) <= 2, "excitement lines up with the date"
+    label = exc.evaluate("el => getComputedStyle(el, '::after').content")
+    assert label == '" excitement"'
     size = game.locator("td.crews-game-matchup").evaluate("el => getComputedStyle(el).fontSize")
     meta = game.locator("td.crews-game-date").evaluate("el => getComputedStyle(el).fontSize")
     assert (size, meta) == ("14px", "12px")
