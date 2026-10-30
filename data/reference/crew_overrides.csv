@@ -75,3 +75,8 @@ cfbd_game_id,network_id,crew_position,person_id,role,reason,source_kind,source_n
 401531911,espnu,1,hutson-mason,analyst,no-506-crew,outlet,Crescent City Sports,https://crescentcitysports.com/?p=255364
 400868988,sec-network,0,mark-neely,pbp,correction,school,Mizzou Athletics game preview,https://mutigers.com/news/2016/9/5/mizzoufootball-opens-home-schedule-with-emu
 400868988,sec-network,1,ray-bentley,analyst,correction,school,Mizzou Athletics game preview,https://mutigers.com/news/2016/9/5/mizzoufootball-opens-home-schedule-with-emu
+401864527,cw,0,jack-mcmullen,pbp,no-506-crew,outlet,Awful Announcing,https://awfulannouncing.com/college-football/2026-week-8-announcing-schedule.html
+401864527,cw,1,cody-kessler,analyst,no-506-crew,outlet,Awful Announcing,https://awfulannouncing.com/college-football/2026-week-8-announcing-schedule.html
+401864527,cw,2,marshall-newhouse,analyst,no-506-crew,outlet,Awful Announcing,https://awfulannouncing.com/college-football/2026-week-8-announcing-schedule.html
+401426343,nfl-network,0,jason-ross-jr,pbp,no-506-crew,outlet,Awful Announcing,https://awfulannouncing.com/schedules/your-2022-college-football-week-6-announcing-schedule.html
+401426343,nfl-network,1,tyoka-jackson,analyst,no-506-crew,outlet,Awful Announcing,https://awfulannouncing.com/schedules/your-2022-college-football-week-6-announcing-schedule.html
