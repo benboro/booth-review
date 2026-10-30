@@ -7001,7 +7001,7 @@ tr.is-matched > :first-child {
    sticky axis and row heads). Gold holds against every deepened network fill in both themes;
    a pick's ink ring replaces it. */
 .wk-cell--lead {
-  box-shadow: inset 0 0 0 2px var(--lead-frame);
+  box-shadow: inset 0 0 0 3px var(--lead-frame);
 }
 
 /* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
@@ -7267,7 +7267,7 @@ tr.is-matched > :first-child {
 
 /* A CFB lead booth on the phone: the timeline's gold frame. A pick's ring below replaces it. */
 .wk-item--lead {
-  box-shadow: inset 0 0 0 2px var(--lead-frame);
+  box-shadow: inset 0 0 0 3px var(--lead-frame);
 }
 
 .wk-item.is-match {

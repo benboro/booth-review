@@ -183,8 +183,8 @@ records only where the site settles or applies them.
 
 - This weekend (user 2026-10-30): booth lines show full names (a last-word surname showed
   "III" and "Jr."), CFB rows put FOX, ABC, ESPN, NBC and CBS first and the rest in network
-  precedence, and the four CFB lead booths get a thin inset frame (a page-colour hairline then
-  an ink one; on the phone list a 1px ink hairline). The frame is inset because an outside
+  precedence, and the four CFB lead booths get a 3px inset gold frame (`--lead-frame`, both
+  themes; the ink hairline was hard to see in light mode, and 3px holds on CBS's gold-brown). The frame is inset because an outside
   outline hides under the sticky axis and row heads; a pick's heavier ring replaces it. Module
   subtitles sit on the title's baseline.
 - The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
