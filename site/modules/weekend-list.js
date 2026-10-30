@@ -21,11 +21,12 @@ import {
 
 function item(game, ctx, { showTime = false } = {}) {
   const state = cellState(game, ctx.nowWall);
-  const line = boothLine(game, state, ctx.collide);
+  const line = boothLine(game, state);
   const btn = el('button', 'wk-item');
   btn.type = 'button';
   btn.dataset.wkId = `g:${game.key}`;
   btn.dataset.wkState = state;
+  if (line.star && game.sport === 'cfb') btn.classList.add('wk-item--lead');
   btn.setAttribute('aria-label', accessibleName(game, state, line));
   const edge = game.networkId == null
     ? 'var(--rule-strong)'

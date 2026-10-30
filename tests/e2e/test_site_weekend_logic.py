@@ -111,7 +111,7 @@ def test_grid_rows_constant(weekend_page: Page) -> None:
 # -- day model ---------------------------------------------------------------------------
 
 
-def test_rows_follow_precedence_and_streaming_last(weekend_page: Page) -> None:
+def test_rows_lead_with_premium_then_precedence_and_streaming_last(weekend_page: Page) -> None:
     games = [
         _game(key="a", networkId="peacock", kickoffMin=900),
         _game(key="b", networkId="espn", kickoffMin=720),
@@ -119,6 +119,10 @@ def test_rows_follow_precedence_and_streaming_last(weekend_page: Page) -> None:
         _game(key="d", networkId="fs1", kickoffMin=780),
         _game(key="e", networkId="fox", kickoffMin=720),
         _game(key="f", networkId="espn2", kickoffMin=720, date="2026-10-30"),
+        _game(key="g", networkId="cbs", kickoffMin=930),
+        _game(key="h", networkId="nbc", kickoffMin=1170),
+        _game(key="i", networkId="big-ten-network", kickoffMin=720),
+        _game(key="j", networkId="espn2", kickoffMin=930),
     ]
     out = _run(
         weekend_page,
@@ -126,7 +130,9 @@ def test_rows_follow_precedence_and_streaming_last(weekend_page: Page) -> None:
         ".rows.map((r) => r.id);",
         games,
     )
-    assert out == ["fox", "fs1", "abc", "espn", "streaming"]
+    assert out == [
+        "fox", "abc", "espn", "nbc", "cbs", "fs1", "big-ten-network", "espn2", "streaming",
+    ]  # fmt: skip
 
 
 def test_build_day_model_geometry_and_buckets(weekend_page: Page) -> None:
@@ -324,21 +330,17 @@ def test_booth_line(weekend_page: Page) -> None:
         " W.boothLine(arg[3], 'not-listed')];",
         games,
     )
-    assert out[0] == {"star": True, "text": "Fowler · Herbstreit", "weight": 600}
-    assert out[1]["text"] == "Fowler · Analyst TBA"
+    assert out[0] == {"star": True, "text": "Chris Fowler · Kirk Herbstreit", "weight": 600}
+    assert out[1]["text"] == "Chris Fowler · Analyst TBA"
     assert out[2]["star"] is False
     assert out[3] == {"star": False, "text": "Crew TBA", "weight": 400}
     assert out[4] == {"star": False, "text": "Crew not listed", "weight": 400}
 
 
-def test_booth_line_initial_on_surname_collision(weekend_page: Page) -> None:
-    g = _game(crewKnown=True, pbp="Tom Smith", analyst="Kirk Herbstreit")
-    out = _run(
-        weekend_page,
-        "return W.boothLine(arg, 'known', new Set(['smith'])).text;",
-        g,
-    )
-    assert out == "T. Smith · Herbstreit"
+def test_booth_line_keeps_a_suffixed_name_whole(weekend_page: Page) -> None:
+    g = _game(crewKnown=True, pbp="Mike Golic Jr.", analyst="Robert Griffin III")
+    out = _run(weekend_page, "return W.boothLine(arg, 'known').text;", g)
+    assert out == "Mike Golic Jr. · Robert Griffin III"
 
 
 def test_matchup_text(weekend_page: Page) -> None:

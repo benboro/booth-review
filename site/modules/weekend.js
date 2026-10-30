@@ -71,6 +71,9 @@ const TINT_WEIGHT = 0.18;
 /** White-on-fill contrast a known-crew cell is deepened to (user sign-off 2026-10-26). */
 const KNOWN_TEXT_CONTRAST = 7;
 const STREAMING_ROW = 'streaming';
+/** CFB's premium networks lead the timeline in this order; every other row follows in network
+ *  precedence (user 2026-10-30). */
+const CFB_PREMIUM_ROWS = Object.freeze(['fox', 'abc', 'espn', 'nbc', 'cbs']);
 const SUB_ROW_PITCH = 48;
 const CELL_HEIGHT = 44;
 /** The sticky network column (UI-SPEC "Row header column: 96px wide"). */
@@ -354,8 +357,12 @@ export function buildDayModel(games, { sport, day, width }) {
   }
 
   const prec = precedenceIndex([...byRow.keys()].filter((id) => id !== STREAMING_ROW));
+  const premium = (id) => {
+    const k = sport === 'cfb' ? CFB_PREMIUM_ROWS.indexOf(id) : -1;
+    return k === -1 ? Infinity : k;
+  };
   const ids = [...byRow.keys()].filter((id) => id !== STREAMING_ROW)
-    .sort((a, b) => cmpNum(prec(a), prec(b)) || a.localeCompare(b));
+    .sort((a, b) => cmpNum(premium(a), premium(b)) || cmpNum(prec(a), prec(b)) || a.localeCompare(b));
   if (byRow.has(STREAMING_ROW)) ids.push(STREAMING_ROW);
 
   const rows = ids.map((id) => {
@@ -421,49 +428,17 @@ export function isUnplayedGame(game, nowWall) {
   return true;
 }
 
-function surname(name) {
-  const parts = name.trim().split(/\s+/);
-  return parts[parts.length - 1];
-}
-
 /**
- * Surnames (lower case) shared by two or more different people among the games' cells, so the
- * booth line can add a first initial (`T. Smith`).
- * @param {WeekendGame[]} games
- * @returns {Set<string>}
- */
-export function collidingSurnames(games) {
-  const seen = new Map();
-  for (const g of games) {
-    for (const n of [g.pbp, g.analyst]) {
-      if (!n) continue;
-      const key = surname(n).toLowerCase();
-      if (!seen.has(key)) seen.set(key, new Set());
-      seen.get(key).add(n);
-    }
-  }
-  return new Set([...seen].filter(([, names]) => names.size > 1).map(([k]) => k));
-}
-
-function shortName(name, collide) {
-  const last = surname(name);
-  if (collide && collide.has(last.toLowerCase()) && name.trim().includes(' ')) {
-    return `${name.trim()[0]}. ${last}`;
-  }
-  return last;
-}
-
-/**
- * The booth line of a cell.
+ * The booth line of a cell, with full names so a suffix (Jr., III) never stands in for the
+ * surname.
  * @param {WeekendGame} game
  * @param {'known'|'tba'|'not-listed'} state
- * @param {Set<string>} [collide] - from `collidingSurnames`.
  * @returns {{star: boolean, text: string, weight: 600|400}}
  */
-export function boothLine(game, state, collide) {
+export function boothLine(game, state) {
   if (state === 'known' && (game.pbp || game.analyst)) {
-    const pbp = game.pbp ? shortName(game.pbp, collide) : 'Play-by-play TBA';
-    const analyst = game.analyst ? shortName(game.analyst, collide) : 'Analyst TBA';
+    const pbp = game.pbp ? game.pbp.trim() : 'Play-by-play TBA';
+    const analyst = game.analyst ? game.analyst.trim() : 'Analyst TBA';
     return { star: Boolean(game.lead), text: `${pbp} · ${analyst}`, weight: 600 };
   }
   return {

@@ -313,8 +313,8 @@ export const MAP_LINE_WIDTH = Object.freeze({
  * 1px ring).
  */
 export const WEEKEND_MAP_DOT = Object.freeze({
-  desktop: Object.freeze({ circle: 12, square: 10, diamond: 14, 'triangle-up': 13, 'circle-open': 12 }),
-  phone: Object.freeze({ circle: 10, square: 8, diamond: 12, 'triangle-up': 11, 'circle-open': 10 }),
+  desktop: Object.freeze({ circle: 12, square: 10, diamond: 14, 'arrow-up': 13, 'circle-open': 12 }),
+  phone: Object.freeze({ circle: 10, square: 8, diamond: 12, 'arrow-up': 11, 'circle-open': 10 }),
   hitDiameter: MAP_VENUE_DOT.hitDiameter,
   keyline: 1.5,
   tbaStroke: 2,

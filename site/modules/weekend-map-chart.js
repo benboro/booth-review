@@ -72,6 +72,9 @@ function layer(name, points, theme) {
       color: points.map((p) => colorOf(p, theme)),
       opacity: points.map((p) => (p.faded ? MAP_OPACITY.faded : 1)),
       line: markerLine(points, theme),
+      // Plotly's arrow-up has the key's even triangle (as tall as wide) but hangs from its tip,
+      // so it moves up half its size to sit centred on the venue like the other shapes.
+      standoff: points.map((p) => (p.symbol === 'arrow-up' ? p.size / 2 : 0)),
     },
     // The venue-hits trace carries hover and click, so the layers only draw.
     hoverinfo: 'skip',

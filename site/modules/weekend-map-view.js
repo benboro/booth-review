@@ -104,7 +104,7 @@ function shapeSvg(symbol, size, color) {
     svg.append(svgEl('rect', { x: c - r, y: c - r, width: size, height: size, fill: color }));
   } else if (symbol === 'diamond') {
     svg.append(svgEl('polygon', { points: `${c},${c - r} ${c + r},${c} ${c},${c + r} ${c - r},${c}`, fill: color }));
-  } else if (symbol === 'triangle-up') {
+  } else if (symbol === 'arrow-up') {
     svg.append(svgEl('polygon', { points: `${c},${c - r} ${c + r},${c + r} ${c - r},${c + r}`, fill: color }));
   } else {
     svg.append(svgEl('circle', {

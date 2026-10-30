@@ -6075,11 +6075,14 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .module-title {
+  align-self: baseline;
   font: var(--font-heading);
   margin: 0;
 }
 
+/* The subtitle sits on the title's baseline, not centred on its taller line box. */
 .module-subtitle {
+  align-self: baseline;
   flex: 1 1 0;
   min-width: 0;
   margin: 0;
@@ -6983,6 +6986,13 @@ tr.is-matched > :first-child {
 }
 
 /* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
+/* A CFB lead booth: a thin inset frame, a page-colour hairline then an ink one, so it shows on
+   every fill and at the lane edges (an outside outline hides under the sticky axis and row
+   heads). A pick's heavier ink ring replaces it. */
+.wk-cell--lead {
+  box-shadow: inset 0 0 0 1px var(--bg), inset 0 0 0 2px var(--ink);
+}
+
 .wk-cell.is-match {
   z-index: 2;
   box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
@@ -7241,6 +7251,12 @@ tr.is-matched > :first-child {
   gap: var(--space-xs);
   min-width: 0;
   font: var(--font-caption);
+}
+
+/* A CFB lead booth on the phone: the timeline's thin frame, as a 1px ink hairline (the item has
+   no fill for a page-colour keyline to show against). A pick's ring below replaces it. */
+.wk-item--lead {
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .wk-item.is-match {

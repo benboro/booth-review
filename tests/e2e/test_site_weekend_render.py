@@ -228,6 +228,18 @@ def test_cell_colors_known_and_tba(wk_page: Page, theme: str) -> None:
     assert wk_page.locator(f"{_cell('t')} .wk-star").count() == 0
 
 
+def test_lead_booth_cell_gets_a_thin_inset_frame(wk_page: Page) -> None:
+    games = [
+        _known(key="k", lead=True, boothRank=1, home="Known"),
+        _known(key="o", boothRank=2, home="Other", kickoffMin=930),
+    ]
+    _mount(wk_page, games)
+    assert "wk-cell--lead" in (wk_page.locator(_cell("k")).get_attribute("class") or "")
+    frame = _style(wk_page, _cell("k"), "boxShadow")
+    assert frame.count("inset") == 2 and "1px" in frame and "2px" in frame
+    assert _style(wk_page, _cell("o"), "boxShadow") == "none"
+
+
 def test_cell_text_ranks_neutral_and_names(wk_page: Page) -> None:
     games = [
         _known(key="a", awayRank=20, homeRank=5, away="Florida", home="Georgia", lead=True),
@@ -238,10 +250,12 @@ def test_cell_text_ranks_neutral_and_names(wk_page: Page) -> None:
     assert wk_page.locator(f"{_cell('a')} .wk-match").inner_text() == "#20 Florida @ #5 Georgia"
     assert wk_page.locator(f"{_cell('n')} .wk-match").inner_text() == "Utah vs Texas"
     assert wk_page.locator(f"{_cell('a')} .wk-time").inner_text() == "12:00"
-    assert wk_page.locator(f"{_cell('a')} .wk-booth").inner_text() == "Fowler · Herbstreit"
-    assert wk_page.locator(f"{_cell('p')} .wk-booth").inner_text() == "Fowler · Analyst TBA"
+    assert wk_page.locator(f"{_cell('a')} .wk-booth").inner_text() == "Joe Fowler · Pat Herbstreit"
+    assert wk_page.locator(f"{_cell('p')} .wk-booth").inner_text() == "Joe Fowler · Analyst TBA"
     label = wk_page.locator(_cell("a")).get_attribute("aria-label")
-    assert label == ("12:00 pm, #20 Florida at #5 Georgia, FOX. Lead booth. Fowler and Herbstreit.")
+    assert label == (
+        "12:00 pm, #20 Florida at #5 Georgia, FOX. Lead booth. Joe Fowler and Pat Herbstreit."
+    )
 
 
 def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
@@ -622,7 +636,7 @@ def test_compact_table_rows_booths_and_keys(wk_page: Page) -> None:
     assert heads == ["Time", "Game", "Network", "Booth"]
     rows = wk_page.locator("#wk-host .wk-compact-table tbody tr")
     assert rows.count() == 2
-    assert rows.nth(0).locator(".wk-c-booth").inner_text() == "Caller · Color"
+    assert rows.nth(0).locator(".wk-c-booth").inner_text() == "Ann Caller · Bob Color"
     assert rows.nth(0).locator(".wk-c-time").inner_text() == "12:00 pm"
     assert rows.nth(1).locator(".wk-c-booth").inner_text() == "Crew TBA"
     assert rows.nth(0).get_attribute("role") == "button"
@@ -778,6 +792,15 @@ def _phone_games() -> list[dict[str, Any]]:
     ]
 
 
+def test_phone_lead_item_gets_a_hairline_frame(phone_page: Page) -> None:
+    _mount_phone(phone_page, [_known(key="k", lead=True, boothRank=1), _known(key="o", home="O")])
+    lead = phone_page.locator('#wk-host .wk-item[data-wk-id="g:k"]')
+    other = phone_page.locator('#wk-host .wk-item[data-wk-id="g:o"]')
+    assert "wk-item--lead" in (lead.get_attribute("class") or "")
+    assert "inset" in lead.evaluate("el => getComputedStyle(el).boxShadow")
+    assert other.evaluate("el => getComputedStyle(el).boxShadow") == "none"
+
+
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_phone_groups_order_and_item_shape(phone_page: Page, theme: str) -> None:
     _mount_phone(phone_page, _phone_games(), theme=theme)
@@ -800,9 +823,8 @@ def test_phone_groups_order_and_item_shape(phone_page: Page, theme: str) -> None
     assert phone_page.locator(f"{first} .wk-item-l1").inner_text() == "Away @ Home".replace(
         "Home", "F1"
     )
-    assert (
-        phone_page.locator(f"{first} .wk-item-l2 .wk-booth").inner_text() == "Fowler · Herbstreit"
-    )
+    booth = phone_page.locator(f"{first} .wk-item-l2 .wk-booth").inner_text()
+    assert booth == "Joe Fowler · Pat Herbstreit"
     assert phone_page.locator(f"{first} .wk-star").count() == 1
     assert _style(phone_page, first, "backgroundColor") == "rgba(0, 0, 0, 0)"
     tba = phone_page.locator('#wk-host .wk-item[data-wk-id="g:late"] .wk-booth')

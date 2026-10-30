@@ -181,6 +181,12 @@ records only where the site settles or applies them.
   its values change with the filters. The key shows size only; venue colours are always on
   (Phase 17.1).
 
+- This weekend (user 2026-10-30): booth lines show full names (a last-word surname showed
+  "III" and "Jr."), CFB rows put FOX, ABC, ESPN, NBC and CBS first and the rest in network
+  precedence, and the four CFB lead booths get a thin inset frame (a page-colour hairline then
+  an ink one; on the phone list a 1px ink hairline). The frame is inset because an outside
+  outline hides under the sticky axis and row heads; a pick's heavier ring replaces it. Module
+  subtitles sit on the title's baseline.
 - The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
   a 96px label column, the time scale runs 80-120 px/hour (80, not the spec's 88,
   so a 15-hour day fits at 1440), cells are 44px tall on a 48px
@@ -232,7 +238,8 @@ records only where the site settles or applies them.
   3:1 on the unrated strip's SURFACE (3.13 and 3.12) and the page ground; NBC and Other on that
   strip were already under 3:1 on the old ground and rely on the 2px ring rule. The kickoff
   window is the shape: CFB circle (noon), square (afternoon), diamond (prime), triangle
-  (late); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
+  (late, Plotly `arrow-up` lifted half its size by `standoff`, so the map draws the key's
+  even triangle centred on the venue, not Plotly's flatter `triangle-up`; user 2026-10-30); NFL circle (early), square (late), diamond (night and standalone); a Time TBA
   game is an open ring in its family colour, still listed in the Time TBA strip. Games at
   one venue sit in a centred row, wrapping at four, never stacked. A game abroad is an edge
   marker in the same shape, labelled by city once per site. A game with no venue is listed

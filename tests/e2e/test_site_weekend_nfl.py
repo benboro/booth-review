@@ -74,8 +74,8 @@ def test_cbs_window_is_four_sub_rows_by_booth_rank(
     assert all(c["time"] == "1:00" for c in cells)
     # Rank 1 on top, rank 2 under it, the crewless games last; every crew visible.
     assert cells[0]["star"] is True
-    assert cells[0]["booth"] == "Strand · Vale"
-    assert cells[1]["booth"] == "Pryor · Reyes"
+    assert cells[0]["booth"] == "Ivo Strand · Jun Vale"
+    assert cells[1]["booth"] == "Ned Pryor · Opal Reyes"
     assert [c["booth"] for c in cells[2:]] == ["Crew TBA", "Crew TBA"]
 
 
@@ -380,7 +380,7 @@ def test_keyboard_reaches_a_cell(nfl_guarded_page: Page, open_nfl_app: OpenNfl) 
     page.locator(".wk-row[data-row=cbs] .wk-cell").first.focus()
     page.keyboard.press("ArrowDown")
     focused = page.evaluate("document.activeElement.querySelector('.wk-booth').textContent")
-    assert focused == "Pryor · Reyes"
+    assert focused == "Ned Pryor · Opal Reyes"
 
 
 # ---- v2.1 polish (18-UI-REVIEW items 6 and 8) ----

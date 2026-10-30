@@ -97,7 +97,7 @@ def test_window_symbol_table_is_frozen_and_complete(map_page: Page) -> None:
         "noon": "circle",
         "afternoon": "square",
         "prime": "diamond",
-        "late": "triangle-up",
+        "late": "arrow-up",
     }
     assert out["nfl"] == {"early": "circle", "late": "square", "night": "diamond"}
     assert out["tba"] == "circle-open"
@@ -151,14 +151,14 @@ def test_weekend_map_palette_constants(map_page: Page) -> None:
         "circle": 12,
         "square": 10,
         "diamond": 14,
-        "triangle-up": 13,
+        "arrow-up": 13,
         "circle-open": 12,
     }
     assert out["dot"]["phone"] == {
         "circle": 10,
         "square": 8,
         "diamond": 12,
-        "triangle-up": 11,
+        "arrow-up": 11,
         "circle-open": 10,
     }
     assert out["dot"]["hitDiameter"] == out["hit"] == 12
@@ -623,7 +623,7 @@ def test_figure_symbols_come_from_the_one_table(map_page: Page) -> None:
             assert out["bySymbol"][key] == symbol
     assert out["bySymbol"]["noon"] == "circle"
     assert out["bySymbol"]["prime"] == "diamond"
-    assert out["bySymbol"]["late"] == "triangle-up"
+    assert out["bySymbol"]["late"] == "arrow-up"
     assert out["bySymbol"]["tba"] == "circle-open"
     # Filled marks wear the 1.5 px page keyline; the open TBA mark is its own 2 px stroke.
     i = out["openIdx"]

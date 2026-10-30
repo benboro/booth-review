@@ -17,7 +17,7 @@ import { boothLine, cellState, clock12, matchupText } from './weekend.js';
  * shapes cannot diverge. CFB windows are by ET kickoff; NFL windows by slot name.
  */
 export const WINDOW_SYMBOL = Object.freeze({
-  cfb: Object.freeze({ noon: 'circle', afternoon: 'square', prime: 'diamond', late: 'triangle-up' }),
+  cfb: Object.freeze({ noon: 'circle', afternoon: 'square', prime: 'diamond', late: 'arrow-up' }),
   nfl: Object.freeze({ early: 'circle', late: 'square', night: 'diamond' }),
   tba: 'circle-open',
 });
