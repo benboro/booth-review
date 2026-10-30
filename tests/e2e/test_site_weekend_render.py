@@ -236,7 +236,11 @@ def test_lead_booth_cell_gets_a_thin_inset_frame(wk_page: Page) -> None:
     _mount(wk_page, games)
     assert "wk-cell--lead" in (wk_page.locator(_cell("k")).get_attribute("class") or "")
     frame = _style(wk_page, _cell("k"), "boxShadow")
-    assert frame.count("inset") == 2 and "1px" in frame and "2px" in frame
+    gold = wk_page.evaluate(
+        "() => { const d = document.createElement('div'); d.style.color = 'var(--lead-frame)';"
+        " document.body.append(d); const c = getComputedStyle(d).color; d.remove(); return c; }"
+    )
+    assert frame.count("inset") == 1 and gold in frame
     assert _style(wk_page, _cell("o"), "boxShadow") == "none"
 
 

@@ -65,6 +65,8 @@ html {
   --rule: #DAE0DD;
   --rule-strong: #C0C9C5;
   --accent: #1B4F5C;
+  /* The CFB lead-booth frame on This weekend (user 2026-10-30: gold, both themes). */
+  --lead-frame: #E8AE00;
   --accent-soft: #E3EDEF;
   --accent-soft-hover: #D3E3E7;
   --disabled: #8E9894;
@@ -96,6 +98,7 @@ html {
   --rule: #333A38;
   --rule-strong: #434B48;
   --accent: #68BACB;
+  --lead-frame: #F2C23A;
   --accent-soft: #223A40;
   --accent-soft-hover: #274046;
   --disabled: #76807C;
@@ -118,6 +121,7 @@ html {
 @media print {
   [data-theme="dark"] {
     color-scheme: light;
+    --lead-frame: #E8AE00;
     --bg: #F5F7F6;
     --surface: #EBEFED;
     --ink: #1E2321;
@@ -3572,9 +3576,17 @@ dialog.detail-panel {
     overflow: hidden;
   }
 
+  /* The 22px serif count's line is taller than the band, and centring it clipped descenders
+     ("games"): a 20px line on the band's top edge, with its detail on the same baseline. */
   #summary .sum-left,
   #nfl-summary-band .sum-left {
     height: 24px;
+    align-items: baseline;
+  }
+
+  #summary .summary-count,
+  #nfl-summary-band .summary-count {
+    line-height: 20px;
   }
 
   #summary .sum-right,
@@ -6985,14 +6997,14 @@ tr.is-matched > :first-child {
   }
 }
 
-/* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
-/* A CFB lead booth: a thin inset frame, a page-colour hairline then an ink one, so it shows on
-   every fill and at the lane edges (an outside outline hides under the sticky axis and row
-   heads). A pick's heavier ink ring replaces it. */
+/* A CFB lead booth: a thin gold frame inside the block (an outside outline hides under the
+   sticky axis and row heads). Gold holds against every deepened network fill in both themes;
+   a pick's ink ring replaces it. */
 .wk-cell--lead {
-  box-shadow: inset 0 0 0 1px var(--bg), inset 0 0 0 2px var(--ink);
+  box-shadow: inset 0 0 0 2px var(--lead-frame);
 }
 
+/* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
 .wk-cell.is-match {
   z-index: 2;
   box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
@@ -7253,10 +7265,9 @@ tr.is-matched > :first-child {
   font: var(--font-caption);
 }
 
-/* A CFB lead booth on the phone: the timeline's thin frame, as a 1px ink hairline (the item has
-   no fill for a page-colour keyline to show against). A pick's ring below replaces it. */
+/* A CFB lead booth on the phone: the timeline's gold frame. A pick's ring below replaces it. */
 .wk-item--lead {
-  box-shadow: inset 0 0 0 1px var(--ink);
+  box-shadow: inset 0 0 0 2px var(--lead-frame);
 }
 
 .wk-item.is-match {
