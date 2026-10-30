@@ -2280,6 +2280,13 @@ def _build(args: argparse.Namespace) -> int:
             "(see interim/review_second_source_rejected.csv)",
             file=sys.stderr,
         )
+    for drop in outcome.explained:
+        print(
+            f"warning: season {drop.season}: match_rate below baseline only from "
+            f"{drop.games} rated game(s) 506 lists with no crew, not blocking "
+            "(see interim/review_crew_overrides.csv)",
+            file=sys.stderr,
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:

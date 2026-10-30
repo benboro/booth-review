@@ -1204,6 +1204,125 @@ def test_update_regression_block_holds_deploy_and_keeps_site_data(
     assert not (tmp_path / "site-out").exists()
 
 
+def _held_lines(result) -> list[str]:
+    return [item.line for item in result.items if item.kind == "deploy_held"]
+
+
+_HELD_LINE = (
+    "deploy held since 2025-10-08 08:00 ET: the last build was blocked by the regression "
+    "guard (clears on the first unblocked build)"
+)
+
+
+def test_update_held_deploy_repeats_on_full_and_light_runs_until_a_build_passes(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    rr_file = next(iter(sorted((paths.raw / "ratingsref" / "telecast" / "2025").glob("*.json"))))
+    saved = rr_file.read_bytes()
+    rr_file.unlink()
+
+    full = _update_job(
+        paths, mock_transport_factory(_update_cfbd_responses()), fake_clock, tmp_path
+    ).run()
+    assert "build_blocked" in _kinds(full)
+    assert _held_lines(full) == [_HELD_LINE]
+    assert load_state(paths.job_state).build_held_since == UPDATE_NOW
+
+    # A later rebuild that is still blocked keeps the original start time.
+    later = UPDATE_NOW + timedelta(hours=6)
+    light = _update_job(
+        paths, mock_transport_factory({}), fake_clock, tmp_path, now=later, mode="rebuild"
+    ).run()
+    assert light.deploy_ready is False
+    assert _held_lines(light) == [_HELD_LINE]
+    assert light.exit_code == 4
+    assert load_state(paths.job_state).build_held_since == UPDATE_NOW
+
+    # The first unblocked build clears the hold.
+    rr_file.write_bytes(saved)
+    cleared = _update_job(
+        paths,
+        mock_transport_factory({}),
+        fake_clock,
+        tmp_path,
+        now=later + timedelta(hours=1),
+        mode="rebuild",
+    ).run()
+    assert cleared.deploy_ready is True
+    assert _held_lines(cleared) == []
+    assert load_state(paths.job_state).build_held_since is None
+
+
+def test_update_crashed_build_keeps_the_hold(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    paths = update_vault
+    save_state(paths.job_state, replace(load_state(paths.job_state), build_held_since=UPDATE_NOW))
+
+    def _boom(*args, **kwargs):
+        raise VaultStateError("detail")
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _boom)
+    later = UPDATE_NOW + timedelta(hours=6)
+    result = _update_job(
+        paths, mock_transport_factory({}), fake_clock, tmp_path, now=later, mode="rebuild"
+    ).run()
+
+    assert _held_lines(result) == [_HELD_LINE]
+    assert load_state(paths.job_state).build_held_since == UPDATE_NOW
+
+
+@pytest.mark.parametrize("mode", ["full", "rebuild"])
+def test_update_push_failure_still_shows_the_held_deploy(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch, mode
+) -> None:
+    paths = update_vault
+    save_state(paths.job_state, replace(load_state(paths.job_state), build_held_since=UPDATE_NOW))
+
+    def _boom(*args, **kwargs):
+        raise VaultCommitError("git subcommand push exited 1")
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _boom)
+    later = UPDATE_NOW + timedelta(hours=6)
+    responses = _update_cfbd_responses() if mode == "full" else {}
+    kw = {} if mode == "full" else {"mode": "rebuild"}
+    result = _update_job(
+        paths, mock_transport_factory(responses), fake_clock, tmp_path, now=later, **kw
+    ).run()
+
+    assert result.exit_code == 3
+    assert "push_failed" in _kinds(result)
+    assert _held_lines(result) == [_HELD_LINE]
+
+
+def test_update_explained_match_rate_drop_is_attention_and_deploys(
+    update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
+) -> None:
+    from booth_review.build.regression import ExplainedDrop
+
+    real = runner_module.run_build
+
+    def _with_explained(*args, **kwargs):
+        return replace(real(*args, **kwargs), explained=(ExplainedDrop(2025, 1),))
+
+    monkeypatch.setattr("booth_review.job.runner.run_build", _with_explained)
+    result = _update_job(
+        update_vault, mock_transport_factory(_update_cfbd_responses()), fake_clock, tmp_path
+    ).run()
+
+    lines = [item.line for item in result.items if item.kind == "match_rate_explained"]
+    assert lines == [
+        "match_rate below baseline only from rated games 506 lists with no crew, "
+        "not a block (games per season 2025: 1): "
+        "an override in data/reference/crew_overrides.csv fills them"
+    ]
+    assert "build_blocked" not in _kinds(result)
+    assert _held_lines(result) == []
+    assert result.deploy_ready is True
+    assert result.exit_code == 4
+
+
 def test_update_missing_bowl_row_is_a_count_item_and_deploy_stays_ready(
     update_vault, mock_transport_factory, fake_clock, tmp_path, monkeypatch
 ) -> None:
@@ -1448,6 +1567,25 @@ def test_update_nothing_due_fresh_build_exits_5(
     assert result.exit_code == 5
     assert result.stale_only is False
     assert handle.requests == []
+
+
+def test_update_nothing_due_while_held_posts_only_the_held_line(
+    update_vault, mock_transport_factory, fake_clock, tmp_path
+) -> None:
+    paths = update_vault
+    now = datetime(2025, 10, 9, 12, 0, tzinfo=UTC)
+    stamp = datetime(2025, 10, 9, 1, 0, tzinfo=UTC)
+    _save_build_state(paths, stamp)
+    save_state(paths.job_state, replace(load_state(paths.job_state), build_held_since=UPDATE_NOW))
+    handle = mock_transport_factory(_update_cfbd_responses())
+
+    result = _update_job(paths, handle, fake_clock, tmp_path, now=now, trigger="schedule").run()
+
+    assert [item.line for item in result.items] == [_HELD_LINE]
+    assert result.exit_code == 4
+    assert result.stale_only is True
+    assert handle.requests == []
+    assert load_state(paths.job_state).build_held_since == UPDATE_NOW
 
 
 def test_update_trail_staleness_item_does_not_change_deploy_ready(

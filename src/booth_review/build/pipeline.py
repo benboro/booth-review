@@ -31,6 +31,7 @@ import polars as pl
 
 from booth_review.build.coverage import build_coverage, write_coverage
 from booth_review.build.regression import (
+    ExplainedDrop,
     RegressionResult,
     SeasonMetrics,
     build_metrics,
@@ -76,6 +77,8 @@ class BuildOutcome:
     second_source_gates: tuple[GateStatus, ...] = ()
     # second_source_network_accepts.csv (line, ignored | unused) pairs (WR-05).
     second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
+    # match_rate drops explained by unpatched no-506-crew gaps: never a reason to block.
+    explained: tuple[ExplainedDrop, ...] = ()
 
 
 # A preliminary headline figure older than this many days is listed in
@@ -360,4 +363,5 @@ def run_build(
         crew_override_differs_lines=tables.crew_override_differs_lines,
         second_source_gates=tables.second_source_gates,
         second_source_accept_warnings=tables.second_source_accept_warnings,
+        explained=result.explained,
     )

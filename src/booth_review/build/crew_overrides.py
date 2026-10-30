@@ -12,9 +12,10 @@ build-time failures are count-only (D-04). Nothing here ever echoes a cell.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import polars as pl
 
@@ -334,6 +335,39 @@ def unmatched_506_keys(
     return keys
 
 
+def _classified_gaps(
+    telecasts: pl.DataFrame,
+    telecast_people: pl.DataFrame,
+    statuses: Mapping[str, str],
+    unmatched_506: Collection[tuple[str, str]],
+    backup_ids: Collection[str],
+) -> Iterator[tuple[dict[str, Any], str, str, bool]]:
+    """(telecast row, gap_kind, override_status, other_feed_crew) for each
+    crew_gap_rows row, so the guard's no-506-crew count classifies exactly as
+    the review file does."""
+    non_main = set(telecast_people.filter(pl.col("feed_type") != "main")["telecast_id"].to_list())
+    plotted_main = telecasts.filter((pl.col("feed_type") == "main") & pl.col("plotted"))
+    for tel in plotted_main.iter_rows(named=True):
+        telecast_id = tel["telecast_id"]
+        status = statuses.get(telecast_id)
+        if tel["crew_matched"]:
+            if status not in _HAS_506_CREW_STATUSES:
+                continue
+            gap_kind = "has-506-crew"
+        elif tel["s506_pointer"] is not None:
+            gap_kind = "no-506-crew"
+        elif telecast_id in non_main:
+            gap_kind = "main-crew-missing"
+        elif (tel["date_et"].isoformat(), tel["network_id"]) in unmatched_506:
+            gap_kind = "join-miss-suspect"
+        else:
+            gap_kind = "no-506-listing"
+        override_status = (
+            status if status is not None else ("backup" if telecast_id in backup_ids else "missing")
+        )
+        yield tel, gap_kind, override_status, telecast_id in non_main
+
+
 def crew_gap_rows(
     telecasts: pl.DataFrame,
     games: pl.DataFrame,
@@ -354,25 +388,11 @@ def crew_gap_rows(
     Vault-only (interim/review_crew_overrides.csv); never logged or published.
     Callers and tests never hard-code a gap count.
     """
-    non_main = set(telecast_people.filter(pl.col("feed_type") != "main")["telecast_id"].to_list())
     game_by_id = {row["game_id"]: row for row in games.iter_rows(named=True)}
     rows: list[dict[str, object]] = []
-    plotted_main = telecasts.filter((pl.col("feed_type") == "main") & pl.col("plotted"))
-    for tel in plotted_main.iter_rows(named=True):
-        telecast_id = tel["telecast_id"]
-        status = statuses.get(telecast_id)
-        if tel["crew_matched"]:
-            if status not in _HAS_506_CREW_STATUSES:
-                continue
-            gap_kind = "has-506-crew"
-        elif tel["s506_pointer"] is not None:
-            gap_kind = "no-506-crew"
-        elif telecast_id in non_main:
-            gap_kind = "main-crew-missing"
-        elif (tel["date_et"].isoformat(), tel["network_id"]) in unmatched_506:
-            gap_kind = "join-miss-suspect"
-        else:
-            gap_kind = "no-506-listing"
+    for tel, gap_kind, override_status, other_feed_crew in _classified_gaps(
+        telecasts, telecast_people, statuses, unmatched_506, backup_ids
+    ):
         game = game_by_id.get(tel["game_id"], {})
         rows.append(
             {
@@ -386,14 +406,36 @@ def crew_gap_rows(
                 "home_team": game.get("home_team"),
                 "gap_kind": gap_kind,
                 "s506_pointer": tel["s506_pointer"],
-                "other_feed_crew": telecast_id in non_main,
+                "other_feed_crew": other_feed_crew,
                 "crew_network_mismatch": tel["crew_network_mismatch"],
-                "override_status": (
-                    status
-                    if status is not None
-                    else ("backup" if telecast_id in backup_ids else "missing")
-                ),
+                "override_status": override_status,
             }
         )
     rows.sort(key=lambda r: (r["season"], r["date_et"], r["cfbd_game_id"], r["network_id"]))
     return rows
+
+
+def no_506_crew_counts(
+    telecasts: pl.DataFrame,
+    telecast_people: pl.DataFrame,
+    statuses: Mapping[str, str],
+    unmatched_506: Collection[tuple[str, str]],
+    backup_ids: Collection[str] = frozenset(),
+) -> dict[int, tuple[int, int]]:
+    """{season: (games, rr records)} of the rated crew_gap_rows gaps that are
+    `no-506-crew` with no override or backup crew (`missing`). Takes the same
+    PRE-override frames as crew_gap_rows. The records are the ones each such
+    telecast adds to the match_rate denominator but not to records_with_crew,
+    which the regression guard needs to call a match_rate drop explained.
+    """
+    counts: dict[int, tuple[int, int]] = {}
+    for tel, gap_kind, override_status, _ in _classified_gaps(
+        telecasts, telecast_people, statuses, unmatched_506, backup_ids
+    ):
+        rr_records = len(tel["rr_telecast_ids"] or [])
+        # A telecast rated only by a second source has no RR record in the denominator.
+        if gap_kind != "no-506-crew" or override_status != "missing" or not rr_records:
+            continue
+        games, records = counts.get(tel["season"], (0, 0))
+        counts[tel["season"]] = (games + 1, records + rr_records)
+    return counts

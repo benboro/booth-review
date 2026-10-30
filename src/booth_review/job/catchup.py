@@ -94,6 +94,10 @@ class JobState:
     Those runs never move `last_success_at` or `last_attempt_at`, so the
     Sunday/Wednesday slot logic is unchanged; this field only stops a backup cron
     repeating a clean schedule-only run."""
+    build_held_since: datetime | None = None
+    """When the regression guard first blocked the CFB build that is still blocked;
+    None once a build passes. A blocked build never moves `last_build_at`, so this
+    is what lets every later run, the quiet path included, say the deploy is held."""
 
 
 _EMPTY_STATE = JobState(
@@ -141,6 +145,7 @@ def load_state(path: Path) -> JobState:
         retry_pending=retry_pending,
         last_build_at=_parse_dt(data, "last_build_at", path=path),
         last_schedule_at=_parse_dt(data, "last_schedule_at", path=path),
+        build_held_since=_parse_dt(data, "build_held_since", path=path),
     )
 
 
@@ -156,6 +161,7 @@ def save_state(path: Path, state: JobState) -> None:
         "retry_pending": state.retry_pending,
         "last_build_at": _format_dt(state.last_build_at),
         "last_schedule_at": _format_dt(state.last_schedule_at),
+        "build_held_since": _format_dt(state.build_held_since),
     }
     atomic_write_json(path, payload)
 

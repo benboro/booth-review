@@ -105,11 +105,13 @@ from booth_review.job.attention import (
     cfbd_failed,
     cfbd_remaining,
     cfbd_step_failed,
+    deploy_held,
     error_type_name,
     espnpr_week_unsaved,
     failed_attempts,
     has_attention,
     has_reminders,
+    match_rate_explained,
     missed_runs,
     nfl_506_missing,
     nfl_506_stale,
@@ -265,6 +267,18 @@ def _remaining_text(value: int | None) -> str:
 def _exit_code(key_leak: bool, items: Sequence[AttentionItem]) -> int:
     """A finished run's exit code: 3 on a key leak, else 4 with attention, else 0."""
     return 3 if key_leak else (4 if has_attention(items) else 0)
+
+
+def _held_since(
+    held_since: datetime | None, build_blocked_now: bool | None, now: datetime
+) -> datetime | None:
+    """The deploy hold after this run: begun (or kept) by a blocked build,
+    cleared by an unblocked one, unchanged when no build finished."""
+    if build_blocked_now is None:
+        return held_since
+    if build_blocked_now:
+        return held_since or now
+    return None
 
 
 def _is_transient_cfbd_error(exc: Exception) -> bool:
@@ -426,6 +440,7 @@ class ScheduledJob:
             # Tue slot may make one feed request and commit ledger/aa_feed_watch.json;
             # nothing else on this path writes.
             quiet_items: list[AttentionItem] = []
+            self._held_step(quiet_items, state.build_held_since)
             if self._update:
                 self._staleness_step(quiet_items, state.last_build_at, now, season)
             quiet_items.extend(due_reminders(paths, now, aa_cfb=self._aa_cfb_resolver()))
@@ -454,6 +469,7 @@ class ScheduledJob:
         deploy_ready = False
         key_leak = False
         new_last_build_at: datetime | None = None
+        build_blocked_now: bool | None = None
         remaining_start = self._remaining(now)
         print(f"cfbd remaining at start: {_remaining_text(remaining_start)}")
 
@@ -510,10 +526,13 @@ class ScheduledJob:
             any_failed = any_failed or not freeze_ok
 
             if self._update and not self._dry_run:
-                build_failed, new_last_build_at, deploy_ready, key_leak = self._build_and_site(
-                    items, counts, now
+                build_failed, new_last_build_at, deploy_ready, key_leak, build_blocked_now = (
+                    self._build_and_site(items, counts, now)
                 )
                 any_failed = any_failed or build_failed
+
+            held_since = _held_since(state.build_held_since, build_blocked_now, now)
+            self._held_step(items, held_since)
 
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
@@ -539,6 +558,7 @@ class ScheduledJob:
         except VaultCommitError:
             # A failed push still posts this slot's reminders (severity "reminder", so the
             # exit code stays 3); the +1h backup may itself be a failing retry.
+            self._held_on_push_failure(items, state.build_held_since)
             items.extend(due_reminders(paths, now, aa_cfb=self._aa_cfb_resolver()))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
@@ -557,6 +577,7 @@ class ScheduledJob:
                 last_window_start=window.start,
                 retry_pending=retry_pending,
                 last_build_at=new_last_build_at or state.last_build_at,
+                build_held_since=held_since,
             )
             report = {
                 "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -620,10 +641,10 @@ class ScheduledJob:
 
     def _build_and_site(
         self, items: list[AttentionItem], counts: dict[str, int], now: datetime
-    ) -> tuple[bool, datetime | None, bool, bool]:
+    ) -> tuple[bool, datetime | None, bool, bool, bool | None]:
         """The build then site steps. Returns (failed, last_build_at,
-        deploy_ready, key_leak); the VaultCommitError of a build push passes
-        through."""
+        deploy_ready, key_leak, blocked), `blocked` None when the build did not
+        finish; the VaultCommitError of a build push passes through."""
         any_failed = False
         new_last_build_at: datetime | None = None
         deploy_ready = False
@@ -652,7 +673,8 @@ class ScheduledJob:
             else:
                 deploy_ready, key_leak = site_result
                 any_failed = any_failed or key_leak
-        return any_failed, new_last_build_at, deploy_ready, key_leak
+        blocked = None if outcome is None else outcome.blocked
+        return any_failed, new_last_build_at, deploy_ready, key_leak, blocked
 
     def _run_light(
         self,
@@ -678,6 +700,7 @@ class ScheduledJob:
         deploy_ready = False
         key_leak = False
         new_last_build_at: datetime | None = None
+        build_blocked_now: bool | None = None
         remaining_start = self._remaining(now)
         print(f"mode: {mode}")
         print(f"cfbd remaining at start: {_remaining_text(remaining_start)}")
@@ -701,10 +724,13 @@ class ScheduledJob:
                     counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
 
             if self._update and not self._dry_run:
-                build_failed, new_last_build_at, deploy_ready, key_leak = self._build_and_site(
-                    items, counts, now
+                build_failed, new_last_build_at, deploy_ready, key_leak, build_blocked_now = (
+                    self._build_and_site(items, counts, now)
                 )
                 any_failed = any_failed or build_failed
+
+            held_since = _held_since(state.build_held_since, build_blocked_now, now)
+            self._held_step(items, held_since)
 
             if self._update:
                 self._staleness_step(items, new_last_build_at or state.last_build_at, now, season)
@@ -721,6 +747,7 @@ class ScheduledJob:
                     items.append(cfbd_remaining(remaining_end, CFBD_FLOOR_DEFAULT))
             print(f"cfbd remaining at end: {_remaining_text(remaining_end)}")
         except VaultCommitError:
+            self._held_on_push_failure(items, state.build_held_since)
             items.extend(due_reminders(self._runtime.paths, now, aa_cfb=self._aa_cfb_resolver()))
             return JobRunResult(exit_code=3, items=items, counts=counts, window=window)
 
@@ -734,6 +761,7 @@ class ScheduledJob:
                 state,
                 last_schedule_at=now if schedule_done else state.last_schedule_at,
                 last_build_at=new_last_build_at or state.last_build_at,
+                build_held_since=held_since,
             )
             report = {
                 "run_at": now.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -856,6 +884,8 @@ class ScheduledJob:
 
         if blocked:
             items.append(build_blocked(len(outcome.reasons)))
+        if outcome.explained:
+            items.extend(match_rate_explained([(d.season, d.games) for d in outcome.explained]))
         if people_new > 0:
             items.append(people_review_due(people_new))
         if teams_unresolved > 0:
@@ -934,6 +964,21 @@ class ScheduledJob:
             return
         if "nfl" not in site_sports(site):
             items.append(nfl_site_switch_off())
+
+    # -- held deploy -------------------------------------------------------------
+
+    def _held_step(self, items: list[AttentionItem], held_since: datetime | None) -> None:
+        """While the last CFB build is blocked, every run says so, whatever its mode."""
+        if held_since is not None:
+            items.append(deploy_held(held_since))
+
+    def _held_on_push_failure(
+        self, items: list[AttentionItem], held_since: datetime | None
+    ) -> None:
+        """A push failure skips the rest of the run, the held step included; the saved
+        hold still shows, since no build that passed could have cleared it."""
+        if not any(item.kind == "deploy_held" for item in items):
+            self._held_step(items, held_since)
 
     # -- staleness (D-14) -------------------------------------------------------
 

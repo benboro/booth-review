@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from booth_review.sources.sports506.collector import WEEK_LABELS
 
@@ -35,6 +36,7 @@ _ERROR_TYPE_RE = re.compile(r"^[A-Za-z]+$")
 _MAX_LINES = 60
 _MAX_LINE_LEN = 200
 _TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_EASTERN = ZoneInfo("America/New_York")
 
 # "reminder" is a hand-save nudge (Phase 24): posted as its own issue comment, never counted
 # as attention, so it cannot change a run's exit code, last_status or attention count.
@@ -431,6 +433,51 @@ def build_blocked(n_reasons: int) -> AttentionItem:
         else f"build blocked by the regression guard: {n_reasons} metric(s) dropped, deploy held"
     )
     return AttentionItem(kind="build_blocked", line=line, severity="attention")
+
+
+def match_rate_explained(games_by_season: Sequence[tuple[int, int]]) -> list[AttentionItem]:
+    """Match_rate drops the guard let through: rated games 506 lists with a
+    blank crew, as (season, games) pairs. Repeats each build until patched.
+    Seasons spill onto further lines so each stays under the line limit."""
+    if not games_by_season:
+        raise ValueError("games_by_season must name at least one season")
+    for season, games in games_by_season:
+        _require_non_negative("games", games)
+        _require_non_negative("season", season)
+
+    def line(parts: list[str]) -> str:
+        return (
+            "match_rate below baseline only from rated games 506 lists with no crew, "
+            f"not a block (games per season {', '.join(parts)}): "
+            "an override in data/reference/crew_overrides.csv fills them"
+        )
+
+    chunks: list[list[str]] = [[]]
+    for season, games in games_by_season:
+        part = f"{season}: {games}"
+        if chunks[-1] and len(line([*chunks[-1], part])) > _MAX_LINE_LEN:
+            chunks.append([])
+        chunks[-1].append(part)
+    return [
+        AttentionItem(kind="match_rate_explained", line=line(parts), severity="attention")
+        for parts in chunks
+    ]
+
+
+def deploy_held(since: datetime) -> AttentionItem:
+    """The last CFB build was blocked; `since` is when the hold began. Every
+    run repeats it until a build passes the guard."""
+    if since.tzinfo is None:
+        raise ValueError("since must be a timezone-aware datetime")
+    stamp = since.astimezone(_EASTERN).strftime("%Y-%m-%d %H:%M")
+    return AttentionItem(
+        kind="deploy_held",
+        line=(
+            f"deploy held since {stamp} ET: the last build was blocked by the regression "
+            "guard (clears on the first unblocked build)"
+        ),
+        severity="attention",
+    )
 
 
 def bowls_missing(n: int) -> AttentionItem:

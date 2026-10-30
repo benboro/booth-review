@@ -10,6 +10,7 @@ Saturdays: Fri 18:00 EDT is 22:00Z, Sat 08:00 EDT is 12:00Z, Fri 18:00 EST is
 
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -427,6 +428,30 @@ def test_last_build_at_round_trips_and_defaults(tmp_path: Path) -> None:
 def test_invalid_last_build_at_raises(tmp_path: Path) -> None:
     path = tmp_path / "job_state.json"
     path.write_text('{"version": 1, "last_build_at": "yesterday"}', encoding="utf-8")
+    with pytest.raises(VaultStateError):
+        load_state(path)
+
+
+def test_build_held_since_defaults_none_and_round_trips(tmp_path: Path) -> None:
+    # A state file written by v0.18.2, before the field existed.
+    path = tmp_path / "job_state.json"
+    path.write_text(
+        '{"version": 1, "season": 2026, "last_success_at": null, "last_attempt_at": null, '
+        '"last_status": "attention", "last_window_start": null, "retry_pending": false, '
+        '"last_build_at": "2026-10-28T14:00:00Z", "last_schedule_at": null}',
+        encoding="utf-8",
+    )
+    assert load_state(path).build_held_since is None
+    held = datetime(2026, 10, 29, 14, 5, tzinfo=UTC)
+    save_state(path, replace(load_state(path), build_held_since=held))
+    assert load_state(path).build_held_since == held
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert saved["build_held_since"] == "2026-10-29T14:05:00Z"
+
+
+def test_invalid_build_held_since_raises(tmp_path: Path) -> None:
+    path = tmp_path / "job_state.json"
+    path.write_text('{"version": 1, "build_held_since": 5}', encoding="utf-8")
     with pytest.raises(VaultStateError):
         load_state(path)
 

@@ -339,6 +339,57 @@ def build_blocked_kind() -> str:
     return build_blocked(2).kind
 
 
+def test_match_rate_explained_names_each_season_and_the_override_file() -> None:
+    from booth_review.job.attention import match_rate_explained
+
+    items = match_rate_explained([(2022, 1), (2026, 2)])
+
+    assert [(i.kind, i.severity) for i in items] == [("match_rate_explained", "attention")]
+    assert items[0].line == (
+        "match_rate below baseline only from rated games 506 lists with no crew, "
+        "not a block (games per season 2022: 1, 2026: 2): "
+        "an override in data/reference/crew_overrides.csv fills them"
+    )
+    assert build_attention_body(items, generated_at=_NOW) is not None
+
+
+def test_match_rate_explained_splits_seasons_across_lines_keeping_every_count() -> None:
+    from booth_review.job.attention import match_rate_explained
+
+    many = [(season, 10 + season % 7) for season in range(2014, 2027)]
+    items = match_rate_explained(many)
+
+    assert len(items) > 1
+    assert build_attention_body(items, generated_at=_NOW) is not None
+    text = "\n".join(item.line for item in items)
+    for item in items:
+        assert len(item.line) <= 200
+        assert "data/reference/crew_overrides.csv" in item.line
+        assert "not a block" in item.line
+    for season, games in many:
+        assert text.count(f"{season}: {games}") == 1
+    with pytest.raises(ValueError):
+        match_rate_explained([])
+    with pytest.raises(ValueError):
+        match_rate_explained([(2026, -1)])
+
+
+def test_deploy_held_shows_the_hold_start_in_eastern_time() -> None:
+    from booth_review.job.attention import deploy_held
+
+    item = deploy_held(datetime(2026, 10, 29, 14, 5, tzinfo=UTC))
+
+    assert item.kind == "deploy_held"
+    assert item.severity == "attention"
+    assert item.line == (
+        "deploy held since 2026-10-29 10:05 ET: the last build was blocked by the "
+        "regression guard (clears on the first unblocked build)"
+    )
+    assert build_attention_body([item], generated_at=_NOW) is not None
+    with pytest.raises(ValueError):
+        deploy_held(datetime(2026, 10, 29, 14, 5))  # noqa: DTZ001
+
+
 def test_new_step_names_accepted() -> None:
     for step in ("build", "site", "staleness"):
         assert step_failed(step, "SiteBuildError").line == f"{step} step failed: SiteBuildError"

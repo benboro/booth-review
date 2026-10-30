@@ -270,6 +270,7 @@ from booth_review.build.crew_overrides import (  # noqa: E402
     REVIEW_CREW_GAPS_COLUMNS,
     apply_crew_overrides,
     crew_gap_rows,
+    no_506_crew_counts,
     unmatched_506_keys,
 )
 from booth_review.build.games import GAMES_SCHEMA  # noqa: E402
@@ -565,6 +566,34 @@ def test_gap_rows_sorted_by_season_date_game_network() -> None:
     )
     rows = crew_gap_rows(tels, _games(), people, {}, set())
     assert [r["cfbd_game_id"] for r in rows] == [3, 1, 2]
+
+
+def test_no_506_crew_counts_cover_only_rated_unpatched_no_506_crew_gaps() -> None:
+    tels, people = _frames(
+        [
+            _tel(1, s506_pointer="ptr"),  # counted: 2 records
+            _tel(2, s506_pointer="ptr", rr_telecast_ids=["rr9"]),  # counted: 1 record
+            _tel(3, s506_pointer="ptr", season=2020),  # counted in its own season
+            _tel(4, s506_pointer="ptr", rated=False, rr_telecast_ids=None),  # unrated
+            _tel(5, s506_pointer="ptr"),  # patched by an override
+            _tel(6, s506_pointer="ptr"),  # filled by the ESPN Press Room backup
+            _tel(7),  # no-506-listing
+            _tel(8, s506_pointer="ptr", plotted=False),  # not a gap row
+            _tel(9, s506_pointer="ptr", rr_telecast_ids=[]),  # rated by a second source only
+        ],
+        [],
+    )
+    counts = no_506_crew_counts(tels, people, {"5-net-a": "patched"}, set(), {"6-net-a"})
+    assert counts == {2019: (2, 3), 2020: (1, 2)}
+
+    rows = crew_gap_rows(tels, _games(), people, {"5-net-a": "patched"}, set(), {"6-net-a"})
+    missing_506_crew = {
+        r["cfbd_game_id"]
+        for r in rows
+        if r["gap_kind"] == "no-506-crew" and r["override_status"] == "missing"
+    }
+    # The review file also lists the unrated and second-source-only ones.
+    assert missing_506_crew == {1, 2, 3, 4, 9}
 
 
 def _unmatched(source: str, network_raw: str, date_et: str = "2020-01-03") -> UnmatchedRow:
