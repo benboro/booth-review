@@ -14,7 +14,7 @@
 import { APPLE_SORT_SPEC, buildAppleRows, sortAppleRows } from '../apple-rows.js';
 import { boothLabelOf, gameRow as mlbGameRow, CAUSE_COPY } from '../data.js';
 import { windowTag } from '../table.js';
-import { announce, createTableState, el, renderCrewsTable } from '../../../modules/crews-table.js';
+import { announce, createTableState, el, excitementCell, renderCrewsTable } from '../../../modules/crews-table.js';
 import { formatAudienceTable } from '../../../modules/format.js';
 import { networkMark } from '../../../modules/network.js';
 import { hideTooltip, showTextTooltip } from '../../../modules/tooltip.js';
@@ -272,7 +272,7 @@ function buildCells(model, row) {
 function gameRow(ctx, model, row, i) {
   const g = mlbGameRow(model, i);
   const matchup = `${g.away} at ${g.home}`;
-  const tr = el('tr', 'crews-game');
+  const tr = el('tr', 'crews-game has-exc');
   tr.dataset.game = String(i);
   tr.tabIndex = 0;
   tr.setAttribute('role', 'button');
@@ -300,6 +300,7 @@ function gameRow(ctx, model, row, i) {
     el('td', 'date crews-game-date', g.date),
     el('td', 'matchup crews-game-matchup', matchup),
     crewTd,
+    excitementCell(model.cols.wp_excitement[i]),
     viewers,
   );
   tr.addEventListener('click', () => ctx.openGame?.(i, gameOpener(i)));
@@ -342,7 +343,7 @@ function renderTable(ctx, model, state) {
     modeKey: adjusted ? 'adjusted' : 'raw',
     colCount: COLUMNS.length + 1,
     tableClasses: ['is-mlb', 'mlb-apple-table'],
-    gameHeads: ['Date', 'Matchup', 'Crew', 'Viewers'],
+    gameHeads: ['Date', 'Matchup', 'Crew', 'Excitement', 'Viewers'],
     buildTools: () => document.createDocumentFragment(),
     isPicked: picked,
     crewKeyOf: (r) => r.rowKey,

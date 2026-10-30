@@ -8,6 +8,7 @@ booth is quality-pending in the fixture; tests that need ready data rewrite the 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 
 import pytest
@@ -442,9 +443,12 @@ def test_expanded_row_lists_analysts_games_and_fill_in(heavy: Page) -> None:
     assert f"{TRICKY} (1)" in line
     assert sub.locator("b").count() == 0
     heads = sub.locator("table.crews-games thead th").all_inner_texts()
-    assert heads == ["Date", "Matchup", "Crew", "Viewers"]
+    assert heads == ["Date", "Matchup", "Crew", "Excitement", "Viewers"]
     games = sub.locator("tr.crews-game")
     assert games.count() == 4
+    excitement = [c.strip() for c in games.locator("td.crews-game-exc").all_inner_texts()]
+    assert len(excitement) == 4
+    assert all(re.fullmatch(r"\d+\.\d|", c) for c in excitement), excitement
     dates = games.locator("td.crews-game-date").all_inner_texts()
     assert dates == sorted(dates, reverse=True)
     tags = sub.locator(".crews-tag.is-dashed")

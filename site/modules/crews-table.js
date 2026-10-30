@@ -43,6 +43,17 @@ export function el(tag, cls, text) {
 }
 
 /**
+ * One game's excitement cell for a sport's game list, blank when the game has none (as the
+ * Avg excitement column leaves it). Sits just before Viewers; its row takes `has-exc`.
+ * @param {number|null|undefined} value
+ */
+export function excitementCell(value) {
+  const td = el('td', 'num crews-game-exc');
+  if (value != null) td.append(el('span', 'crews-figure', value.toFixed(1)));
+  return td;
+}
+
+/**
  * The sort the table currently shows: null state means the sport's default.
  * @param {{csort?: object|null}} state
  * @param {boolean} perSeason - whether rows are per season right now (the displayed order)
