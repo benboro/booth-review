@@ -5,6 +5,7 @@ accepted build baseline and the Phase 2 completeness counts.
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import polars as pl
@@ -482,3 +483,200 @@ def test_regression_result_dataclass_fields() -> None:
     )
     assert result.blocked is True
     assert result.compared_seasons == 1
+
+
+# -- explained match_rate drops (rated games 506 lists with no crew) ---------------------------
+
+
+def _gap_metrics(season: int, *, crewless: int, gaps: int, games: int, **overrides: object):
+    """A current-build season with `crewless` crewless denominator records, `gaps` of
+    them unpatched no-506-crew gaps on `games` games."""
+    return _metrics(
+        season,
+        crewless_records=crewless,
+        no_506_crew_records=gaps,
+        no_506_crew_games=games,
+        **overrides,
+    )
+
+
+def test_drop_explained_by_no_506_crew_gaps_does_not_block(tmp_path: Path) -> None:
+    # Accepted at 1.0; RR then rates one game whose 506 row has a blank crew.
+    baseline = {2022: _metrics(2022, rr_records=141, records_with_crew=141, match_rate=1.0)}
+    current = [
+        _gap_metrics(
+            2022,
+            crewless=1,
+            gaps=1,
+            games=1,
+            rr_records=142,
+            records_with_crew=141,
+            match_rate=141 / 142,
+        )
+    ]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is False
+    assert result.reasons == ()
+    assert [(d.season, d.games) for d in result.explained] == [(2022, 1)]
+
+    paths = DataPaths(vault=tmp_path / "vault")
+    paths.audit.mkdir(parents=True)
+    write_regression_report(paths, current, baseline, None, result)
+    lines = (paths.vault / "audit/regression.csv").read_text(encoding="utf-8").splitlines()
+    rate_rows = [line for line in lines if ",match_rate," in line]
+    assert len(rate_rows) == 1
+    assert rate_rows[0].startswith("2022,match_rate,1.0,")
+    assert rate_rows[0].endswith(",explained")
+
+
+def test_no_506_listing_crewless_record_still_blocks() -> None:
+    # Two crewless records, only one of them a no-506-crew gap: the other has
+    # no 506 listing at all, which can mean a 506 page stopped parsing.
+    baseline = {2026: _metrics(2026, rr_records=282, records_with_crew=282, match_rate=1.0)}
+    current = [
+        _gap_metrics(
+            2026,
+            crewless=2,
+            gaps=1,
+            games=1,
+            rr_records=284,
+            records_with_crew=282,
+            match_rate=282 / 284,
+        )
+    ]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is True
+    assert result.reasons == ("season 2026: match_rate 0.993 below baseline 1.0",)
+    assert result.explained == ()
+
+
+def test_drop_with_no_gaps_at_all_still_blocks() -> None:
+    baseline = {2026: _metrics(2026, match_rate=1.0)}
+    current = [_gap_metrics(2026, crewless=3, gaps=0, games=0, match_rate=0.97)]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is True
+    assert result.explained == ()
+
+
+def test_crew_loss_alongside_gaps_blocks_and_the_drop_is_not_explained(tmp_path: Path) -> None:
+    # A crew was lost (records_with_crew fell) and that game now shows as a
+    # blank 506 crew: every crewless record is a gap, but the loss still blocks.
+    base = _metrics(2024, records_with_crew=80, records_with_506_crew=80, match_rate=1.0)
+    baseline = {2024: base}
+    current = [
+        _gap_metrics(
+            2024,
+            crewless=1,
+            gaps=1,
+            games=1,
+            records_with_crew=79,
+            records_with_506_crew=79,
+            match_rate=79 / 80,
+        )
+    ]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is True
+    assert "season 2024: records_with_crew 79 below baseline 80" in result.reasons
+    assert "season 2024: match_rate 0.9875 below baseline 1.0" in result.reasons
+    assert result.explained == ()
+
+    paths = DataPaths(vault=tmp_path / "vault")
+    paths.audit.mkdir(parents=True)
+    write_regression_report(paths, current, baseline, None, result)
+    text = (paths.vault / "audit/regression.csv").read_text(encoding="utf-8")
+    assert "explained" not in text
+
+
+def test_506_crew_loss_alongside_gaps_blocks() -> None:
+    # An override hides the lost 506 crew from records_with_crew, not from the 506-only count.
+    base = _metrics(2024, records_with_crew=80, records_with_506_crew=80, match_rate=1.0)
+    baseline = {2024: base}
+    current = [
+        _gap_metrics(
+            2024,
+            crewless=1,
+            gaps=1,
+            games=1,
+            rr_records=101,
+            records_with_crew=80,
+            records_with_506_crew=78,
+            match_rate=80 / 81,
+        )
+    ]
+
+    result = check_regression(current, baseline, None)
+
+    assert result.blocked is True
+    assert result.reasons == (
+        "season 2024: records_with_506_crew 78 below baseline 80",
+        "season 2024: match_rate 0.9877 below baseline 1.0",
+    )
+    assert result.explained == ()
+
+
+def test_explained_drop_does_not_hide_other_blocks() -> None:
+    baseline = {2022: _metrics(2022, match_rate=1.0), 2023: _metrics(2023)}
+    completeness = {2022: {"sports506": 18, "ratingsref": 100, "cfbd": 6}}
+    current = [
+        _gap_metrics(2022, crewless=1, gaps=1, games=1, match_rate=0.99, sports506_pages=17),
+        _metrics(2023, rated_telecasts=70),
+    ]
+
+    result = check_regression(current, baseline, completeness)
+
+    assert result.blocked is True
+    assert result.reasons == (
+        "season 2022: sports506_pages 17 below baseline 18",
+        "season 2023: rated_telecasts 70 below baseline 80",
+        "season 2022: sports506_completeness 17 below baseline 18",
+    )
+    assert [(d.season, d.games) for d in result.explained] == [(2022, 1)]
+
+
+def test_build_metrics_counts_crewless_records_and_no_506_crew_gaps(tmp_path: Path) -> None:
+    paths = DataPaths(vault=tmp_path / "vault")
+    tables = _tables(
+        per_season={
+            2022: {
+                "rr_records": 150,
+                "rr_excluded": 3,
+                "rr_out_of_scope": 5,
+                "records_with_crew": 140,
+            },
+            2023: {"rr_records": 10, "records_with_crew": 10},
+        },
+        join08_by_season={2022: 140 / 142, 2023: 1.0},
+    )
+    tables = replace(
+        tables, diagnostics=replace(tables.diagnostics, no_506_crew_by_season={2022: (1, 2)})
+    )
+
+    by_season = {m.season: m for m in build_metrics(tables, paths)}
+
+    assert by_season[2022].crewless_records == 2
+    assert (by_season[2022].no_506_crew_games, by_season[2022].no_506_crew_records) == (1, 2)
+    assert by_season[2023].crewless_records == 0
+    assert by_season[2023].no_506_crew_records == 0
+
+
+def test_baseline_files_keep_their_header_and_load_without_gap_counts(tmp_path: Path) -> None:
+    # The gap counts are current-build only: the header a v0.18.2 vault holds is
+    # still METRIC_COLUMNS, and a written-then-loaded baseline drops the counts.
+    paths = DataPaths(vault=tmp_path / "vault")
+    paths.audit.mkdir(parents=True)
+    accept_baseline(paths, [_gap_metrics(2024, crewless=1, gaps=1, games=1)])
+
+    header = (paths.audit / "build_baseline.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert header == (
+        "season,rr_records,rated_telecasts,records_with_crew,records_with_506_crew,"
+        "match_rate,sports506_pages,rr_records_cached,cfbd_files"
+    )
+    assert load_baseline(paths) == {2024: _metrics(2024)}

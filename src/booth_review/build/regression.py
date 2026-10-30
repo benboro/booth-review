@@ -18,6 +18,13 @@ than what Phase 2 already collected is blocked.
 
 Every reason string names only a season, a metric, and numbers (T-03-41) --
 never a team, announcer, or figure. An increase in any metric never blocks.
+
+One drop is explained rather than blocked: a `match_rate` drop in a season
+where every crewless rated record sits on a game 506 lists with a blank crew
+cell and no override (`no-506-crew`, `override_status` missing), and no crew
+count fell. Ratings Reference newly rating such a game grows the denominator
+without losing any crew. The drop is reported in `RegressionResult.explained`
+and as an "explained" row in `audit/regression.csv`, never as a reason.
 """
 
 from __future__ import annotations
@@ -87,17 +94,35 @@ class SeasonMetrics:
     sports506_pages: int
     rr_records_cached: int
     cfbd_files: int
+    # Current-build only, never written to a metrics or baseline file (None
+    # when loaded from one): the season's crewless records in the match_rate
+    # denominator, and how many of them, on how many games, are unpatched
+    # no-506-crew gaps.
+    crewless_records: int | None = None
+    no_506_crew_records: int | None = None
+    no_506_crew_games: int | None = None
+
+
+@dataclass(frozen=True)
+class ExplainedDrop:
+    """A season whose match_rate drop comes only from rated games 506 lists
+    without a crew; `games` of them are still unpatched."""
+
+    season: int
+    games: int
 
 
 @dataclass(frozen=True)
 class RegressionResult:
-    """The guard's verdict: whether the build is blocked, why, and how many
-    seasons the comparison covered."""
+    """The guard's verdict: whether the build is blocked, why, how many
+    seasons the comparison covered, and which match_rate drops were explained
+    (never counted toward `blocked`)."""
 
     blocked: bool
     reasons: tuple[str, ...]
     compared_seasons: int
     note: str
+    explained: tuple[ExplainedDrop, ...] = ()
 
 
 def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
@@ -113,6 +138,7 @@ def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
     otherwise hide it.
     """
     result: list[SeasonMetrics] = []
+    no_506_crew = tables.diagnostics.no_506_crew_by_season
     for season, diag in sorted(tables.diagnostics.per_season.items()):
         sports506_dir = paths.raw / "sports506" / str(season)
         sports506_pages = (
@@ -128,6 +154,15 @@ def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
             if (paths.raw / "cfbd" / endpoint / f"{season}.json").is_file()
         )
 
+        # The match_rate denominator less records_with_crew (tables._join08_rate).
+        crewless_records = (
+            diag.get("rr_records", 0)
+            - diag.get("rr_excluded", 0)
+            - diag.get("rr_out_of_scope", 0)
+            - diag.get("records_with_crew", 0)
+        )
+        gap_games, gap_records = no_506_crew.get(season, (0, 0))
+
         result.append(
             SeasonMetrics(
                 season=season,
@@ -139,6 +174,9 @@ def build_metrics(tables: BuildTables, paths: DataPaths) -> list[SeasonMetrics]:
                 sports506_pages=sports506_pages,
                 rr_records_cached=rr_records_cached,
                 cfbd_files=cfbd_files,
+                crewless_records=crewless_records,
+                no_506_crew_records=gap_records,
+                no_506_crew_games=gap_games,
             )
         )
     return result
@@ -295,11 +333,29 @@ def _count_dropped(
     return False, None
 
 
+def _drop_explained(current: SeasonMetrics, base: SeasonMetrics) -> bool:
+    """True when a match_rate drop is fully explained by unpatched no-506-crew
+    gaps: every crewless record in the denominator is one, and neither crew
+    count fell (a real crew loss alongside them still blocks). A
+    no-506-listing record, an unmatched record, or any other crewless record
+    leaves the drop unexplained, since it can mean a 506 page stopped parsing.
+    """
+    gaps = current.no_506_crew_records
+    if not gaps or current.crewless_records != gaps:
+        return False
+    if current.records_with_crew < base.records_with_crew:
+        return False
+    base_506 = base.records_with_506_crew
+    current_506 = current.records_with_506_crew
+    return base_506 is None or (current_506 is not None and current_506 >= base_506)
+
+
 def _compare_baseline(
     current_by_season: Mapping[int, SeasonMetrics], baseline: Mapping[int, SeasonMetrics]
-) -> tuple[list[dict[str, object]], list[str]]:
+) -> tuple[list[dict[str, object]], list[str], list[ExplainedDrop]]:
     comparisons: list[dict[str, object]] = []
     reasons: list[str] = []
+    explained: list[ExplainedDrop] = []
 
     for season in sorted(baseline):
         base = baseline[season]
@@ -321,8 +377,12 @@ def _compare_baseline(
         for metric in _BASELINE_METRICS:
             base_value = getattr(base, metric)
             current_value = getattr(current, metric)
+            status = "ok"
             if metric == "match_rate":
                 blocked, reason = _match_rate_dropped(season, current_value, base_value)
+                if blocked and _drop_explained(current, base):
+                    blocked, reason, status = False, None, "explained"
+                    explained.append(ExplainedDrop(season, current.no_506_crew_games or 0))
             else:
                 blocked, reason = _count_dropped(season, metric, current_value, base_value)
             comparisons.append(
@@ -331,13 +391,13 @@ def _compare_baseline(
                     "metric": metric,
                     "baseline": base_value,
                     "current": current_value,
-                    "status": "blocked" if blocked else "ok",
+                    "status": "blocked" if blocked else status,
                 }
             )
             if blocked and reason is not None:
                 reasons.append(reason)
 
-    return comparisons, reasons
+    return comparisons, reasons, explained
 
 
 def _compare_completeness(
@@ -379,14 +439,16 @@ def check_regression(
     """Compare `current` against the accepted `baseline` and the Phase 2
     `completeness` counts. With no baseline, only the completeness
     comparison runs; with neither, the result is never blocked ("no
-    baseline"). An increase in any metric never blocks.
+    baseline"). An increase in any metric never blocks, and an explained
+    match_rate drop (`_drop_explained`) is listed in `explained` instead.
     """
     current_by_season = {m.season: m for m in current}
     reasons: list[str] = []
+    explained: list[ExplainedDrop] = []
     compared_seasons: set[int] = set()
 
     if baseline:
-        _, baseline_reasons = _compare_baseline(current_by_season, baseline)
+        _, baseline_reasons, explained = _compare_baseline(current_by_season, baseline)
         reasons.extend(baseline_reasons)
         compared_seasons.update(baseline)
 
@@ -409,6 +471,7 @@ def check_regression(
         reasons=tuple(reasons),
         compared_seasons=len(compared_seasons),
         note=note,
+        explained=tuple(explained),
     )
 
 
@@ -441,7 +504,7 @@ def write_regression_report(
     current_by_season = {m.season: m for m in current}
     rows: list[dict[str, object]] = []
     if baseline:
-        baseline_rows, _ = _compare_baseline(current_by_season, baseline)
+        baseline_rows, _, _ = _compare_baseline(current_by_season, baseline)
         rows.extend(baseline_rows)
     if completeness:
         completeness_rows, _ = _compare_completeness(current_by_season, completeness)

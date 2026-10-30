@@ -299,3 +299,57 @@ def test_sentinel_never_reaches_output_or_commit_message(
     assert _SENTINEL not in subject
     review = (git_vault.vault / "interim" / "review_crew_overrides.csv").read_text(encoding="utf-8")
     assert "500005" in review
+
+
+# -- the regression guard and rated games 506 lists with no crew -------------------------------
+
+_SILVERLAKE_RR = "cfb-silverlake-west-hawaii-state-2025-09-20.json"  # game 500006, 506 row 1:4
+_IRONPEAK_RR = "cfb-ironpeak-foxhollow-2025-11-08.json"  # game 500005, no 506 listing
+
+
+def _blank_506_crew(paths: DataPaths) -> None:
+    page = paths.raw / "sports506" / "2025" / "wk-01.html"
+    html = page.read_text(encoding="utf-8")
+    cell = '<div id="cntwk">ECN2</div><div id="canncrs">Casey Vale</div>'
+    assert html.count(cell) == 1
+    page.write_text(
+        html.replace(cell, '<div id="cntwk">ECN2</div><div id="canncrs"></div>'), encoding="utf-8"
+    )
+
+
+def test_newly_rated_game_with_a_blank_506_crew_does_not_block(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = _vault(git_vault, tmp_path, monkeypatch)
+    _blank_506_crew(git_vault)
+    rr_dir = git_vault.raw / "ratingsref" / "telecast" / "2025"
+    held = {name: (rr_dir / name).read_bytes() for name in (_SILVERLAKE_RR, _IRONPEAK_RR)}
+    for name in held:
+        (rr_dir / name).unlink()
+    accepted = run_build(git_vault, reference, commit=False, accept_baseline=True)
+    assert accepted.counts["join08_rate_x10000"] == 10000
+    site_data = git_vault.vault / "processed" / "site-data.json"
+    site_before = site_data.read_bytes()
+
+    # RR now rates the blank-crew game: the denominator grows, no crew is lost.
+    (rr_dir / _SILVERLAKE_RR).write_bytes(held[_SILVERLAKE_RR])
+    explained = run_build(git_vault, reference, commit=False, accept_baseline=False)
+
+    assert explained.blocked is False
+    assert explained.reasons == ()
+    assert [(d.season, d.games) for d in explained.explained] == [(2025, 1)]
+    assert site_data.read_bytes() != site_before  # processed data and site data written
+    gap = [r for r in _gap_rows(git_vault) if r["cfbd_game_id"] == "500006"]
+    assert [(r["gap_kind"], r["override_status"]) for r in gap] == [("no-506-crew", "missing")]
+    report = (git_vault.audit / "regression.csv").read_text(encoding="utf-8")
+    assert "2025,match_rate,1.0,0.8571428571428571,explained" in report.splitlines()
+
+    # A rated game with no 506 listing at all still blocks, gap or not.
+    (rr_dir / _IRONPEAK_RR).write_bytes(held[_IRONPEAK_RR])
+    site_before = site_data.read_bytes()
+    blocked = run_build(git_vault, reference, commit=False, accept_baseline=False)
+
+    assert blocked.blocked is True
+    assert blocked.reasons == ("season 2025: match_rate 0.75 below baseline 1.0",)
+    assert blocked.explained == ()
+    assert site_data.read_bytes() == site_before

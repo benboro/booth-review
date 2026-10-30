@@ -51,6 +51,7 @@ from booth_review.build.crew_overrides import (
     apply_crew_overrides,
     crew_gap_rows,
     load_crew_overrides,
+    no_506_crew_counts,
     unmatched_506_keys,
 )
 from booth_review.build.games import build_games_frame
@@ -150,6 +151,9 @@ class BuildDiagnostics:
     totals: dict[str, int]
     join08_rate: float | None
     join08_by_season: dict[int, float | None]
+    # {season: (games, rr records)} of rated, unpatched no-506-crew gaps, for
+    # the regression guard's explained match_rate drop.
+    no_506_crew_by_season: dict[int, tuple[int, int]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -490,12 +494,20 @@ def assemble_tables(
     booth_assignment = assign_cfb_booths(
         telecasts, telecast_people, people, networks, load_cfb_booth_ranks(reference_directory)
     )
+    unmatched_506 = unmatched_506_keys(telecast_build.unmatched_rows, networks)
     crew_gap_review = crew_gap_rows(
         telecasts_pre,
         games,
         telecast_people_pre,
         override_result.statuses,
-        unmatched_506_keys(telecast_build.unmatched_rows, networks),
+        unmatched_506,
+        backup_ids=backup.filled_ids,
+    )
+    no_506_crew_by_season = no_506_crew_counts(
+        telecasts_pre,
+        telecast_people_pre,
+        override_result.statuses,
+        unmatched_506,
         backup_ids=backup.filled_ids,
     )
     # D-15: the ESPN-family gaps still left, by week, for the user to look up
@@ -605,7 +617,9 @@ def assemble_tables(
         and entry.at_bowl
         and entry.official_name is None
     )
-    diagnostics = replace(diagnostics, totals=merged_totals)
+    diagnostics = replace(
+        diagnostics, totals=merged_totals, no_506_crew_by_season=no_506_crew_by_season
+    )
 
     return BuildTables(
         games=games,

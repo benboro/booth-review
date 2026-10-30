@@ -87,7 +87,8 @@ that the site is live, and no private repo name may appear.
 - Rollout order: set `JOB_REF` to the new tag before installing a workflow that passes new flags.
 - Releasing a reference fix: patch-bump `version` in `pyproject.toml`, run `uv lock`, update the version literal in the workflow test, open a PR, merge, then run `ops/release-job.sh vX.Y.Z` from the merged main.
 - Rollback: set `JOB_REF` to the previous tag.
-- Clearing a blocked build: after `git -C data/vault pull --rebase`, run `booth-review build --accept-baseline` locally, then push the vault.
+- Clearing a blocked build: after `git -C data/vault pull --rebase`, run `booth-review build --accept-baseline` locally, then push the vault. While the last build is blocked, every job run, a comment-only one included, posts "deploy held since <ET time>" until a build passes.
+- A `match_rate` drop doesn't block when every crewless rated record in that season is a game 506 lists with a blank crew and no override (`no-506-crew` in `interim/review_crew_overrides.csv`) and no crew count fell. The build deploys, and each build posts "match_rate below baseline only from rated games 506 lists with no crew" with each season's count until a `crew_overrides.csv` row fills the game or a baseline is accepted. A rated game with no 506 listing at all still blocks.
 - The staleness check runs only when a run happens. The manual fallback is `gh workflow run`.
 - If a drill run is missing, dispatch it again; concurrency keeps one pending run.
 - Deploy commits record the bundle hash in their message.
