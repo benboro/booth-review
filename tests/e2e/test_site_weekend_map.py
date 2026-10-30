@@ -232,7 +232,7 @@ def test_each_window_renders_its_symbol(wkmap: Wk, theme: str) -> None:
     assert symbols[ESPN_PLUS] == "square"
     assert symbols[PRIME] == "diamond"
     assert symbols[LEAD] == "diamond"
-    assert symbols[LATE] == "triangle-up"
+    assert symbols[LATE] == "arrow-up"
     assert symbols[LONDON] == "circle"
     # The key lists the same five shapes, each drawn once.
     key = page.evaluate(
@@ -319,7 +319,7 @@ def test_hover_card_shows_matchup_booth_kickoff_network_and_venue(wkmap: Wk, the
     hover(page, LEAD)
     card = page.locator("#chart-tooltip").inner_text()
     assert "Ironpeak @ Stonebridge" in card
-    assert "Rowan · Delgado" in card
+    assert "Pat Rowan · Sam Delgado" in card
     assert "7:30 pm ET, Alpha Sports" in card
     assert "Stonebridge Stadium, Pasadena, CA" in card
     assert page.locator("#chart-tooltip .tt-open-game").count() == 0

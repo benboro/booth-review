@@ -17,7 +17,7 @@
 
 import {
   WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState, clock12,
-  collidingSurnames, dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
+  dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
   stripCollapsedByDefault,
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
@@ -82,11 +82,10 @@ export function makeContext(model, opts, state) {
   const inDay = model.games.filter((g) => g.date === day || g.date == null);
   const dayModel = buildDayModel(model.games, { sport: model.sport, day, width: state.width });
   const anyPick = model.games.some((g) => passes(g) !== null);
-  const collide = collidingSurnames(inDay);
   const open = opts.onOpen ?? (() => {});
   return {
     model, opts, state, theme, nowDate, nowParts: np, nowWall, passes, networksPicked, days, day,
-    inDay, dayModel, anyPick, collide, open,
+    inDay, dayModel, anyPick, open,
     countFor(d) {
       return model.games.filter((g) => (g.date === d || g.date == null) && passes(g) === true).length;
     },
@@ -139,12 +138,14 @@ export function accessibleName(game, state, line) {
  */
 export function buildCell(game, ctx, { tail = null } = {}) {
   const state = cellState(game, ctx.nowWall);
-  const line = boothLine(game, state, ctx.collide);
+  const line = boothLine(game, state);
   const matchup = matchupText(game);
   const btn = el('button', 'wk-cell');
   btn.type = 'button';
   btn.dataset.wkId = `g:${game.key}`;
   btn.dataset.wkState = state;
+  // The four CFB lead booths (one A booth per network family) get a thin outline.
+  if (line.star && game.sport === 'cfb') btn.classList.add('wk-cell--lead');
   btn.setAttribute('aria-label', accessibleName(game, state, line));
   const when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
   btn.title = `${when}, ${matchup}, ${line.text}`;
@@ -387,7 +388,7 @@ export function buildCompactTable(ctx) {
   const tbody = el('tbody');
   for (const g of games) {
     const state = cellState(g, ctx.nowWall);
-    const line = boothLine(g, state, ctx.collide);
+    const line = boothLine(g, state);
     const tr = el('tr', 'wk-crow');
     tr.setAttribute('role', 'button');
     tr.tabIndex = 0;
