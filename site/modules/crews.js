@@ -202,10 +202,18 @@ function viewersCell(data, i) {
   return td;
 }
 
+/** One game's CFBD excitement, blank when CFBD has none (as the Avg excitement column leaves it). */
+function excitementCell(data, i) {
+  const td = el('td', 'num crews-game-exc');
+  const e = data.t.excitement[i];
+  if (e != null) td.append(el('span', 'crews-figure', e.toFixed(1)));
+  return td;
+}
+
 function gameRow(row, mode, ctx, i) {
   const { data } = ctx;
   const matchup = formatMatchup(data, i, {});
-  const tr = el('tr', 'crews-game');
+  const tr = el('tr', 'crews-game has-exc');
   tr.dataset.game = String(i);
   tr.tabIndex = 0;
   tr.setAttribute('role', 'button');
@@ -224,7 +232,7 @@ function gameRow(row, mode, ctx, i) {
   if (mode !== 'crew') tr.append(el('td', 'crews-game-crew', otherCrew(data, i, row.personSlug)));
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');
-  tr.append(viewers);
+  tr.append(excitementCell(data, i), viewers);
   tr.addEventListener('click', (e) => {
     if (e.target instanceof Element && e.target.closest('a')) return;
     ctx.openGame?.(i);
@@ -295,7 +303,7 @@ export function renderCrewsPanel(container, model, ctx) {
     modeKey: mode,
     colCount: cols.length + 1,
     tableClasses: ['crews-table--' + mode, ...(model.perSeason ? ['has-season'] : [])],
-    gameHeads: ['Date', 'Matchup', 'Network', ...(mode === 'crew' ? [] : ['Crew']), 'Viewers'],
+    gameHeads: ['Date', 'Matchup', 'Network', ...(mode === 'crew' ? [] : ['Crew']), 'Excitement', 'Viewers'],
     buildTools: () => buildTools(full),
     buildEmpty: () => {
       const note = el('div', 'season-empty-note crews-empty');

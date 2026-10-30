@@ -5642,6 +5642,28 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     grid-area: viewers;
   }
 
+  /* CFB game items carry excitement on its own line under line 2 (line 2 has no room left at 360px),
+     labeled since the heads are hidden. */
+  .table-scroll .crews-games tbody tr.crews-game.has-exc {
+    grid-template-areas:
+      "matchup matchup matchup"
+      "date network viewers"
+      "exc exc exc"
+      "crew crew crew";
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-exc {
+    grid-area: exc;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-exc:empty {
+    display: none;
+  }
+
+  .crews-games td.crews-game-exc::after {
+    content: " excitement";
+  }
+
   .crews-games td.crews-game-network::before,
   .crews-games td.crews-game-viewers::before {
     content: "\00b7";
