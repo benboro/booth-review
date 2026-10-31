@@ -107,7 +107,7 @@ wheels = [
 
 [[package]]
 name = "booth-review"
-version = "0.18.3"
+version = "0.18.4"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
