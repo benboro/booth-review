@@ -30,7 +30,7 @@ from booth_review.people.roles import Role
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import NetworkRow, NetworkTable
 from booth_review.resolve.teams import TeamResolver
-from booth_review.sources.aa.crews import AaBooth, ParsedCrews
+from booth_review.sources.aa.crews import AaBooth, ParsedCrews, parse_crews
 from booth_review.sources.cfbd.parser import CfbdGame
 
 FIXTURE = Path(__file__).parent / "fixtures" / "aa" / "schedule_synthetic.html"
@@ -633,3 +633,23 @@ def test_inputs_are_not_mutated_and_review_rows_hold_only_their_columns() -> Non
     assert tel_frame.equals(pl.DataFrame(tels, schema=TELECASTS_SCHEMA))
     assert tp_frame.equals(pl.DataFrame(tp, schema=TELECAST_PEOPLE_SCHEMA))
     assert all(tuple(r) == REVIEW_CREW_AA_DISAGREEMENT_COLUMNS for r in result.review_rows)
+
+
+def test_placeholder_in_an_aa_line_never_makes_a_superset() -> None:
+    """Adversarial panel N1: "TBD (analyst)" is not a person, so AA's line agrees
+    with a newer 506 booth of the same two people instead of winning as a superset."""
+    html = FIXTURE.read_text(encoding="utf-8")
+    start, end = html.index("<h3>"), html.index("<p>Closing invented prose")
+    body = (
+        "<h3><u>Saturday, November 7</u></h3>\n"
+        "<p><strong>Silverlake at Northfield (Noon, ESPN): </strong>Avery Lane "
+        "(play-by-play), Morgan Pike (analyst), TBD (analyst)</p>\n"
+    )
+    parsed = parse_crews(html[:start] + body + html[end:], season=SEASON)
+    page = AaPage(path=REL, parsed=parsed, aa_time=T_OLD, aa_time_source="modified")
+    tels = [_tel(crew_matched=True, crew_source_label="506 Sports")]
+    tp = [_tp("100-espn", "avery-lane", 0), _tp("100-espn", "morgan-pike", 1)]
+    result = _run(tels, [page], tp, s506={(SEASON, "10"): T_NEW})
+    assert result.statuses == {"100-espn": "agrees"}
+    assert result.review_rows == [] and result.won_ids == frozenset()
+    assert result.counts["superset"] == 0 and result.counts["provisional_persons"] == 0

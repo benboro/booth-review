@@ -84,6 +84,13 @@ _GAME_RE = re.compile(
 _PERSON_RE = re.compile(r"\s*(?P<name>[^(),]+?)\s*\((?P<role>[^()]+)\)\s*(?:,\s*|$)")
 _CITY_RE = re.compile(r"\s+in\s+.+$")
 _ROLES: dict[str, Role | None] = {"play-by-play": "pbp", "analyst": "analyst", "reporter": None}
+# Placeholders AA writes where a name is not known yet; never a person (adversarial
+# panel N1). Compared case-insensitively with punctuation removed ("T.B.D.", "TBA:").
+_PLACEHOLDERS = frozenset({"tbd", "tba"})
+
+
+def _is_placeholder(text: str) -> bool:
+    return re.sub(r"[^a-z]", "", text.lower()) in _PLACEHOLDERS
 
 
 class AaCrewsParseError(ValueError):
@@ -209,9 +216,13 @@ def _split_matchup(matchup: str) -> tuple[str, str] | None:
     return (away, home) if away and home else None
 
 
-def _crew(text: str) -> tuple[tuple[str, Role], ...] | None:
-    """The role-tagged people of a crew string, or None when it doesn't fit."""
+def _crew(text: str) -> tuple[tuple[tuple[str, Role], ...], frozenset[Role]] | None:
+    """The role-tagged people of a crew string and the roles held only by a
+    placeholder, or None when it doesn't fit.
+
+    A placeholder name (TBD, TBA) is dropped, so it never reaches a booth."""
     people: list[tuple[str, Role]] = []
+    placeholders: set[Role] = set()
     pos = 0
     text = text.strip()
     if not text:
@@ -228,9 +239,13 @@ def _crew(text: str) -> tuple[tuple[str, Role], ...] | None:
         name = match.group("name").strip()
         if not name:
             return None
-        if role is not None:
+        if role is None:
+            continue
+        if _is_placeholder(name):
+            placeholders.add(role)
+        else:
             people.append((name, role))
-    return tuple(people)
+    return tuple(people), frozenset(placeholders)
 
 
 def parse_crews(html: str, *, season: int) -> ParsedCrews:
@@ -281,15 +296,20 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
             unparsed += 1
             continue
         crew_text = game.group("crew").strip()
-        if crew_text.lower() == "tbd":
+        if _is_placeholder(crew_text):
             tbd += 1
             continue
-        people = _crew(crew_text)
-        if people is None:
+        crew = _crew(crew_text)
+        if crew is None:
             unparsed += 1
             continue
+        people, placeholders = crew
         if not any(role == "pbp" for _, role in people):
-            no_pbp += 1
+            # A booth whose play-by-play is only a placeholder is still TBD.
+            if "pbp" in placeholders:
+                tbd += 1
+            else:
+                no_pbp += 1
             continue
         booths.append(
             AaBooth(

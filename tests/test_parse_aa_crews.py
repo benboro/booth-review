@@ -285,3 +285,30 @@ def test_january_to_may_headers_belong_to_the_next_year(header: str, expected: d
     """F2: bowl and playoff dates (January to May) take season + 1."""
     parsed = _parse(_HTML.replace("Friday November 6", header))
     assert parsed.booths[0].date_et == expected
+
+
+# -- Adversarial panel N1: TBD/TBA placeholders are never people -----------------
+
+
+def _one_game(crew: str) -> str:
+    body = (
+        "<h3><u>Saturday, November 7</u></h3>\n"
+        f"<p><strong>Echo U at Foxtrot (7:00 p.m., Net4): </strong>{crew}</p>\n"
+    )
+    start = _HTML.index("<h3>")
+    end = _HTML.index("<p>Closing invented prose")
+    return _HTML[:start] + body + _HTML[end:]
+
+
+@pytest.mark.parametrize("placeholder", ["TBD", "tba", "T.B.D.", "TBA."])
+def test_placeholder_analyst_is_dropped_from_the_booth(placeholder: str) -> None:
+    crew = f"Avery Lane (play-by-play), Morgan Pike (analyst), {placeholder} (analyst)"
+    (booth,) = _parse(_one_game(crew)).booths
+    assert booth.people == (("Avery Lane", "pbp"), ("Morgan Pike", "analyst"))
+
+
+@pytest.mark.parametrize("crew", ["TBA", "tbd.", "TBD (play-by-play), Morgan Pike (analyst)"])
+def test_booth_without_a_real_play_by_play_counts_as_tbd(crew: str) -> None:
+    parsed = _parse(_one_game(crew))
+    assert parsed.booths == []
+    assert (parsed.tbd, parsed.no_pbp, parsed.unparsed) == (1, 0, 0)
