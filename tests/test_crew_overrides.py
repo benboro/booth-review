@@ -266,6 +266,30 @@ import datetime as dt  # noqa: E402
 
 import polars as pl  # noqa: E402
 
+
+def test_aa_filled_gaps_are_classified_aa_and_not_counted_missing() -> None:
+    tels, people = _frames(
+        [
+            _tel(1, s506_pointer="ptr"),  # filled by AA
+            _tel(2, s506_pointer="ptr"),  # filled by AA and backup: AA first
+            _tel(3, s506_pointer="ptr"),  # still missing
+        ],
+        [],
+    )
+    counts = no_506_crew_counts(tels, people, {}, set(), {"2-net-a"}, aa_ids={"1-net-a", "2-net-a"})
+    assert counts == {2019: (1, 2)}
+    rows = crew_gap_rows(
+        tels, _games(), people, {}, set(), {"2-net-a"}, aa_ids={"1-net-a", "2-net-a"}
+    )
+    assert {r["cfbd_game_id"]: r["override_status"] for r in rows} == {
+        1: "aa",
+        2: "aa",
+        3: "missing",
+    }
+    default = crew_gap_rows(tels, _games(), people, {}, set())
+    assert {r["override_status"] for r in default} == {"missing"}
+
+
 from booth_review.build.crew_overrides import (  # noqa: E402
     REVIEW_CREW_GAPS_COLUMNS,
     apply_crew_overrides,

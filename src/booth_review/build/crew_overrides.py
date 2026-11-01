@@ -342,6 +342,7 @@ def _classified_gaps(
     statuses: Mapping[str, str],
     unmatched_506: Collection[tuple[str, str]],
     backup_ids: Collection[str],
+    aa_ids: Collection[str] = frozenset(),
 ) -> Iterator[tuple[dict[str, Any], str, str, bool]]:
     """(telecast row, gap_kind, override_status, other_feed_crew) for each
     crew_gap_rows row, so the guard's no-506-crew count classifies exactly as
@@ -363,9 +364,14 @@ def _classified_gaps(
             gap_kind = "join-miss-suspect"
         else:
             gap_kind = "no-506-listing"
-        override_status = (
-            status if status is not None else ("backup" if telecast_id in backup_ids else "missing")
-        )
+        if status is not None:
+            override_status = status
+        elif telecast_id in aa_ids:
+            override_status = "aa"
+        elif telecast_id in backup_ids:
+            override_status = "backup"
+        else:
+            override_status = "missing"
         yield tel, gap_kind, override_status, telecast_id in non_main
 
 
@@ -376,6 +382,7 @@ def crew_gap_rows(
     statuses: Mapping[str, str],
     unmatched_506: Collection[tuple[str, str]],
     backup_ids: Collection[str] = frozenset(),
+    aa_ids: Collection[str] = frozenset(),
 ) -> list[dict[str, object]]:
     """One row per plotted main telecast with no 506 main crew, classified, plus
     one has-506-crew row per redundant/differs/correction override (D-05, D-09).
@@ -385,14 +392,15 @@ def crew_gap_rows(
     AND network (see unmatched_506_keys); a same-day listing on another
     network is no evidence that this telecast's join missed.
     A gap the ESPN Press Room backup pass filled (`backup_ids`, 04.19 D-13)
-    is `backup`, not missing; an override status still comes first.
+    is `backup`, not missing; one the Awful Announcing pass filled (`aa_ids`)
+    is `aa`, checked before `backup`; an override status still comes first.
     Vault-only (interim/review_crew_overrides.csv); never logged or published.
     Callers and tests never hard-code a gap count.
     """
     game_by_id = {row["game_id"]: row for row in games.iter_rows(named=True)}
     rows: list[dict[str, object]] = []
     for tel, gap_kind, override_status, other_feed_crew in _classified_gaps(
-        telecasts, telecast_people, statuses, unmatched_506, backup_ids
+        telecasts, telecast_people, statuses, unmatched_506, backup_ids, aa_ids
     ):
         game = game_by_id.get(tel["game_id"], {})
         rows.append(
@@ -422,16 +430,17 @@ def no_506_crew_counts(
     statuses: Mapping[str, str],
     unmatched_506: Collection[tuple[str, str]],
     backup_ids: Collection[str] = frozenset(),
+    aa_ids: Collection[str] = frozenset(),
 ) -> dict[int, tuple[int, int]]:
     """{season: (games, rr records)} of the rated crew_gap_rows gaps that are
-    `no-506-crew` with no override or backup crew (`missing`). Takes the same
+    `no-506-crew` with no override, AA or backup crew (`missing`). Takes the same
     PRE-override frames as crew_gap_rows. The records are the ones each such
     telecast adds to the match_rate denominator but not to records_with_crew,
     which the regression guard needs to call a match_rate drop explained.
     """
     counts: dict[int, tuple[int, int]] = {}
     for tel, gap_kind, override_status, _ in _classified_gaps(
-        telecasts, telecast_people, statuses, unmatched_506, backup_ids
+        telecasts, telecast_people, statuses, unmatched_506, backup_ids, aa_ids
     ):
         rr_records = len(tel["rr_telecast_ids"] or [])
         # A telecast rated only by a second source has no RR record in the denominator.
