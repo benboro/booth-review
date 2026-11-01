@@ -78,6 +78,11 @@ passing. The input_stamp assertion for raw/mlb/ manifest lines is owned by plan 
 Phase 27 Plan 05: telecasts gain crew_aa (all False in the synthetic vault, which has no
 AA pages); telecasts.parquet with that column dropped hashes to the earlier digest
 (ba7234232dd8...), so no figure or crew changed.
+
+Phase 27 Plan 06: the build now writes a header-only review_crew_aa_disagreements.csv
+(its digest is the sha256 of the header line alone; the synthetic vault has no AA
+pages). The other 27 pinned digests, telecasts, telecast_people and site-data.json
+among them, are unchanged, so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -119,6 +124,9 @@ _GOLDEN: dict[str, str] = {
     ),
     "interim/review_combined.csv": (
         "f2cdebc610d2b471fc5500b834c2488b9da90d7a65020c7138d41c289c1ab23c"
+    ),
+    "interim/review_crew_aa_disagreements.csv": (
+        "34ae5be1e939909d436c1cd3a9a45391a4e15ea15ce1321b6673b7b6202fede2"
     ),
     "interim/review_crew_backup_disagreements.csv": (
         "9e2b349af80baa6d783e7ada73158d9c4cc82406581acc35ee961fa1b5208b72"

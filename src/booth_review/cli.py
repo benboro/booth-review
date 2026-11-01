@@ -2389,6 +2389,21 @@ def _build(args: argparse.Namespace) -> int:
             ("upcoming games filled", outcome.counts.get("crew_backup_scheduled_filled", 0)),
         )
     )
+    # Phase 27: Awful Announcing crews; counts only, never names or post text.
+    print(
+        f"crew aa: filled {outcome.counts.get('crew_aa_filled', 0)}, "
+        f"agreements {outcome.counts.get('crew_aa_agreements', 0)}, "
+        f"superset {outcome.counts.get('crew_aa_superset', 0)}, "
+        f"aa won {outcome.counts.get('crew_aa_aa_won', 0)}, "
+        f"506 won {outcome.counts.get('crew_aa_s506_won', 0)}, "
+        f"network mismatches {outcome.counts.get('crew_aa_network_mismatch', 0)}, "
+        f"unparsed lines {outcome.counts.get('crew_aa_unparsed_lines', 0)}, "
+        f"undated pages {outcome.counts.get('crew_aa_undated_pages', 0)}"
+        + _nonzero(
+            ("rejected pages", outcome.counts.get("crew_aa_rejected_pages", 0)),
+            ("upcoming games filled", outcome.counts.get("crew_aa_scheduled_filled", 0)),
+        )
+    )
     for gate in outcome.second_source_gates:
         extras = _nonzero(
             ("unlinked prose", gate.unlinked_prose),
