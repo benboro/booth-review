@@ -18,7 +18,12 @@ import pytest
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultBusyError, VaultCommitError
-from booth_review.job.aa_watch import AA_WATCH_SEASON, LAST_POLL_LOCAL, make_aa_cfb_resolver
+from booth_review.job.aa_watch import (
+    AA_WATCH_SEASON,
+    LAST_POLL_LOCAL,
+    make_aa_cfb_resolver,
+    run_crews_fetch,
+)
 from booth_review.job.attention import reminder_aa_cfb
 from booth_review.job.reminders import due_reminders
 from booth_review.sources.aa.feed import (
@@ -27,11 +32,13 @@ from booth_review.sources.aa.feed import (
     load_feed_state,
     save_feed_state,
 )
+from booth_review.transport.cache import RawCache
 from booth_review.transport.client import PoliteClient
 
 ET = ZoneInfo("America/New_York")
 FIXTURES = Path(__file__).parent / "fixtures" / "aa"
 FEED = (FIXTURES / "feed_schedules_synthetic.xml").read_bytes()
+POST = (FIXTURES / "schedule_synthetic.html").read_bytes()
 EMPTY_FEED = b'<rss version="2.0"><channel></channel></rss>'
 CURRENT = "https://awfulannouncing.com/schedules/your-2026-week-10-college-football-announcing-schedule.html"
 T2130 = datetime(2026, 11, 3, 21, 30, tzinfo=ET)
@@ -47,17 +54,40 @@ class _Server:
         self.robots = robots if robots is not None else b"User-agent: *\nAllow: /\n"
         self.feed_requests = 0
         self.robots_requests = 0
+        self.post_requests = 0
+        self.post_status = 200
+        self.post_body = POST
+        self.feed_redirect: str | None = None
+        self.post_redirect: str | None = None
+        self.redirect_hits = 0
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/robots.txt":
             self.robots_requests += 1
             return httpx2.Response(200, content=self.robots)
-        self.feed_requests += 1
-        return httpx2.Response(self.status, content=self.feed)
+        if request.url.path == "/moved/":
+            self.redirect_hits += 1
+            return httpx2.Response(200, content=self.feed)
+        if request.url.path == "/schedules/feed/" or "feed" in request.url.path:
+            self.feed_requests += 1
+            if self.feed_redirect is not None:
+                return httpx2.Response(302, headers={"Location": self.feed_redirect})
+            return httpx2.Response(self.status, content=self.feed)
+        self.post_requests += 1
+        if self.post_redirect is not None:
+            return httpx2.Response(301, headers={"Location": self.post_redirect})
+        if request.headers.get("If-None-Match") == '"p1"':
+            return httpx2.Response(304)
+        return httpx2.Response(self.post_status, content=self.post_body, headers={"ETag": '"p1"'})
 
     @property
     def total(self) -> int:
-        return self.feed_requests + self.robots_requests
+        return self.feed_requests + self.robots_requests + self.post_requests
+
+    @property
+    def aa_requests(self) -> int:
+        """Feed plus post requests (robots.txt is not counted against the cap)."""
+        return self.feed_requests + self.post_requests
 
 
 class _Vault:
@@ -79,7 +109,9 @@ def _runtime(paths: DataPaths, server: _Server, vault: _Vault | None = None) -> 
     client = PoliteClient(
         transport=httpx2.MockTransport(server), clock=lambda: 0.0, sleep=lambda s: None
     )
-    return SimpleNamespace(paths=paths, client=client, vault=vault or _Vault())
+    return SimpleNamespace(
+        paths=paths, client=client, vault=vault or _Vault(), cache=RawCache(paths, client)
+    )
 
 
 def _policy(
@@ -174,7 +206,7 @@ def test_week_already_linked_makes_zero_requests(vault_paths: DataPaths) -> None
     server = _Server()
     items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
     assert _kinds(items) == ["reminder_aa_cfb_link"] and CURRENT in items[0].line
-    assert server.total == 0
+    assert server.feed_requests == 0  # only the crews post is fetched (Phase 27)
 
 
 @pytest.mark.parametrize("variant", ["none", "old", "terms_null", "unreadable"])
@@ -299,7 +331,7 @@ def test_commit_after_request_scopes_paths(vault_paths: DataPaths) -> None:
     _ready(vault_paths)
     vault = _Vault()
     make_aa_cfb_resolver(_runtime(vault_paths, _Server(), vault), commit=True)(2026, "10", T2130)
-    assert len(vault.calls) == 1
+    assert len(vault.calls) == 2  # feed paths, then the crews post (Phase 27)
     assert vault.calls[0][1] == [
         "ledger/aa_feed_watch.json",
         "ledger/requests.jsonl",
@@ -389,3 +421,308 @@ def test_commit_paths_name_only_the_aa_robots_file(vault_paths: DataPaths) -> No
     make_aa_cfb_resolver(_runtime(vault_paths, _Server(), vault), commit=True)(2026, "10", T2130)
     assert "raw/_robots/awfulannouncing.com" in vault.calls[0][1]
     assert "raw/_robots" not in vault.calls[0][1]
+
+
+# -- Phase 27 plan 08: the crews post fetch ----------------------------------
+
+CREWS_FILE = "raw/aa/crews/2026/wk-10.html"
+
+
+def _crews_cached(paths: DataPaths) -> bool:
+    return (paths.raw / "aa" / "crews" / "2026" / "wk-10.html").is_file()
+
+
+def test_crews_tuesday_first_find_fetches_post_within_cap(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    server, vault = _Server(), _Vault()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert (server.feed_requests, server.post_requests) == (1, 1)
+    assert server.aa_requests <= 2
+    assert _crews_cached(vault_paths)
+    assert len(vault.calls) == 2
+    assert "aa crews" in vault.calls[1][0] or "crews" in vault.calls[1][0]
+    assert any(p == CREWS_FILE for p in vault.calls[1][1])
+    assert not any(p == CREWS_FILE for p in vault.calls[0][1])
+
+
+def test_crews_backup_run_sends_nothing_when_cached(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    first = _Server()
+    resolver = make_aa_cfb_resolver(_runtime(vault_paths, first), commit=False)
+    resolver(2026, "10", T2130)
+    backup = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, backup), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert backup.aa_requests == 0
+
+
+def test_crews_linked_but_uncached_fetches_exactly_one_post(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert (server.feed_requests, server.post_requests) == (0, 1)
+    assert _crews_cached(vault_paths)
+
+
+def test_crews_post_error_is_swallowed(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    server = _Server()
+    server.post_status = 403
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2130)
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    assert server.aa_requests <= 2
+    assert not _crews_cached(vault_paths)
+
+
+@pytest.mark.parametrize("failure", ["http_500", "invalid_post"])
+def test_crews_failed_request_says_so_and_commits_its_audit_line(
+    vault_paths: DataPaths, failure: str
+) -> None:
+    """Phase 27 review WR-03: a failed fetch gets a fixed line (no URL, no page text)
+    and its request ledger line is committed, as the CLI does."""
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    if failure == "http_500":
+        server.post_status = 500
+    else:
+        server.post_body = b"<html><body><p>SENTINEL PAGE TEXT</p></body></html>"
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2230
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    line = items[1].line
+    assert "http" not in line and "SENTINEL" not in line
+    assert "awfulannouncing" not in line
+    assert server.post_requests == 1
+    assert not _crews_cached(vault_paths)
+    ((message, committed),) = vault.calls
+    assert "crews" in message
+    # F8: the week's failure mark is committed with the audit line.
+    assert committed == [
+        "ledger/requests.jsonl",
+        "raw/_robots/awfulannouncing.com",
+        "ledger/aa_feed_watch.json",
+    ]
+    ledger = (vault_paths.ledger / "requests.jsonl").read_text(encoding="utf-8")
+    assert "SENTINEL" not in ledger and ledger.strip()
+
+
+def test_crews_robots_disallow_posts_skipped_line(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server(robots=b"User-agent: *\nDisallow: /schedules/\n")
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_robots"]
+    assert server.post_requests == 0
+
+
+def test_crews_stale_policy_sends_no_post_request(vault_paths: DataPaths) -> None:
+    _state(vault_paths)
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb", "aa_feed_policy_stale"]
+    assert server.aa_requests == 0
+
+
+def test_crews_linked_with_stale_policy_names_it_and_sends_nothing(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_policy"]
+    assert server.aa_requests == 0
+
+
+def test_crews_other_season_touches_nothing(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2025-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    t = datetime(2025, 11, 4, 21, 30, tzinfo=ET)
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(2025, "10", t)
+    assert _kinds(items) == ["reminder_aa_cfb"]
+    assert server.total == 0 and vault.calls == []
+
+
+# -- Phase 27 review WR-02: the Friday/Saturday re-check ------------------------
+
+SLOT = "2026-11-06T18"
+T_FRI = datetime(2026, 11, 6, 18, 0, tzinfo=ET)
+
+
+def _recheck(paths: DataPaths, server: _Server, vault: _Vault | None = None) -> list:
+    return run_crews_fetch(
+        _runtime(paths, server, vault),
+        season=2026,
+        label="10",
+        now=T_FRI,
+        mode="recheck",
+        budget=1,
+        commit=True,
+        recheck_slot=SLOT,
+    )
+
+
+def test_recheck_of_an_uncached_post_sends_nothing(vault_paths: DataPaths) -> None:
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    items = _recheck(vault_paths, server, vault)
+    assert _kinds(items) == ["aa_crews_skipped_not_cached"]
+    assert "http" not in items[0].line
+    assert server.total == 0 and vault.calls == []
+    assert load_feed_state(vault_paths).crews_rechecked == []
+
+
+def _cache_post(paths: DataPaths, *, etag: str | None = '"p1"') -> None:
+    """A cached week-10 post and its manifest line (with or without an ETag)."""
+    rel = "aa/crews/2026/wk-10.html"
+    post = paths.raw / rel
+    post.parent.mkdir(parents=True)
+    post.write_bytes(POST)
+    line = {
+        "url": CURRENT,
+        "source": "aa",
+        "season": 2026,
+        "kind": "page",
+        "fetched_at": "2026-11-04T02:30:00Z",
+        "status": 200,
+        "etag": etag,
+        "last_modified": None,
+        "sha256": None,
+        "path": rel,
+        "bytes": len(POST),
+        "final_url": CURRENT,
+    }
+    paths.manifest.parent.mkdir(parents=True, exist_ok=True)
+    with paths.manifest.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def test_recheck_without_a_stored_validator_sends_nothing(vault_paths: DataPaths) -> None:
+    """Adversarial panel F7: a re-check is conditional or not sent; never a plain GET."""
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    _cache_post(vault_paths, etag=None)
+    server, vault = _Server(), _Vault()
+    items = _recheck(vault_paths, server, vault)
+    assert _kinds(items) == ["aa_crews_skipped_no_validator"]
+    assert "http" not in items[0].line and "awfulannouncing" not in items[0].line
+    assert server.total == 0 and vault.calls == []
+    assert load_feed_state(vault_paths).crews_rechecked == []
+
+
+def test_recheck_marks_its_slot_commits_it_and_never_repeats(vault_paths: DataPaths) -> None:
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    _cache_post(vault_paths)
+    server, vault = _Server(), _Vault()
+    assert _recheck(vault_paths, server, vault) == []
+    assert server.post_requests == 1
+    assert load_feed_state(vault_paths).crews_rechecked == [SLOT]
+    ((_, committed),) = vault.calls
+    assert "ledger/aa_feed_watch.json" in committed and CREWS_FILE in committed
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert stored["crews_rechecked"] == [SLOT]
+
+    again, vault2 = _Server(), _Vault()
+    assert _recheck(vault_paths, again, vault2) == []
+    assert again.total == 0 and vault2.calls == []
+
+
+def test_feed_state_without_rechecks_keeps_its_old_shape(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert "crews_rechecked" not in stored
+    with pytest.raises(ValueError, match="slot key"):
+        _state(vault_paths, crews_rechecked=["friday"])
+
+
+# -- Adversarial panel F6: AA redirects are failures, never followed ---------------
+
+MOVED = "https://awfulannouncing.com/moved/"
+
+
+def test_redirecting_post_after_a_found_feed_sends_exactly_two_requests(
+    vault_paths: DataPaths,
+) -> None:
+    """The feed finds the link, the post answers 301: two AA requests in the run (the
+    redirect target is never requested), nothing cached, a fixed error line."""
+    _ready(vault_paths)
+    server, vault = _Server(), _Vault()
+    server.post_redirect = MOVED
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    assert (server.feed_requests, server.post_requests, server.redirect_hits) == (1, 1, 0)
+    assert server.aa_requests == 2
+    assert not _crews_cached(vault_paths)
+    ledger = [json.loads(x) for x in vault_paths.manifest.read_text().splitlines()]
+    post_lines = [x for x in ledger if x.get("url") == CURRENT]
+    assert [(x["status"], x["path"]) for x in post_lines] == [(301, None)]
+
+
+def test_redirecting_feed_and_post_each_count_one_request(vault_paths: DataPaths) -> None:
+    """A redirecting feed is one request and finds nothing; a redirecting post (link
+    already recorded) is one request. Neither redirect target is ever requested."""
+    _ready(vault_paths)
+    server = _Server()
+    server.feed_redirect = MOVED
+    make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2130)
+    assert (server.feed_requests, server.post_requests, server.redirect_hits) == (1, 0, 0)
+
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    second = _Server()
+    second.post_redirect = MOVED
+    items = make_aa_cfb_resolver(_runtime(vault_paths, second), commit=False)(2026, "10", T2230)
+    assert "aa_crews_skipped_error" in _kinds(items)
+    assert (second.feed_requests, second.post_requests, second.redirect_hits) == (0, 1, 0)
+    assert server.aa_requests + second.aa_requests == 2
+
+
+# -- Adversarial panel F8: a failed Tuesday post request is never sent again -------
+
+
+def test_failed_tuesday_post_is_not_requested_again_by_the_backup_run(
+    vault_paths: DataPaths,
+) -> None:
+    _ready(vault_paths)
+    first, vault = _Server(), _Vault()
+    first.post_status = 500
+    items = make_aa_cfb_resolver(_runtime(vault_paths, first, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    assert first.post_requests == 1
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert stored["crews_failed"] == ["2026-10"]
+    assert "ledger/aa_feed_watch.json" in vault.calls[-1][1]
+
+    for later in (T2230, T2330):
+        backup, vault2 = _Server(), _Vault()
+        items = make_aa_cfb_resolver(_runtime(vault_paths, backup, vault2), commit=True)(
+            2026, "10", later
+        )
+        assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_failed_before"]
+        assert "http" not in items[1].line and "awfulannouncing" not in items[1].line
+        assert backup.aa_requests == 0 and vault2.calls == []
+
+
+def test_failed_mark_does_not_stop_the_friday_recheck_of_a_cached_post(
+    vault_paths: DataPaths,
+) -> None:
+    """The Friday/Saturday rules are unchanged: they re-check a cached post."""
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT}, crews_failed=["2026-10"])
+    _cache_post(vault_paths)
+    server = _Server()
+    assert _recheck(vault_paths, server) == []
+    assert server.post_requests == 1
+
+
+def test_feed_state_without_failures_has_no_crews_failed_key(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert "crews_failed" not in stored
+    assert load_feed_state(vault_paths).crews_failed == []

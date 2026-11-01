@@ -339,6 +339,44 @@ def aa_feed_blocked() -> AttentionItem:
     )
 
 
+def aa_crews_skipped(
+    reason: Literal["policy", "robots", "not_cached", "no_validator", "failed_before", "error"],
+) -> AttentionItem:
+    """Phase 27: the crews post was not fetched; fixed lines, no URL or page text."""
+    if reason == "robots":
+        line = "aa crews post not fetched: robots.txt refuses it or asks for a longer crawl delay"
+    elif reason == "error":
+        # Phase 27 review WR-03: the request failed or the post failed validation.
+        line = (
+            "aa crews post fetch failed: an error response or a post that failed validation, "
+            "the cached copy is unchanged, check the job log"
+        )
+    elif reason == "not_cached":
+        # Phase 27 review WR-02: the Friday/Saturday runs only re-check a cached post.
+        line = (
+            "aa crews post not re-checked: the week post is not cached and this run only "
+            "re-checks, run booth-review collect aa --crews to fetch it"
+        )
+    elif reason == "failed_before":
+        # Adversarial panel F8: a failed request is never retried by the job.
+        line = (
+            "aa crews post not fetched: an earlier request for this week failed and the "
+            "job never retries it, check the log of that run"
+        )
+    elif reason == "no_validator":
+        # Adversarial panel F7: a scheduled re-check is conditional or not sent.
+        line = (
+            "aa crews post not re-checked: no etag or last-modified is stored for it, so "
+            "this run sent nothing, run booth-review collect aa --crews to fetch it again"
+        )
+    else:
+        line = (
+            "aa crews post not fetched: aa policy check older than 30 days or terms not "
+            "confirmed, run booth-review collect aa --policy-check then --confirm-terms"
+        )
+    return AttentionItem(kind=f"aa_crews_skipped_{reason}", line=line, severity="attention")
+
+
 def reminder_fox_cfb(season: int, label: str) -> AttentionItem:
     """Phase 24 D-13: save the FOX Sports press college football release."""
     _require_cfb_week(label)

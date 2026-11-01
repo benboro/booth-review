@@ -84,6 +84,67 @@ the table's source cell names Awful Announcing, linked to the post, and the
 detail panel adds "View original source (Awful Announcing) ↗" and says the
 figure was read from its ratings post and is not listed on Ratings Reference.
 
+## Crew posts (2026)
+
+For the 2026 college football season only, `booth-review collect aa --crews`
+fetches the weekly announcing-schedule posts and the build reads their crews.
+
+- **URLs:** only the week links recorded in `ledger/aa_feed_watch.json`, on the
+  AA host. The command never takes a URL argument.
+- **When:** the Tuesday reminder run fetches a post the first time it finds it.
+  If that request fails, the week is recorded in `ledger/aa_feed_watch.json`
+  (`crews_failed`), and the 22:30 backup and later Tuesday runs do not send it
+  again; they say so in a reminder line.
+  Conditional re-checks (ETag / Last-Modified) run Friday 18:00 and Saturday
+  08:00 ET, since AA edits a post through Saturday. They only re-check a post
+  that is already cached and has a stored ETag or Last-Modified (otherwise the
+  run sends nothing and says so in a reminder line, so a re-check is never a plain
+  request), and each slot sends at most one request: the slot is recorded in
+  `ledger/aa_feed_watch.json` (`crews_rechecked`), so a backup or manual run in
+  the same slot sends none. `--week N` re-checks an already-recorded week by hand.
+- **Cap:** at most 2 AA requests per run (the feed and the post; the robots.txt
+  check before them is not counted), at least 3 s apart, with the project user agent
+  and robots.txt. A request that fails is never retried, and a redirect is never
+  followed: a 3xx answer counts as the request and fails, so a run sends exactly
+  the requests it counts and only to the recorded links. This applies to every
+  awfulannouncing.com request, the 2021-2024 ratings pass included.
+- **Gate:** an AA policy check from the last 30 days with confirmed terms. When
+  it is stale, the run skips the fetch and says so in the reminder.
+- **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault. A 304 that
+  omits a validator keeps the one stored before it, so the next re-check still
+  sends it.
+- **Parser:** one line per game, shaped like
+  `Away at Home (time, Network): Name (play-by-play), Name (analyst), Name (reporter)`.
+  Reporters are dropped, `TBD` is counted, and a line that does not parse is
+  counted, never guessed. A `TBD` or `TBA` name is never a person: it is dropped
+  from the booth, and a booth with no named play-by-play counts as TBD. A day
+  header starts with a weekday ("Saturday, November 7", optionally with a year);
+  January to May dates fall in the season's next year. A game line above every
+  recognised day header, or under a weekday heading that does not parse, counts as
+  unparsed, and a post with no booth while it has unparsed game lines (or with no
+  day header at all) fails validation, so it is never cached as a good page.
+
+Coalescing with 506, in order, per game and network:
+
+1. A `crew_overrides.csv` row wins, whatever its status (one equal to 506's crew
+   included).
+2. A lone source fills.
+3. The same people from both, or an AA booth whose people are all in 506's crew
+   (AA drops reporters 506 may list): 506's crew and attribution are kept
+   (corroborated), with no review row.
+4. AA lists every person 506 lists, plus more: AA's whole booth fills (D-04), with
+   a review row `relation=superset`.
+5. Any other difference goes to the newer page (D-02): 506's manifest `saved_at`
+   (else `fetched_at`) against AA's `article:modified_time` (else the fetch time of
+   the last HTTP 200 line). A tie keeps 506. Each such case writes a row to
+   `interim/review_crew_aa_disagreements.csv`; the build never fails over it.
+6. ESPN Press Room fills only what is still blank.
+
+An AA fill (506 listed no crew) never moves the "crews through week N" stamp;
+a 506 crew that AA's booth replaced still does, since 506 listed it. The coverage table
+counts them in their own column (`matched_crew_aa`), never as 506 matches. Each
+crew is credited to its exact post, and AA's crews come down if AA objects.
+
 ## Storage
 
 The cached sitemaps and posts live only in the private vault, under `raw/aa/`.

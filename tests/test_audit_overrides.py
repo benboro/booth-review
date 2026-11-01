@@ -8,7 +8,7 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from booth_review.audit.overrides import TELECASTS, check_overrides_plotted, release_problems
+from booth_review.audit.overrides import TELECASTS, check_overrides_exist, release_problems
 from booth_review.build.crew_overrides import CREW_OVERRIDE_COLUMNS
 
 SOURCE = "no-506-crew,outlet,Example Outlet,https://example.com/synthetic-schedule"
@@ -44,42 +44,56 @@ def _booth(game: int, network: str) -> list[str]:
 def test_all_plotted_passes(tmp_path: Path) -> None:
     _write_overrides(tmp_path / "ref", _booth(1, "net-a"))
     _write_telecasts(tmp_path / "telecasts.parquet", [(1, "net-a", "main", True)])
-    result = check_overrides_plotted(tmp_path / "ref", tmp_path / "telecasts.parquet")
+    result = check_overrides_exist(tmp_path / "ref", tmp_path / "telecasts.parquet")
     assert result.telecasts == 1
-    assert result.unplotted_lines == ()
+    assert result.missing_lines == ()
 
 
-def test_unplotted_unrated_and_missing_telecasts_are_flagged_by_first_line(
+def test_missing_and_alt_only_telecasts_are_flagged_by_first_line(
     tmp_path: Path,
 ) -> None:
-    rows = _booth(1, "net-a") + _booth(2, "net-a") + _booth(3, "net-b") + _booth(4, "net-a")
+    rows = _booth(1, "net-a") + _booth(3, "net-b") + _booth(9, "net-a")
     _write_overrides(tmp_path / "ref", rows)
     _write_telecasts(
         tmp_path / "telecasts.parquet",
         [
             (1, "net-a", "main", True),
-            (2, "net-a", "main", False),  # unrated: in the build, not plotted
-            (3, "net-b", "alt", True),  # plotted only as an alt feed
-            (4, "net-a", "main", None),  # null plotted counts as unplotted
+            (3, "net-b", "alt", True),  # exists only as an alt feed
         ],
     )
-    result = check_overrides_plotted(tmp_path / "ref", tmp_path / "telecasts.parquet")
-    assert result.telecasts == 4
-    # Header is line 1, so telecast 2 starts on line 4, 3 on line 6, 4 on line 8.
-    assert result.unplotted_lines == (4, 6, 8)
+    result = check_overrides_exist(tmp_path / "ref", tmp_path / "telecasts.parquet")
+    assert result.telecasts == 3
+    # Header is line 1, so telecast 3 starts on line 4, game 9 on line 6.
+    assert result.missing_lines == (4, 6)
+
+
+def test_unrated_and_null_plotted_main_telecasts_pass(tmp_path: Path) -> None:
+    rows = _booth(1, "net-a") + _booth(2, "net-a") + _booth(4, "net-a")
+    _write_overrides(tmp_path / "ref", rows)
+    _write_telecasts(
+        tmp_path / "telecasts.parquet",
+        [
+            (1, "net-a", "main", True),
+            (2, "net-a", "main", False),
+            (4, "net-a", "main", None),
+        ],
+    )
+    result = check_overrides_exist(tmp_path / "ref", tmp_path / "telecasts.parquet")
+    assert result.telecasts == 3
+    assert result.missing_lines == ()
 
 
 def test_wrong_network_is_flagged(tmp_path: Path) -> None:
     _write_overrides(tmp_path / "ref", _booth(1, "net-b"))
     _write_telecasts(tmp_path / "telecasts.parquet", [(1, "net-a", "main", True)])
-    result = check_overrides_plotted(tmp_path / "ref", tmp_path / "telecasts.parquet")
-    assert result.unplotted_lines == (2,)
+    result = check_overrides_exist(tmp_path / "ref", tmp_path / "telecasts.parquet")
+    assert result.missing_lines == (2,)
 
 
 def test_missing_telecasts_table_raises(tmp_path: Path) -> None:
     _write_overrides(tmp_path / "ref", _booth(1, "net-a"))
     with pytest.raises(FileNotFoundError):
-        check_overrides_plotted(tmp_path / "ref", tmp_path / "telecasts.parquet")
+        check_overrides_exist(tmp_path / "ref", tmp_path / "telecasts.parquet")
 
 
 def _cli(
@@ -106,9 +120,9 @@ def test_cli_exit_codes(
     _write_telecasts(table, [(1, "net-a", "main", True), (2, "net-a", "main", True)])
     code, out = _cli(tmp_path, monkeypatch, capsys)
     assert code == 0
-    assert "2 telecasts checked, 0 not plotted" in out
+    assert "2 telecasts checked, 0 missing" in out
 
-    _write_telecasts(table, [(1, "net-a", "main", True), (2, "net-a", "main", False)])
+    _write_telecasts(table, [(1, "net-a", "main", True), (2, "net-a", "alt", True)])
     code, out = _cli(tmp_path, monkeypatch, capsys)
     assert code == 1
     assert "line(s) 4 name a telecast" in out
@@ -204,9 +218,9 @@ def test_cli_release_uses_explicit_paths_over_env(
     monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", str(tmp_path / "nowhere"))
     args = ["audit", "overrides", "--release", "--vault", str(vault), "--reference", str(ref)]
     assert main(args) == 0
-    assert "1 telecasts checked, 0 not plotted" in capsys.readouterr().out
+    assert "1 telecasts checked, 0 missing" in capsys.readouterr().out
 
-    _write_overrides(ref, _booth(1, "net-a") + _booth(2, "net-a"))
+    _write_overrides(ref, _booth(1, "net-a") + _booth(9, "net-a"))
     assert main(args) == 1
     assert "line(s) 4 name a telecast" in capsys.readouterr().out
 

@@ -435,6 +435,56 @@ def test_cfbd_retries_on_connect_error() -> None:
     assert call_count["n"] == 2
 
 
+def _aa_status_handler(statuses: list[int], call_count: dict[str, int]) -> Handler:
+    """Serve AA robots as allow-all, then `statuses` in order for one post."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        url = str(request.url)
+        if url == "https://awfulannouncing.com/robots.txt":
+            status, body, headers = ALLOW_ALL_ROBOTS
+            return httpx2.Response(status, content=body, headers=headers, request=request)
+        if url == "https://awfulannouncing.com/post/":
+            n = call_count["n"]
+            call_count["n"] += 1
+            return httpx2.Response(statuses[min(n, len(statuses) - 1)], request=request)
+        raise AssertionError(f"unexpected url {url}")
+
+    return handler
+
+
+def test_aa_host_is_never_retried() -> None:
+    assert HOST_POLICIES["awfulannouncing.com"].retry_mode == "single"
+
+
+@pytest.mark.parametrize("status", [429, 500, 502, 503])
+def test_aa_error_status_is_sent_once_so_the_run_cap_holds(status: int) -> None:
+    call_count = {"n": 0}
+    client = _client(_aa_status_handler([status, 200], call_count))
+
+    with stamina.set_testing(True, attempts=10, cap=True):
+        resp = client.fetch("https://awfulannouncing.com/post/")
+
+    assert resp.status_code == status
+    assert call_count["n"] == 1
+
+
+def test_aa_connect_error_is_not_retried() -> None:
+    call_count = {"n": 0}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if str(request.url) == "https://awfulannouncing.com/robots.txt":
+            status, body, headers = ALLOW_ALL_ROBOTS
+            return httpx2.Response(status, content=body, headers=headers, request=request)
+        call_count["n"] += 1
+        raise httpx2.ConnectError("boom", request=request)
+
+    client = _client(handler)
+
+    with pytest.raises(FetchError):
+        client.fetch("https://awfulannouncing.com/post/")
+    assert call_count["n"] == 1
+
+
 def test_fetch_error_after_retries_exhausted() -> None:
     log: list[httpx2.Request] = []
 
@@ -723,6 +773,29 @@ def test_redirect_loop_is_cut_off() -> None:
     with pytest.raises(FetchError, match="too many redirects"):
         client.fetch("https://github.com/a")
     assert len(log) == 1 + 6
+
+
+def test_aa_redirect_is_returned_not_followed() -> None:
+    """Phase 27 adversarial panel F6: an awfulannouncing.com 3xx is the response
+    (one request, body unread), so a caller's per-run cap counts real requests."""
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (
+            301,
+            b"",
+            {"Location": "https://awfulannouncing.com/b.html"},
+        ),
+    }
+    client = _client(_recording_handler(responses, log))
+    for max_bytes in (None, 1000):
+        resp = client.fetch("https://awfulannouncing.com/a.html", max_bytes=max_bytes)
+        assert resp.status_code == 301 and resp.content == b""
+    assert [str(r.url) for r in log] == [
+        "https://awfulannouncing.com/robots.txt",
+        "https://awfulannouncing.com/a.html",
+        "https://awfulannouncing.com/a.html",
+    ]
 
 
 # -- Response size cap --------------------------------------------------------

@@ -209,6 +209,18 @@ def _build_counts(tables: BuildTables, result: RegressionResult) -> dict[str, in
         "crew_overrides_differs": totals.get("crew_overrides_differs", 0),
         "crew_overrides_corrections": totals.get("crew_overrides_corrections", 0),
         "crew_gaps_unpatched": totals.get("crew_gaps_unpatched", 0),
+        # Phase 27: the Awful Announcing crews pass; counts only.
+        "crew_aa_filled": totals.get("crew_aa_filled", 0),
+        "crew_aa_scheduled_filled": totals.get("crew_aa_scheduled_filled", 0),
+        "crew_aa_agreements": totals.get("crew_aa_agreements", 0),
+        "crew_aa_disagreements": totals.get("crew_aa_disagreements", 0),
+        "crew_aa_superset": totals.get("crew_aa_superset", 0),
+        "crew_aa_aa_won": totals.get("crew_aa_aa_won", 0),
+        "crew_aa_s506_won": totals.get("crew_aa_s506_won", 0),
+        "crew_aa_network_mismatch": totals.get("crew_aa_network_mismatch", 0),
+        "crew_aa_unparsed_lines": totals.get("crew_aa_unparsed_lines", 0),
+        "crew_aa_undated_pages": totals.get("crew_aa_undated_pages", 0),
+        "crew_aa_rejected_pages": totals.get("crew_aa_rejected_pages", 0),
         # 04.19 D-13/D-15: the ESPN Press Room backup pass; counts only.
         "crew_backup_filled": totals.get("crew_backup_filled", 0),
         # 18-13 F7: upcoming games with no telecast that took a Press Room booth.

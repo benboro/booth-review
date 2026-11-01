@@ -149,17 +149,37 @@ model, and build phases; read the relevant section before starting a phase.
   that week's college football announcing-schedule post, with the same feed check as
   `booth-review collect aa --feed` (project user agent, robots.txt, pacing, and
   conditional requests with ETag / Last-Modified). It reads only each entry's title,
-  link, date and categories, keeps only the post link, and never parses or stores a
+  link, date and categories, keeps only the post link, and itself never parses or stores a
   post body or crew data; the response is never cached, and `ledger/aa_feed_watch.json`
-  holds only the feed validators, the verified feed URL, and each week's post link or a
-  mark that its plain reminder went out (after which that week is not checked again, so
-  it gets one comment). The feed is the `/schedules/feed/` category feed, or the site
+  holds only the feed validators, the verified feed URL, each week's post link or a mark
+  that its plain reminder went out (after which that week is not checked again, so it
+  gets one comment), the Friday and Saturday crews re-check slots already used, and
+  each week whose Tuesday post request failed (which is not requested again). The
+  feed is the `/schedules/feed/` category feed, or the site
   feed if a first `booth-review collect aa --feed --verify` request shows the category
   feed lacks the posts. It needs an AA policy check from the last 30 days with
   confirmed terms; when that is stale, or robots.txt now refuses the feed, the job
   skips the request, posts the plain reminder and asks for `--policy-check` and
   `--confirm-terms`. If robots.txt or the terms ban automated access, stop. It ends
   with the 2026 season.
+- Awful Announcing crew posts (2026 college football season only): the scheduled job
+  may fetch only the weekly college football announcing-schedule posts whose links the
+  feed watch recorded in `ledger/aa_feed_watch.json`, and only through
+  `booth-review collect aa --crews`.
+  - **When:** it fetches a post on the Tuesday reminder run that finds it. It re-checks
+    the post with conditional requests (ETag / Last-Modified) on the Friday 18:00 and
+    Saturday 08:00 ET runs.
+  - **How:** at most 2 AA requests per run (the feed and the post; the robots.txt check
+    before them is not counted), at least 3 s apart, with the project user agent and
+    robots.txt. A request that fails is never retried. Each response is cached under
+    `raw/aa/crews/2026/`.
+  - **Policy check:** it needs the same AA policy check as the feed watch: done within
+    the last 30 days, with terms confirmed. When that check is stale, or robots.txt
+    refuses the post, the run skips the fetch and says so in the reminder. If
+    robots.txt or the terms ban automated access, stop.
+  - **Data and credit:** the parsed crews are private vault data. The site credits each
+    crew to its exact post, and AA's crews come down if AA objects.
+  - It ends with the 2026 season.
 - ESPN Press Room: never collect with scripts; Disney's Terms of Use ban automated
   access. Save its pages by hand in a browser (any filename) into
   `data/incoming/espnpr/`, or copy them there with `cp -p` to keep each file's save

@@ -29,7 +29,6 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
-from booth_review.build.crew_backup import CREW_BACKUP_LABEL
 from booth_review.build.named_games import (
     build_franchises,
     check_game_slugs,
@@ -209,8 +208,13 @@ def _build_freshness(tables: BuildTables, label: str | None = None) -> dict[str,
     # overrides sit on crews 506 did list and still advance the stamp.
     # D-14 (04.19): backup crews never move the 506 stamp either; an ESPN
     # Press Room booth covers one network family, so it can't claim a week.
+    # Phase 27: an AA fill (506 listed no crew) never moves it either, but a crew
+    # 506 listed still counts when AA's booth replaced it (adversarial panel F4).
     crew_filter = (
-        pl.col("crew_matched") & ~pl.col("crew_patched") & ~pl.col("crew_backup").fill_null(False)
+        pl.col("crew_matched")
+        & ~pl.col("crew_patched")
+        & ~pl.col("crew_backup").fill_null(False)
+        & ~pl.col("telecast_id").is_in(sorted(tables.aa_filled_ids))
     )
     crew_ids: set[str] = set(season_telecasts.filter(crew_filter)["telecast_id"].to_list())
     viewership_ids: set[str] = set(
@@ -823,7 +827,7 @@ def build_site_data(
             sched_crew.source_url if sched_crew is not None else None
         )
         scheduled_columns["crew_source_label"].append(
-            CREW_BACKUP_LABEL if sched_crew is not None else None
+            sched_crew.label if sched_crew is not None else None
         )
         for side in ("home", "away"):
             conf = row[f"{side}_conference"]
@@ -873,6 +877,7 @@ def build_site_data(
                 "matched_crew": _as_int(crow["matched_crew"]),
                 "matched_crew_patched": _as_int(crow["crew_patched"]),
                 "matched_crew_backup": _as_int(crow["crew_backup"]),
+                "matched_crew_aa": _as_int(crow["crew_aa"]),
                 "match_rate": crow["match_rate"],
                 "headline_present": _as_int(crow["headline_present"]),
                 "excitement_present": _as_int(crow["excitement_present"]),

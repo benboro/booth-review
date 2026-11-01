@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.7.0"
+SCHEMA_VERSION = "2.8.0"
 
 _S506_HOST = "506sports.com"
 
@@ -443,6 +443,10 @@ class CoverageRow(BaseModel):
     matched_crew_patched: int
     # of matched_crew, how many took theirs from an ESPN Press Room backup page (04.19 D-13)
     matched_crew_backup: int
+    # of matched_crew, how many show an Awful Announcing crew: a fill of a telecast
+    # 506 left crew-less, or a newer or superset AA booth that replaced 506's
+    # (Phase 27 AAC-03; review WR-05)
+    matched_crew_aa: int
     match_rate: float | None = None
     headline_present: int
     excitement_present: int
@@ -455,7 +459,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.7.0"]
+    schema_version: Literal["2.8.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -713,6 +717,16 @@ class SiteData(BaseModel):
                 raise ValueError(
                     f"coverage[{i}].matched_crew_backup: with matched_crew_patched exceeds"
                     " matched_crew"
+                )
+            if row.matched_crew_aa < 0:
+                raise ValueError(f"coverage[{i}].matched_crew_aa: must not be negative")
+            if (
+                row.matched_crew_patched + row.matched_crew_backup + row.matched_crew_aa
+                > row.matched_crew
+            ):
+                raise ValueError(
+                    f"coverage[{i}].matched_crew_aa: with matched_crew_patched and"
+                    " matched_crew_backup exceeds matched_crew"
                 )
 
         return self

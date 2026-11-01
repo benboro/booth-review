@@ -489,7 +489,41 @@ def test_crew_patched_counts_separately_but_stays_in_matched_crew() -> None:
 
 def test_crew_patched_and_backup_columns_follow_matched_crew() -> None:
     index = COVERAGE_COLUMNS.index("matched_crew")
-    assert COVERAGE_COLUMNS[index + 1 : index + 3] == ("crew_patched", "crew_backup")
+    assert COVERAGE_COLUMNS[index + 1 : index + 4] == ("crew_patched", "crew_backup", "crew_aa")
+
+
+def test_crew_aa_counts_separately_but_stays_in_matched_crew() -> None:
+    """Phase 27 review WR-05: an Awful Announcing crew (fill or won) is crew_matched
+    but counted in crew_aa, so matched_crew minus the source columns is the 506 match."""
+    games = [_game_row(game_id=i + 1) for i in range(5)]
+    # (crew_aa, crew_patched, crew_backup)
+    flags = [
+        (True, False, False),
+        (True, False, False),
+        (False, True, False),
+        (False, False, True),
+        (None, False, False),
+    ]
+    telecasts = [
+        _telecast_row(
+            telecast_id=f"{i + 1}-net-a",
+            game_id=i + 1,
+            crew_matched=True,
+            crew_aa=aa,
+            crew_patched=patched,
+            crew_backup=backup,
+        )
+        for i, (aa, patched, backup) in enumerate(flags)
+    ]
+    tables = _build_tables(games, telecasts, diagnostics=_diagnostics({2024: {}}, {2024: None}))
+    report = build_coverage(tables)
+    for network in ("net-a", "ALL"):
+        row = _row(report, 2024, network)
+        assert row["matched_crew"] == 5
+        assert row["crew_aa"] == 2
+        assert row["crew_patched"] == 1 and row["crew_backup"] == 1
+        s506 = row["matched_crew"] - row["crew_patched"] - row["crew_backup"] - row["crew_aa"]
+        assert s506 == 1
 
 
 def test_crew_backup_counts_separately_but_stays_in_matched_crew() -> None:

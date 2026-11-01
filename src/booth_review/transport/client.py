@@ -250,10 +250,17 @@ class PoliteClient:
         request = self._client.build_request("GET", url, headers=req_headers)
         hop_host, hop_policy = host, policy
         redirects = 0
+        unfollowed = False
         while True:
             response = self._send_hop(hop_host, hop_policy, request, url, max_bytes=max_bytes)
             next_request = response.next_request
             if next_request is None:
+                break
+            if check_robots and not hop_policy.follow_redirects:
+                # The 3xx itself is the answer (body unread): the caller treats it
+                # as a failure.
+                response.close()
+                unfollowed = True
                 break
             # Never read a redirect's body; the next hop is vetted before it is sent.
             response.close()
@@ -283,7 +290,7 @@ class PoliteClient:
 
         fetch_resp = FetchResponse(
             status_code=response.status_code,
-            content=response.content,
+            content=b"" if unfollowed else response.content,
             etag=response.headers.get("ETag"),
             last_modified=response.headers.get("Last-Modified"),
             call_limit_remaining=call_limit_remaining,
@@ -327,6 +334,8 @@ class PoliteClient:
             return response
 
         try:
+            if policy.retry_mode == "single":
+                return attempt()
             if policy.retry_mode == "standard":
                 return self._send_with_standard_retries(attempt)
             return self._send_with_budgeted_retries(attempt)

@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.7.0"`). See
+- `schema_version` — the contract version (currently `"2.8.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -124,7 +124,12 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   null for an empty crew, and the contract rejects one without the others. Once 506 lists
   the game it moves to `telecasts_unrated`, where a 506 crew outranks the backup booth.
   In the current season the same booth also fills an unplotted telecast 506 listed with no
-  crew, so the precedence (override > 506 > ESPN Press Room) holds for upcoming games.
+  crew, so the precedence (override > 506 and Awful Announcing > ESPN Press Room) holds
+  for upcoming games.
+- `crew_source_label` may also be `Awful Announcing`, with `crew_source_url` the exact
+  announcing-schedule post, on a scheduled row or on an unrated or played telecast whose
+  crew came from that post. A scheduled row's label follows its source, so an Awful
+  Announcing booth is credited to Awful Announcing and an ESPN one to ESPN Press Room.
 - No booth, cause, points, spread or excitement ships, since the game has none by
   definition, and no game or telecast id or completed flag does either (CFBD display
   fields only). The block rejects any column it does not declare.
@@ -264,6 +269,11 @@ than `matched_crew`), `matched_crew_backup` (how many of `matched_crew` took
 their crew from a hand-saved ESPN Press Room page because neither 506 nor
 `crew_overrides.csv` listed one, 04.19 D-13; never negative, and
 `matched_crew_patched + matched_crew_backup` is never more than `matched_crew`),
+`matched_crew_aa` (how many of `matched_crew` show an Awful Announcing crew: a
+fill of a telecast 506 left crew-less, or a newer or superset AA booth that
+replaced 506's, Phase 27; never negative, and `matched_crew_patched +
+matched_crew_backup + matched_crew_aa` is never more than `matched_crew`, so
+the remainder is exactly the 506-sourced crews),
 `match_rate` (null when there's nothing to
 divide), `headline_present`, `excitement_present`, `spread_present` (telecasts whose game has a closing spread),
 `duplicate_merges`, `combined_figures`, and `publisher_counts` (a
@@ -319,7 +329,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.3.0 -> 2.4.0` added `telecasts.figure_source` and allowed empty `rr_urls` for second-source figures (SRC-06, 04.19); minor bump;
   `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump;
   `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
-  `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive).
+  `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive);
+  `2.7.0 -> 2.8.0` added coverage `matched_crew_aa` (Phase 27 AA crews, review WR-05); minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -358,6 +369,8 @@ As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with n
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
+
+As of v2.8.0 every fixture coverage row has `matched_crew_aa` 0.
 
 As of v2.5.0 every fixture coverage row has `matched_crew_backup` 0.
 

@@ -325,6 +325,7 @@ def test_506_crew_with_other_people_writes_one_disagreement_row() -> None:
     review = result.review_rows[0]
     assert review["telecast_id"] == "100-espn"
     assert review["s506_person_ids"] == "blair-tolley|morgan-pike"
+    assert review["aa_person_ids"] == ""
     assert review["backup_person_ids"] == "avery-lane|morgan-pike"
     assert review["source_url"] == URL
     # 506 wins: nothing about the telecast or its crew changes.

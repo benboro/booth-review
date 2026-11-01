@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -47,6 +47,8 @@ EASTERN: Final = ZoneInfo("America/New_York")
 _FORBIDDEN_DECL = re.compile(rb"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
 _LINE_RE = re.compile(r"^[A-Za-z0-9 ,()_./:#-]+$")
 _WEEK_KEY_RE = re.compile(r"^[0-9]{4}-[A-Za-z0-9]+$")
+# A Friday/Saturday crews re-check slot: its ET date and slot hour (Phase 27 review WR-02).
+_SLOT_KEY_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}$")
 _URL_PATH_RE = re.compile(r"^/[a-z0-9/._-]+$")
 _COLLEGE_WORDS: Final = frozenset({"college", "cfb", "ncaa"})
 _TS_FORMAT: Final = "%Y-%m-%dT%H:%M:%SZ"
@@ -82,6 +84,12 @@ class FeedWatchState:
     weeks: dict[str, str]
     blind_weeks: list[str]
     """Week keys whose plain (blind) reminder line already went out (D-11)."""
+    crews_rechecked: list[str] = field(default_factory=list)
+    """Friday/Saturday crews re-check slots (ET `YYYY-MM-DDTHH`) that already sent
+    their one request, so a backup or manual run in the same slot sends none."""
+    crews_failed: list[str] = field(default_factory=list)
+    """Week keys whose Tuesday crews post request failed; the job never sends it
+    again (a failed request is never retried, adversarial panel F8)."""
 
 
 @dataclass(frozen=True)
@@ -263,6 +271,12 @@ def load_feed_state(paths: DataPaths) -> FeedWatchState:
         raise VaultStateError(f"{FEED_STATE_NAME}: weeks must map strings to strings")
     if not isinstance(blind, list) or not all(isinstance(k, str) for k in blind):
         raise VaultStateError(f"{FEED_STATE_NAME}: blind_weeks must be a list of strings")
+    rechecked = raw.get("crews_rechecked", [])
+    if not isinstance(rechecked, list) or not all(isinstance(k, str) for k in rechecked):
+        raise VaultStateError(f"{FEED_STATE_NAME}: crews_rechecked must be a list of strings")
+    failed = raw.get("crews_failed", [])
+    if not isinstance(failed, list) or not all(isinstance(k, str) for k in failed):
+        raise VaultStateError(f"{FEED_STATE_NAME}: crews_failed must be a list of strings")
     return FeedWatchState(
         verified_feed_url=_opt_str(raw, "verified_feed_url"),
         verified_at=_opt_str(raw, "verified_at"),
@@ -271,6 +285,8 @@ def load_feed_state(paths: DataPaths) -> FeedWatchState:
         checked_at=_opt_str(raw, "checked_at"),
         weeks=dict(weeks),
         blind_weeks=list(blind),
+        crews_rechecked=list(rechecked),
+        crews_failed=list(failed),
     )
 
 
@@ -293,7 +309,13 @@ def save_feed_state(paths: DataPaths, state: FeedWatchState) -> None:
     for key in state.blind_weeks:
         if _WEEK_KEY_RE.fullmatch(key) is None:
             raise ValueError("feed state: bad blind week key")
-    payload = {
+    for key in state.crews_rechecked:
+        if _SLOT_KEY_RE.fullmatch(key) is None:
+            raise ValueError("feed state: bad crews re-check slot key")
+    for key in state.crews_failed:
+        if _WEEK_KEY_RE.fullmatch(key) is None:
+            raise ValueError("feed state: bad crews failed week key")
+    payload: dict[str, object] = {
         "verified_feed_url": state.verified_feed_url,
         "verified_at": state.verified_at,
         "etag": state.etag,
@@ -302,6 +324,10 @@ def save_feed_state(paths: DataPaths, state: FeedWatchState) -> None:
         "weeks": dict(sorted(state.weeks.items())),
         "blind_weeks": sorted(set(state.blind_weeks)),
     }
+    if state.crews_rechecked:  # absent until the first re-check, so older files stay as they were
+        payload["crews_rechecked"] = sorted(set(state.crews_rechecked))
+    if state.crews_failed:  # absent until a post request fails, likewise
+        payload["crews_failed"] = sorted(set(state.crews_failed))
     atomic_write_json(_state_path(paths), payload)
 
 
@@ -313,6 +339,32 @@ def record_blind_week(paths: DataPaths, *, season: int, label: str) -> bool:
         return False
     save_feed_state(paths, replace(state, blind_weeks=[*state.blind_weeks, key]))
     return True
+
+
+def record_crews_recheck(paths: DataPaths, slot: str) -> bool:
+    """Mark a Friday/Saturday crews re-check slot as used. True when newly added."""
+    if _SLOT_KEY_RE.fullmatch(slot) is None:
+        raise ValueError("feed state: bad crews re-check slot key")
+    state = load_feed_state(paths)
+    if slot in state.crews_rechecked:
+        return False
+    save_feed_state(paths, replace(state, crews_rechecked=[*state.crews_rechecked, slot]))
+    return True
+
+
+def record_crews_failed(paths: DataPaths, *, season: int, label: str) -> bool:
+    """Mark a week whose Tuesday crews post request failed. True when newly added."""
+    state = load_feed_state(paths)
+    key = week_key(season, label)
+    if key in state.crews_failed:
+        return False
+    save_feed_state(paths, replace(state, crews_failed=[*state.crews_failed, key]))
+    return True
+
+
+def crews_rechecked(paths: DataPaths, slot: str) -> bool:
+    """True when the slot's one re-check request already went out."""
+    return slot in load_feed_state(paths).crews_rechecked
 
 
 # -- poll ----------------------------------------------------------------------------------

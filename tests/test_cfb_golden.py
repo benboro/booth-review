@@ -74,6 +74,26 @@ changed.
 Phase 09 (MLB module): the MLB isolation characterizations below pass on HEAD and must keep
 passing. The input_stamp assertion for raw/mlb/ manifest lines is owned by plan 09-02
 (TDD red then green), because on HEAD input_stamp only skips nfl/ paths.
+
+Phase 27 Plan 05: telecasts gain crew_aa (all False in the synthetic vault, which has no
+AA pages); telecasts.parquet with that column dropped hashes to the earlier digest
+(ba7234232dd8...), so no figure or crew changed.
+
+Phase 27 Plan 06: the build now writes a header-only review_crew_aa_disagreements.csv
+(its digest is the sha256 of the header line alone; the synthetic vault has no AA
+pages). The other 27 pinned digests, telecasts, telecast_people and site-data.json
+among them, are unchanged, so no figure or crew changed.
+
+Phase 27 review (2026-11-01): CR-01 (overrides of any status beat AA) and CR-02 (an AA
+booth inside 506's crew is an agreement) moved no digest, since the synthetic vault has no
+AA pages. WR-05: contract 2.8.0 adds coverage matched_crew_aa (0 on every synthetic
+coverage row); site-data.json with that field dropped and the version set back to 2.7.0
+hashes to the Phase 27 Plan 06 digest (cce9771409a8...), so no figure or crew changed.
+
+Phase 27 adversarial review (2026-11-01): F10 adds an aa_person_ids column to the
+header-only review_crew_backup_disagreements.csv (old digest 9e2b349af80b... is the sha256
+of the old header line, the new one the sha256 of the new header line); no other digest
+moved, so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -116,8 +136,11 @@ _GOLDEN: dict[str, str] = {
     "interim/review_combined.csv": (
         "f2cdebc610d2b471fc5500b834c2488b9da90d7a65020c7138d41c289c1ab23c"
     ),
+    "interim/review_crew_aa_disagreements.csv": (
+        "34ae5be1e939909d436c1cd3a9a45391a4e15ea15ce1321b6673b7b6202fede2"
+    ),
     "interim/review_crew_backup_disagreements.csv": (
-        "9e2b349af80baa6d783e7ada73158d9c4cc82406581acc35ee961fa1b5208b72"
+        "9b14a0eb0a41a27db5d4da358a2019acedd5adae16064be6a1fd67c71a16a46e"
     ),
     "interim/review_crew_overrides.csv": (
         "e373f4cc3d6670f41f5669fcb0bcaebb82353e435fc152cc9a0d4a1be98bb4ec"
@@ -169,7 +192,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "cce9771409a80899f0aa10221be449ead4b6feffe00dbad59a73684b6f96d3ed"
+        "3244f6b46d0cab05317c40f00cd0da866eab99c66774f2f58505de37c87ba34a"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"
@@ -178,7 +201,7 @@ _GOLDEN: dict[str, str] = {
         "b1a1dfe384aedae6bbe88a851792065fd4f60d94ef338faad6054abc5710b0d2"
     ),
     "processed/telecasts.parquet": (
-        "ba7234232dd841ce4ff84a45fc78643379df8c4029875af9fc4fcd40aa2c69fc"
+        "b5dc840100e63bf542efc554256179b4e23df4b576181b798c7fc95732f9a598"
     ),
     "processed/viewership.parquet": (
         "9f4c6a8905644a1dbb02beb9b49e8d71cbcba17955f7957d024097b1af1d1f0e"

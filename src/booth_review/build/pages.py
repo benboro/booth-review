@@ -396,6 +396,7 @@ def render_coverage(site: SiteData, *, theme_script: str | None = None) -> str:
         f"<td>{row.matched_crew}</td>"
         f"<td>{row.matched_crew_patched}</td>"
         f"<td>{row.matched_crew_backup}</td>"
+        f"<td>{row.matched_crew_aa}</td>"
         f"<td>{_pct(row.match_rate)}</td>"
         f"<td>{row.excitement_present}</td>"
         f"<td>{row.spread_present}</td>"
@@ -413,6 +414,7 @@ def render_coverage(site: SiteData, *, theme_script: str | None = None) -> str:
         '<th scope="col">Matched with crew</th>'
         '<th scope="col">Of which hand-confirmed</th>'
         '<th scope="col">Of which ESPN backup</th>'
+        '<th scope="col">Of which Awful Announcing</th>'
         '<th scope="col">Match rate</th>'
         '<th scope="col">Excitement present</th>'
         '<th scope="col">Spread</th>'

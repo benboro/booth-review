@@ -97,7 +97,11 @@ from booth_review.errors import (
     VaultCommitError,
     VaultStateError,
 )
-from booth_review.job.aa_watch import make_aa_cfb_resolver
+from booth_review.job.aa_watch import (
+    CREWS_RECHECK_WINDOW_HOURS,
+    make_aa_cfb_resolver,
+    run_crews_fetch,
+)
 from booth_review.job.attention import (
     AttentionItem,
     bowls_missing,
@@ -138,6 +142,7 @@ from booth_review.job.attention import (
 )
 from booth_review.job.catchup import (
     EASTERN,
+    SCHEDULE_ONLY,
     CatchupWindow,
     JobState,
     RunMode,
@@ -150,7 +155,7 @@ from booth_review.job.catchup import (
 )
 from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.gaps_espnpr import espnpr_page_week, find_espnpr_gap
-from booth_review.job.reminders import AaCfbResolver, due_reminders
+from booth_review.job.reminders import AaCfbResolver, current_cfb_week, due_reminders
 from booth_review.job.staleness import newest_listed, newest_plotted, staleness_items
 from booth_review.nfl.freeze import schedule_drift
 from booth_review.nfl.gaps import find_nfl_506_gaps
@@ -408,6 +413,43 @@ class ScheduledJob:
         self._mode = mode
         self._schedule_max_calls = schedule_max_calls
         self._nfl_carry_items: list[AttentionItem] = []
+
+    def _aa_crews_step(self, items: list[AttentionItem], now: datetime) -> None:
+        """Friday 18:00 / Saturday 08:00 ET: one conditional re-check of the week's AA
+        crews post, before the build so it sees the page (D-01). It never raises.
+
+        Phase 27 review WR-02: a re-check only (no first fetch of an uncached post),
+        and at most one request per slot occurrence, however many runs land in it."""
+        try:
+            local = now.astimezone(EASTERN)
+            slot = next(
+                (
+                    f"{local.date().isoformat()}T{hour:02d}"
+                    for weekday, hour in SCHEDULE_ONLY
+                    if local.weekday() == weekday
+                    and 0 <= local.hour - hour < CREWS_RECHECK_WINDOW_HOURS
+                ),
+                None,
+            )
+            if slot is None:
+                return
+            week = current_cfb_week(self._runtime.paths, now)
+            if week is None:
+                return
+            items.extend(
+                run_crews_fetch(
+                    self._runtime,
+                    season=week[0],
+                    label=week[1],
+                    now=now,
+                    mode="recheck",
+                    budget=1,
+                    commit=self._commit_enabled,
+                    recheck_slot=slot,
+                )
+            )
+        except Exception as exc:
+            print(f"aa crews: {type(exc).__name__}")
 
     def _aa_cfb_resolver(self) -> AaCfbResolver | None:
         """The shared AA feed resolver, built once per run; none in a dry run."""
@@ -722,6 +764,9 @@ class ScheduledJob:
                     cfbd_failed, _transient, cfbd_counts = cfbd_result
                     any_failed = any_failed or cfbd_failed
                     counts.update({f"cfbd_{key}": value for key, value in cfbd_counts.items()})
+
+            if mode == "schedule" and not self._dry_run:
+                self._aa_crews_step(items, now)
 
             if self._update and not self._dry_run:
                 build_failed, new_last_build_at, deploy_ready, key_leak, build_blocked_now = (

@@ -36,6 +36,13 @@ from booth_review.build.combined import (
     load_combined_figures,
     orphan_decision_count,
 )
+from booth_review.build.crew_aa import (
+    REVIEW_CREW_AA_DISAGREEMENT_COLUMNS,
+    REVIEW_CREW_AA_DISAGREEMENTS,
+    apply_crew_aa,
+    load_506_times,
+    load_aa_pages,
+)
 from booth_review.build.crew_backup import (
     BACKFILL_SEASONS,
     ESPNPR_BACKFILL_GAP_COLUMNS,
@@ -180,6 +187,9 @@ class BuildTables:
     booth_tiers: pl.DataFrame = field(default_factory=empty_booth_tiers_frame)
     # Phase 18: the current season's schedule inputs for telecasts_scheduled and the weekend stamp.
     schedule: ScheduleInputs = field(default_factory=ScheduleInputs)
+    # Phase 27: telecasts whose crew AA filled because 506 listed none (not the ones
+    # AA's booth replaced); they never move the "crews through week N" stamp.
+    aa_filled_ids: frozenset[str] = frozenset()
 
 
 def _combined_review_row(
@@ -443,31 +453,54 @@ def assemble_tables(
     telecasts = override_result.telecasts
     telecast_people = override_result.telecast_people
 
-    # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
-    # 506 and the overrides left crew-less (override > 506 > backup).
-    # 18-13 F7: in the schedule's season the backup also reaches upcoming games, both the
-    # unplotted telecasts 506 listed without a crew and the games with no telecast yet.
+    # Phase 27: Awful Announcing booths coalesce with 506's crews (override > 506 + AA);
+    # the ESPN Press Room backup then fills what is still crew-less.
     schedule = _schedule_inputs(paths, sources, networks, primary_overrides)
-    booth_pages = load_espnpr_booths(paths, seasons)
-    backup = apply_crew_backup(
+    # A backfill season is never "current", even when a build loads only past seasons.
+    current_season = (
+        schedule.season if schedule.games and schedule.season not in BACKFILL_SEASONS else None
+    )
+    scheduled_networks = {gid: net for gid, (net, _) in schedule.networks.items()}
+    aa_pages = load_aa_pages(paths, seasons)
+    aa = apply_crew_aa(
         telecasts,
         telecast_people,
         people,
-        booth_pages.booths,
+        aa_pages,
         resolver=resolver,
         index=index,
         overrides=overrides,
         networks=networks,
         registry=registry,
         season_counts=override_result.season_counts,
-        # A backfill season is never "current", even when a build loads only past seasons.
-        current_season=(
-            schedule.season if schedule.games and schedule.season not in BACKFILL_SEASONS else None
-        ),
-        scheduled_networks={gid: net for gid, (net, _) in schedule.networks.items()},
+        s506_times=load_506_times(paths),
+        current_season=current_season,
+        scheduled_networks=scheduled_networks,
+        override_telecast_ids=frozenset(override_result.statuses),
+    )
+
+    # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
+    # 506 and the overrides left crew-less (override > 506 + AA > backup).
+    # 18-13 F7: in the schedule's season the backup also reaches upcoming games, both the
+    # unplotted telecasts 506 listed without a crew and the games with no telecast yet.
+    booth_pages = load_espnpr_booths(paths, seasons)
+    backup = apply_crew_backup(
+        aa.telecasts,
+        aa.telecast_people,
+        aa.people,
+        booth_pages.booths,
+        resolver=resolver,
+        index=index,
+        overrides=overrides,
+        networks=networks,
+        registry=registry,
+        season_counts=aa.season_counts,
+        current_season=current_season,
+        scheduled_networks=scheduled_networks,
     )
     # The weekend stamp credits ESPN Press Room only for weeks where one of its crews landed
     # on a shown game: a backup-filled telecast or a scheduled row (18-REVIEW IN-01).
+    # A scheduled game both passes cover ships AA's crew, so it is not ESPN's.
     filled_games = {
         int(gid)
         for tid, gid in zip(
@@ -479,12 +512,12 @@ def assemble_tables(
     }
     backup_labels = {
         schedule.labels[gid]
-        for gid in filled_games | set(backup.scheduled_crews)
+        for gid in filled_games | (set(backup.scheduled_crews) - set(aa.scheduled_crews))
         if gid in schedule.labels
     }
     schedule = replace(
         schedule,
-        crews=backup.scheduled_crews,
+        crews={**backup.scheduled_crews, **aa.scheduled_crews},
         stamps=restrict_espnpr_stamps(schedule.stamps, backup_labels),
     )
     telecasts = backup.telecasts
@@ -502,6 +535,7 @@ def assemble_tables(
         override_result.statuses,
         unmatched_506,
         backup_ids=backup.filled_ids,
+        aa_ids=aa.filled_ids,
     )
     no_506_crew_by_season = no_506_crew_counts(
         telecasts_pre,
@@ -509,6 +543,7 @@ def assemble_tables(
         override_result.statuses,
         unmatched_506,
         backup_ids=backup.filled_ids,
+        aa_ids=aa.filled_ids,
     )
     # D-15: the ESPN-family gaps still left, by week, for the user to look up
     # (interim/espnpr_backfill_gaps.csv).
@@ -517,12 +552,18 @@ def assemble_tables(
     )
 
     unmatched_review_rows: list[dict[str, object]] = [
-        dict(unmatched_row(row)) for row in [*telecast_build.unmatched_rows, *backup.unmatched_rows]
+        dict(unmatched_row(row))
+        for row in [*telecast_build.unmatched_rows, *aa.unmatched_rows, *backup.unmatched_rows]
     ]
     unresolved_review_rows: list[dict[str, object]] = [
         dict(row)
         for row in unresolved_rows(
-            [*telecast_build.unresolved_rows, *second.unresolved_rows, *backup.unresolved_rows]
+            [
+                *telecast_build.unresolved_rows,
+                *second.unresolved_rows,
+                *aa.unresolved_rows,
+                *backup.unresolved_rows,
+            ]
         )
     ]
 
@@ -545,9 +586,13 @@ def assemble_tables(
         "review_people_new": (
             NEW_NAME_COLUMNS,
             sorted(
-                [*people_links.new_name_rows, *backup.new_name_rows],
+                [*people_links.new_name_rows, *aa.new_name_rows, *backup.new_name_rows],
                 key=lambda row: str(row["name"]),
             ),
+        ),
+        REVIEW_CREW_AA_DISAGREEMENTS: (
+            REVIEW_CREW_AA_DISAGREEMENT_COLUMNS,
+            aa.review_rows,
         ),
         REVIEW_CREW_BACKUP_DISAGREEMENTS: (
             REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
@@ -595,6 +640,7 @@ def assemble_tables(
     merged_totals.update(
         {f"crew_overrides_{key}": value for key, value in override_result.counts.items()}
     )
+    merged_totals.update({f"crew_aa_{key}": value for key, value in aa.counts.items()})
     merged_totals.update({f"crew_backup_{key}": value for key, value in backup.counts.items()})
     merged_totals.update(
         {f"crew_backup_{key}": value for key, value in booth_pages.counts().items()}
@@ -637,6 +683,7 @@ def assemble_tables(
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
         schedule=schedule,
+        aa_filled_ids=aa.filled_ids,
     )
 
 

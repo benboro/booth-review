@@ -270,6 +270,7 @@ def test_render_coverage_has_espn_press_room_backup_column() -> None:
     assert (
         '<th scope="col">Of which hand-confirmed</th>'
         '<th scope="col">Of which ESPN backup</th>'
+        '<th scope="col">Of which Awful Announcing</th>'
         '<th scope="col">Match rate</th>' in result
     )
     # Season, rated, matched to a game, matched with crew, hand-confirmed, backup.
@@ -282,9 +283,33 @@ def test_render_coverage_backup_column_reads_zero_when_no_backup() -> None:
     result = render_coverage(site)
     row = next(r for r in site.coverage if r.network is None and r.matched_crew_backup == 0)
     assert (
-        f"<td>{row.matched_crew}</td><td>{row.matched_crew_patched}</td><td>0</td>"
+        f"<td>{row.matched_crew}</td><td>{row.matched_crew_patched}</td><td>0</td><td>0</td>"
         f"<td>{_pct_text(row.match_rate)}</td>"
     ) in result
+
+
+def test_render_coverage_has_awful_announcing_column() -> None:
+    """Phase 27 review WR-05: AA crews get their own count after the ESPN backup
+    count, read from matched_crew_aa, so they never read as 506 matches."""
+    payload = copy.deepcopy(_load_fixture())
+    coverage = payload["coverage"]
+    assert isinstance(coverage, list)
+    all_row = next(r for r in coverage if r["season"] == 2026 and r["network"] is None)
+    all_row.update(
+        rated_telecasts=6,
+        matched_game=6,
+        matched_crew=6,
+        matched_crew_patched=2,
+        matched_crew_backup=1,
+        matched_crew_aa=2,
+    )
+    result = render_coverage(validate_site_data(payload))
+    assert (
+        '<th scope="col">Of which ESPN backup</th>'
+        '<th scope="col">Of which Awful Announcing</th>' in result
+    )
+    # Season, rated, matched to a game, matched with crew, hand-confirmed, backup, AA.
+    assert "<tr><td>2026</td><td>6</td><td>6</td><td>6</td><td>2</td><td>1</td><td>2</td>" in result
 
 
 def _pct_text(value: float | None) -> str:
@@ -423,7 +448,21 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 26 Plan 10 (sign-off): the 27 em-dashes in methodology.md and the
 # known-gaps text it splices in become commas, colons, semicolons and parentheses.
 # Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
-_METHODOLOGY_FLAG_OFF_SHA256 = "f96bea18dab8fbd62d196cc7011a4cce943bb0bbdb3d688c0c15e0d508da4d0c"
+# Re-pinned at Phase 27 Plan 07: the methodology gains an Awful Announcing crew-source paragraph
+# (probe: the previous methodology.md reproduces the old digest, so only that prose moved it).
+# Re-pinned at the Phase 27 review (2026-11-01, WR-05): the AA crew-source paragraph says the
+# coverage table counts AA crews in their own column (probe: the previous methodology.md, with
+# the 2.8.0 fixture, reproduces the old digest, so only that sentence moved it).
+# Re-pinned at the Phase 27 review (2026-11-01, docs): the AA paragraph says the job fetches
+# each post the feed watch found, not that posts are saved by hand (only that sentence moved).
+# Re-pinned at the Phase 27 adversarial review (2026-11-01, F4): the AA paragraph says an AA
+# fill never moves the crews stamp but a 506 crew AA replaced still does (probe: the previous
+# methodology.md reproduces the old digest, so only that sentence moved it).
+# Re-pinned at the Phase 27 adversarial review (2026-11-01, F1): the AA paragraph says an AA
+# fill counts toward the coverage match rate, as an ESPN Press Room fill does, and the build
+# check also counts 506's own matches (probe: the previous methodology.md reproduces the old
+# digest, so only those sentences moved it).
+_METHODOLOGY_FLAG_OFF_SHA256 = "c13c80e945695560936afa459beefd371930bbaa541129252ced848421c80ecc"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
@@ -646,3 +685,11 @@ def test_static_toggle_markup_matches_index(page: str) -> None:
 def test_page_html_missing_script_file_raises(tmp_path: Path) -> None:
     with pytest.raises(SiteBuildError):
         write_pages(tmp_path, _fixture_site(), REPO_ROOT / "docs", site_src=tmp_path)
+
+
+def test_methodology_says_aa_fills_count_toward_the_match_rate() -> None:
+    """Phase 27 adversarial panel F1: AA fills of rated games count toward the coverage
+    match rate (as ESPN Press Room fills do); the page never claims it stays 506-only."""
+    rendered = " ".join(render_methodology(_DOCS, _fixture_site()).split())
+    assert "the match rate stays the 506 match rate" not in rendered
+    assert "counts toward the match rate on the coverage page" in rendered

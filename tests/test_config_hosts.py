@@ -37,7 +37,8 @@ def test_second_source_hosts_are_paced_at_least_as_slowly_as_ratingsref(
     """04.19 D-10: TVRG and AA are scripted, never faster than Ratings Reference."""
     assert HOST_SOURCE[host] == source
     policy = HOST_POLICIES[host]
-    assert policy.retry_mode == "standard"
+    # Phase 27: AA is sent once, never retried, so its per-run request cap holds.
+    assert policy.retry_mode == ("single" if source == "aa" else "standard")
     assert policy.min_interval_s >= 3.0
     assert policy.min_interval_s >= HOST_POLICIES["ratingsreference.com"].min_interval_s
     assert policy.jitter_s >= 1.0

@@ -60,6 +60,9 @@ html {
 
   --bg: #F5F7F6;
   --surface: #EBEFED;
+  /* The modal's ground. The dialog and its close button both read it, so the x can never
+     carry a fill of its own; it follows --bg into dark mode. */
+  --modal-bg: var(--bg);
   --ink: #1E2321;
   --muted: #5A6460;
   --rule: #DAE0DD;
@@ -3269,7 +3272,7 @@ dialog.detail-panel {
   border: 1px solid var(--rule);
   border-top: 2px solid var(--ink);
   border-radius: 4px;
-  background: var(--bg);
+  background: var(--modal-bg);
   color: var(--ink);
   width: min(560px, calc(100vw - 32px));
   max-width: none;
@@ -3384,13 +3387,14 @@ dialog.detail-panel {
 }
 
 /* Sticky inside the one scroller (D-38), so the only visible close control
-   stays in view while the body scrolls (review WR-04). The surface fill keeps
-   text scrolling underneath from showing through it. */
+   stays in view while the body scrolls (review WR-04). It shares the dialog's
+   --modal-bg, so it reads as part of the modal while still hiding content that
+   scrolls under it (a transparent x lets the crew box border run through it). */
 #panel-close,
 #nfl-detail-panel .panel-close,
 #mlb-detail-panel .panel-close {
   border: none;
-  background: var(--surface);
+  background: var(--modal-bg);
   cursor: pointer;
   font: var(--font-heading);
   float: right;
