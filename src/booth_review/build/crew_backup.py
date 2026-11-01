@@ -105,6 +105,9 @@ REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS = (
     "pointer",
     "source_url",
     "s506_person_ids",
+    # Phase 27 adversarial panel F10: the crew the backup was compared with came from
+    # Awful Announcing (filled or won over 506), so its people are not 506's.
+    "aa_person_ids",
     "backup_names",
     "backup_person_ids",
 )
@@ -491,6 +494,7 @@ def apply_crew_backup(
                 continue
             statuses[telecast_id] = "differs"
             counts["disagreements"] += 1
+            from_aa = bool(tel.get("crew_aa"))
             review_rows.append(
                 {
                     "telecast_id": telecast_id,
@@ -500,7 +504,8 @@ def apply_crew_backup(
                     "date_et": tel["date_et"],
                     "pointer": winner.booth.pointer,
                     "source_url": winner.booth.source_url,
-                    "s506_person_ids": "|".join(sorted(current)),
+                    "s506_person_ids": "" if from_aa else "|".join(sorted(current)),
+                    "aa_person_ids": "|".join(sorted(current)) if from_aa else "",
                     "backup_names": "|".join(names),
                     "backup_person_ids": "|".join(pid or "" for pid in backup_ids),
                 }

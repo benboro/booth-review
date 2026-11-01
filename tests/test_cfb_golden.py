@@ -89,6 +89,11 @@ booth inside 506's crew is an agreement) moved no digest, since the synthetic va
 AA pages. WR-05: contract 2.8.0 adds coverage matched_crew_aa (0 on every synthetic
 coverage row); site-data.json with that field dropped and the version set back to 2.7.0
 hashes to the Phase 27 Plan 06 digest (cce9771409a8...), so no figure or crew changed.
+
+Phase 27 adversarial review (2026-11-01): F10 adds an aa_person_ids column to the
+header-only review_crew_backup_disagreements.csv (old digest 9e2b349af80b... is the sha256
+of the old header line, the new one the sha256 of the new header line); no other digest
+moved, so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -135,7 +140,7 @@ _GOLDEN: dict[str, str] = {
         "34ae5be1e939909d436c1cd3a9a45391a4e15ea15ce1321b6673b7b6202fede2"
     ),
     "interim/review_crew_backup_disagreements.csv": (
-        "9e2b349af80baa6d783e7ada73158d9c4cc82406581acc35ee961fa1b5208b72"
+        "9b14a0eb0a41a27db5d4da358a2019acedd5adae16064be6a1fd67c71a16a46e"
     ),
     "interim/review_crew_overrides.csv": (
         "e373f4cc3d6670f41f5669fcb0bcaebb82353e435fc152cc9a0d4a1be98bb4ec"

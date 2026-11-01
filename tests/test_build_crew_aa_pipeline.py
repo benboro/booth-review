@@ -268,6 +268,9 @@ def test_espn_booth_does_not_replace_an_aa_filled_crew(
     assert filled["crew_source_label"] == "Awful Announcing"
     _, rows = _csv(git_vault, "review_crew_backup_disagreements")
     assert "500005" in {r["cfbd_game_id"] for r in rows}
+    # F10: the crew ESPN was compared with is AA's, and the row says so.
+    (row,) = [r for r in rows if r["cfbd_game_id"] == "500005"]
+    assert row["s506_person_ids"] == "" and row["aa_person_ids"]
     assert outcome.counts["crew_aa_filled"] == 1
     assert outcome.counts["crew_backup_filled"] == 0
 

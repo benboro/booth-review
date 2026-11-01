@@ -21,7 +21,13 @@ from booth_review.build.crew_aa import (
     load_506_times,
     load_aa_pages,
 )
-from booth_review.build.crew_backup import CREW_BACKUP_LABEL, ScheduledCrew
+from booth_review.build.crew_backup import (
+    CREW_BACKUP_LABEL,
+    REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS,
+    SavedBooth,
+    ScheduledCrew,
+    apply_crew_backup,
+)
 from booth_review.build.people_links import PEOPLE_SCHEMA, TELECAST_PEOPLE_SCHEMA
 from booth_review.build.telecasts import TELECASTS_SCHEMA
 from booth_review.config import DataPaths
@@ -32,6 +38,7 @@ from booth_review.resolve.networks import NetworkRow, NetworkTable
 from booth_review.resolve.teams import TeamResolver
 from booth_review.sources.aa.crews import AaBooth, ParsedCrews, parse_crews
 from booth_review.sources.cfbd.parser import CfbdGame
+from booth_review.sources.espnpr.parser import EspnPrBooth
 
 FIXTURE = Path(__file__).parent / "fixtures" / "aa" / "schedule_synthetic.html"
 REL = "aa/crews/2026/wk-10.html"
@@ -653,3 +660,44 @@ def test_placeholder_in_an_aa_line_never_makes_a_superset() -> None:
     assert result.statuses == {"100-espn": "agrees"}
     assert result.review_rows == [] and result.won_ids == frozenset()
     assert result.counts["superset"] == 0 and result.counts["provisional_persons"] == 0
+
+
+def test_espn_backup_row_on_an_aa_crew_says_aa_not_506() -> None:
+    """Adversarial panel F10: AA fills a crewless telecast, then a differing ESPN
+    Press Room booth is compared with it; the review row lists AA's people as AA's,
+    never under s506_person_ids."""
+    aa = _run([_tel()], [_page([_booth(PBP_ANALYST)])])
+    assert aa.statuses == {"100-espn": "filled"}
+    espn = SavedBooth(
+        booth=EspnPrBooth(
+            season=SEASON,
+            date_et=date(SEASON, 11, 7),
+            kickoff="Noon",
+            away_raw="Silverlake",
+            home_raw="Northfield",
+            network_raw="ESPN",
+            tv_names=("Blair Tolley", "Quinn Harrow"),
+            source_url="https://espnpressroom.com/us/press-releases/2026/11/invented/",
+            pointer="wk-10:1",
+        ),
+        saved_at="2026-11-06T18:00:00Z",
+    )
+    backup = apply_crew_backup(
+        aa.telecasts,
+        aa.telecast_people,
+        aa.people,
+        [espn],
+        resolver=TeamResolver({SEASON: GAMES}, []),
+        index=GameIndex(GAMES),
+        overrides={},
+        networks=_networks(),
+        registry=_registry(),
+        season_counts=aa.season_counts,
+        current_season=SEASON,
+    )
+    assert backup.statuses == {"100-espn": "differs"}
+    (row,) = backup.review_rows
+    assert tuple(row) == REVIEW_CREW_BACKUP_DISAGREEMENT_COLUMNS
+    assert row["s506_person_ids"] == ""
+    assert row["aa_person_ids"] == "avery-lane|morgan-pike"
+    assert row["backup_person_ids"] == "blair-tolley|quinn-harrow"
