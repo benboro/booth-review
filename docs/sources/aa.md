@@ -101,7 +101,10 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
   the same slot sends none. `--week N` re-checks an already-recorded week by hand.
 - **Cap:** at most 2 AA requests per run (the feed and the post; the robots.txt
   check before them is not counted), at least 3 s apart, with the project user agent
-  and robots.txt. A request that fails is never retried.
+  and robots.txt. A request that fails is never retried, and a redirect is never
+  followed: a 3xx answer counts as the request and fails, so a run sends exactly
+  the requests it counts and only to the recorded links. This applies to every
+  awfulannouncing.com request, the 2021-2024 ratings pass included.
 - **Gate:** an AA policy check from the last 30 days with confirmed terms. When
   it is stale, the run skips the fetch and says so in the reminder.
 - **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault. A 304 that

@@ -57,15 +57,25 @@ class _Server:
         self.post_requests = 0
         self.post_status = 200
         self.post_body = POST
+        self.feed_redirect: str | None = None
+        self.post_redirect: str | None = None
+        self.redirect_hits = 0
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/robots.txt":
             self.robots_requests += 1
             return httpx2.Response(200, content=self.robots)
+        if request.url.path == "/moved/":
+            self.redirect_hits += 1
+            return httpx2.Response(200, content=self.feed)
         if request.url.path == "/schedules/feed/" or "feed" in request.url.path:
             self.feed_requests += 1
+            if self.feed_redirect is not None:
+                return httpx2.Response(302, headers={"Location": self.feed_redirect})
             return httpx2.Response(self.status, content=self.feed)
         self.post_requests += 1
+        if self.post_redirect is not None:
+            return httpx2.Response(301, headers={"Location": self.post_redirect})
         if request.headers.get("If-None-Match") == '"p1"':
             return httpx2.Response(304)
         return httpx2.Response(self.post_status, content=self.post_body, headers={"ETag": '"p1"'})
@@ -621,3 +631,46 @@ def test_feed_state_without_rechecks_keeps_its_old_shape(vault_paths: DataPaths)
     assert "crews_rechecked" not in stored
     with pytest.raises(ValueError, match="slot key"):
         _state(vault_paths, crews_rechecked=["friday"])
+
+
+# -- Adversarial panel F6: AA redirects are failures, never followed ---------------
+
+MOVED = "https://awfulannouncing.com/moved/"
+
+
+def test_redirecting_post_after_a_found_feed_sends_exactly_two_requests(
+    vault_paths: DataPaths,
+) -> None:
+    """The feed finds the link, the post answers 301: two AA requests in the run (the
+    redirect target is never requested), nothing cached, a fixed error line."""
+    _ready(vault_paths)
+    server, vault = _Server(), _Vault()
+    server.post_redirect = MOVED
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    assert (server.feed_requests, server.post_requests, server.redirect_hits) == (1, 1, 0)
+    assert server.aa_requests == 2
+    assert not _crews_cached(vault_paths)
+    ledger = [json.loads(x) for x in vault_paths.manifest.read_text().splitlines()]
+    post_lines = [x for x in ledger if x.get("url") == CURRENT]
+    assert [(x["status"], x["path"]) for x in post_lines] == [(301, None)]
+
+
+def test_redirecting_feed_and_post_each_count_one_request(vault_paths: DataPaths) -> None:
+    """A redirecting feed is one request and finds nothing; a redirecting post (link
+    already recorded) is one request. Neither redirect target is ever requested."""
+    _ready(vault_paths)
+    server = _Server()
+    server.feed_redirect = MOVED
+    make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2130)
+    assert (server.feed_requests, server.post_requests, server.redirect_hits) == (1, 0, 0)
+
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    second = _Server()
+    second.post_redirect = MOVED
+    items = make_aa_cfb_resolver(_runtime(vault_paths, second), commit=False)(2026, "10", T2230)
+    assert "aa_crews_skipped_error" in _kinds(items)
+    assert (second.feed_requests, second.post_requests, second.redirect_hits) == (0, 1, 0)
+    assert server.aa_requests + second.aa_requests == 2

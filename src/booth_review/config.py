@@ -26,6 +26,11 @@ class HostPolicy:
     # "single": one attempt, never retried, so a per-run request cap (Awful
     # Announcing: at most 2 per job run) holds even when the server errors.
     retry_mode: Literal["standard", "budgeted", "single"]
+    # False: a 3xx is returned as the response (a failure to the caller), never
+    # followed, so one logical fetch is exactly one request and lands only on the
+    # URL asked for (Awful Announcing, Phase 27 adversarial panel F6). robots.txt
+    # redirects are still followed.
+    follow_redirects: bool = True
 
 
 HOST_POLICIES: dict[str, HostPolicy] = {
@@ -53,7 +58,9 @@ HOST_POLICIES: dict[str, HostPolicy] = {
     "www.thetvratingsguide.com": HostPolicy(
         min_interval_s=3.0, jitter_s=1.0, retry_mode="standard"
     ),
-    "awfulannouncing.com": HostPolicy(min_interval_s=3.0, jitter_s=1.0, retry_mode="single"),
+    "awfulannouncing.com": HostPolicy(
+        min_interval_s=3.0, jitter_s=1.0, retry_mode="single", follow_redirects=False
+    ),
     # MLB: Retrosheet's CSV downloads. statsapi.mlb.com and the relay blog stay
     # unlisted (gated, D-04/D-22/D-09), so the client refuses them.
     "www.retrosheet.org": HostPolicy(min_interval_s=5.0, jitter_s=1.0, retry_mode="standard"),

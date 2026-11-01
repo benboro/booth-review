@@ -775,6 +775,29 @@ def test_redirect_loop_is_cut_off() -> None:
     assert len(log) == 1 + 6
 
 
+def test_aa_redirect_is_returned_not_followed() -> None:
+    """Phase 27 adversarial panel F6: an awfulannouncing.com 3xx is the response
+    (one request, body unread), so a caller's per-run cap counts real requests."""
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (
+            301,
+            b"",
+            {"Location": "https://awfulannouncing.com/b.html"},
+        ),
+    }
+    client = _client(_recording_handler(responses, log))
+    for max_bytes in (None, 1000):
+        resp = client.fetch("https://awfulannouncing.com/a.html", max_bytes=max_bytes)
+        assert resp.status_code == 301 and resp.content == b""
+    assert [str(r.url) for r in log] == [
+        "https://awfulannouncing.com/robots.txt",
+        "https://awfulannouncing.com/a.html",
+        "https://awfulannouncing.com/a.html",
+    ]
+
+
 # -- Response size cap --------------------------------------------------------
 
 _CAP_URL = "https://506sports.com/ncaaf.php?yr=2025&wk=1"
