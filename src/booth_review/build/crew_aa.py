@@ -4,7 +4,9 @@ AA's weekly college football announcing-schedule post (cached by
 `booth-review collect aa --crews`) gives whole role-tagged booths. This pass
 coalesces them with 506's crews:
 
-- A hand-confirmed override always wins (04.3 D-09), untouched.
+- A hand-confirmed override always wins (04.3 D-09), untouched, whatever its
+  status (a `redundant` override leaves no marker on the frame, so the caller
+  passes every override's telecast id).
 - A main telecast 506 listed no crew for (plotted, unrated or not yet plotted)
   takes AA's whole booth, credited "Awful Announcing" with the post's canonical
   URL. `crew_aa` marks it; `crew_patched` is never set, so the 506 match-rate
@@ -26,7 +28,7 @@ invented names.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Final
@@ -313,9 +315,12 @@ def apply_crew_aa(
     s506_times: Mapping[tuple[int, str], datetime],
     current_season: int | None = None,
     scheduled_networks: Mapping[int, str | None] | None = None,
+    override_telecast_ids: Collection[str] = frozenset(),
 ) -> CrewAaResult:
     """Coalesce 506 and Awful Announcing main crews (see module docstring).
-    Run after apply_crew_overrides. Inputs are not mutated; failures are count-only.
+    Run after apply_crew_overrides, passing every telecast id it gave a status
+    (including `redundant`) as `override_telecast_ids`. Inputs are not mutated;
+    failures are count-only.
     """
     counts: dict[str, int] = dict.fromkeys(_COUNT_KEYS, 0)
     new_counts = {season: dict(values) for season, values in season_counts.items()}
@@ -336,12 +341,14 @@ def apply_crew_aa(
     for row in telecasts.filter(pl.col("feed_type") == "main").iter_rows(named=True):
         mains_by_game.setdefault(row["game_id"], []).append((row["telecast_id"], row["network_id"]))
         info[row["telecast_id"]] = row
-    override_ids = set(
-        telecasts.filter(pl.col("crew_patched").fill_null(False))["telecast_id"].to_list()
-    ) | set(
-        telecast_people.filter(
-            (pl.col("feed_type") == "main") & (pl.col("source") == CREW_OVERRIDE_SOURCE)
-        )["telecast_id"].to_list()
+    override_ids = (
+        set(override_telecast_ids)
+        | set(telecasts.filter(pl.col("crew_patched").fill_null(False))["telecast_id"].to_list())
+        | set(
+            telecast_people.filter(
+                (pl.col("feed_type") == "main") & (pl.col("source") == CREW_OVERRIDE_SOURCE)
+            )["telecast_id"].to_list()
+        )
     )
     existing_main: dict[str, set[str]] = {}
     for row in telecast_people.filter(pl.col("feed_type") == "main").iter_rows(named=True):

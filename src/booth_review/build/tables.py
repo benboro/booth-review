@@ -473,6 +473,7 @@ def assemble_tables(
         s506_times=load_506_times(paths),
         current_season=current_season,
         scheduled_networks=scheduled_networks,
+        override_telecast_ids=frozenset(override_result.statuses),
     )
 
     # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that

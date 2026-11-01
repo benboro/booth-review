@@ -484,6 +484,34 @@ def test_override_rows_alone_also_protect_a_telecast() -> None:
     assert result.statuses == {"100-espn": "override"}
 
 
+def test_redundant_override_telecast_is_never_changed() -> None:
+    """Phase 27 review CR-01: a `redundant` override (it equals 506's crew) leaves
+    no marker on the frames, so the caller passes its id; AA never replaces it."""
+    tels = [_tel(crew_matched=True, crew_source_label="506 Sports")]
+    tp = [_tp("100-espn", "avery-lane", 0)]
+    for booth in (PBP_ANALYST, (("Blair Tolley", "pbp"),)):
+        result = apply_crew_aa(
+            pl.DataFrame(tels, schema=TELECASTS_SCHEMA),
+            pl.DataFrame(tp, schema=TELECAST_PEOPLE_SCHEMA),
+            _people_frame(),
+            [_page([_booth(booth)])],
+            resolver=TeamResolver({SEASON: GAMES}, []),
+            index=GameIndex(GAMES),
+            overrides={},
+            networks=_networks(),
+            registry=_registry(),
+            season_counts=_COUNTS,
+            s506_times={(SEASON, "10"): T_OLD},
+            current_season=SEASON,
+            override_telecast_ids=frozenset({"100-espn"}),
+        )
+        assert result.statuses == {"100-espn": "override"}
+        assert result.counts["kept_override"] == 1 and result.review_rows == []
+        assert _crew_of(result) == [("avery-lane", "pbp")]
+        tel = result.telecasts.to_dicts()[0]
+        assert tel["crew_aa"] is False and tel["crew_source_label"] == "506 Sports"
+
+
 def test_booth_on_another_network_is_skipped_and_counted() -> None:
     result = _run([_tel()], [_page([_booth(PBP_ANALYST, network="ABC")])])
     assert result.counts["network_mismatch"] == 1 and result.counts["filled"] == 0

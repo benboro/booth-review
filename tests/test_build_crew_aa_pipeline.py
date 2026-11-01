@@ -208,6 +208,52 @@ def test_a_newer_aa_page_replaces_a_differing_506_crew(
     assert won["crew_patched"] is False
 
 
+def test_a_redundant_override_beats_a_newer_aa_page(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Phase 27 review CR-01: an override equal to 506's crew (`redundant`) still
+    wins over a newer, differing AA booth."""
+    reference = _setup(git_vault, tmp_path, monkeypatch)
+    _build(git_vault, reference)
+    target = _telecast(git_vault, 500002)
+    crew = _main_people(git_vault, target["telecast_id"])
+    # The synthetic 506 crew is provisional; an override needs registered people.
+    names = pl.read_parquet(git_vault.vault / "processed" / "people.parquet").filter(
+        pl.col("person_id").is_in(crew["person_id"].to_list()) & ~pl.col("registered")
+    )
+    with (reference / "people.csv").open("a", encoding="utf-8", newline="") as fh:
+        for row in names.iter_rows(named=True):
+            name = row["canonical_name"]
+            fh.write(f"{row['person_id']},{name},{name},{row['usual_role']},\n")
+    _build(git_vault, reference)
+    crew = _main_people(git_vault, target["telecast_id"])
+    before = crew.select("person_id", "role").sort("person_id")
+    rows = [
+        f"500002,ecn,{position},{person},{role},correction,outlet,Outlet,https://example.com/a\n"
+        for position, (person, role) in enumerate(
+            zip(crew["person_id"].to_list(), crew["role"].to_list(), strict=True)
+        )
+    ]
+    (reference / "crew_overrides.csv").write_text(
+        "cfbd_game_id,network_id,crew_position,person_id,role,reason,"
+        "source_kind,source_name,source_url\n" + "".join(rows),
+        encoding="utf-8",
+    )
+    _save_aa(git_vault)
+    _save_506_times(git_vault, "2025-11-01T00:00:00Z")  # the AA page is newer
+    outcome = _build(git_vault, reference)
+
+    assert outcome.counts["crew_aa_aa_won"] == 0
+    assert outcome.counts["crew_aa_disagreements"] == 0
+    kept = _telecast(git_vault, 500002)
+    assert kept["crew_aa"] is False
+    assert kept["crew_source_label"] == target["crew_source_label"]
+    after = _main_people(git_vault, kept["telecast_id"])
+    assert after.select("person_id", "role").sort("person_id").equals(before)
+    _, review = _csv(git_vault, "review_crew_aa_disagreements")
+    assert review == []
+
+
 def test_espn_booth_does_not_replace_an_aa_filled_crew(
     git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
