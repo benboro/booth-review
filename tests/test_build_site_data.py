@@ -1423,6 +1423,7 @@ def _patched_freshness_tables(
     second_week: int,
     second_patched: bool,
     second_backup: bool = False,
+    second_aa: bool = False,
 ) -> BuildTables:
     games = [
         _game_row(game_id=1, week=2),
@@ -1445,6 +1446,7 @@ def _patched_freshness_tables(
             rr_record_urls=["https://example.com/r2"],
             crew_patched=second_patched,
             crew_backup=second_backup,
+            crew_aa=second_aa,
         ),
     ]
     return _build_tables(
@@ -1485,6 +1487,20 @@ def test_freshness_crews_stamp_ignores_backup_crews(build_reference: Path) -> No
     payload = _site(tables, build_reference)
     assert payload["freshness"]["crews_through_week"] == "2"
     assert payload["freshness"]["viewership_through_week"] == "3"
+
+
+def test_freshness_crews_stamp_ignores_aa_crews(build_reference: Path) -> None:
+    # Phase 27: an AA-sourced crew never moves the 506 stamp, though its week is plotted.
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False, second_aa=True
+    )
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "2"
+    assert payload["freshness"]["viewership_through_week"] == "3"
+    plain = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False
+    )
+    assert _site(plain, build_reference)["freshness"]["crews_through_week"] == "3"
 
 
 def test_coverage_emits_matched_crew_backup_per_network_and_season(
@@ -2570,6 +2586,27 @@ def test_scheduled_game_ships_its_press_room_booth(
     assert block["crew_source_label"][k] == "ESPN Press Room"
     others = [i for i in range(len(names)) if i != k]
     assert all(block["crew"][i] == [] and block["crew_source_url"][i] is None for i in others)
+
+
+def test_scheduled_game_credits_an_aa_booth_to_awful_announcing(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    url = "https://awfulannouncing.com/college-football/example-week-announcing-schedule.html"
+    crew = ScheduledCrew(
+        (("mike-golic-jr", "pbp"), ("dale-harlow", "analyst")), url, "Awful Announcing"
+    )
+    payload = _scheduled_site(
+        small_tables,
+        _weeks_four_to_six(),
+        {102: ("net-a", ["net-a"])},
+        build_reference,
+        crews={102: crew},
+    )
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    k = names.index("Sched Home 102")
+    assert block["crew_source_url"][k] == url
+    assert block["crew_source_label"][k] == "Awful Announcing"
 
 
 def test_scheduled_empty_without_schedule_inputs(

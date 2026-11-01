@@ -594,3 +594,25 @@ def test_stratified_sample_leaves_out_espn_press_room_backup_crews() -> None:
     drawn = {row.telecast_id for row in result}
     assert drawn.isdisjoint({"95-net-a", "96-net-a"})
     assert len(drawn) == 3
+
+
+def test_stratified_sample_leaves_out_awful_announcing_crews() -> None:
+    games, telecasts = _make_season_telecasts(2024, {"net-a": 3}, game_offset=0)
+    telecasts.append(_telecast_row(telecast_id="96-net-a", game_id=96, season=2024, crew_aa=True))
+    telecasts.append(_telecast_row(telecast_id="95-net-a", game_id=95, season=2024))
+    games += [_game_row(game_id=96, season=2024), _game_row(game_id=95, season=2024)]
+    telecast_people = [
+        _telecast_people_row(telecast_id="95-net-a", s506_pointer=None, source="crew_aa"),
+    ]
+
+    result = stratified_sample(
+        _telecasts_frame(telecasts),
+        _telecast_people_frame(telecast_people),
+        _people_frame([]),
+        _games_frame(games),
+        size=10,
+        seed=1,
+    )
+    drawn = {row.telecast_id for row in result}
+    assert drawn.isdisjoint({"95-net-a", "96-net-a"})
+    assert len(drawn) == 3

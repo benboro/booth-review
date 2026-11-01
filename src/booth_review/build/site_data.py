@@ -29,7 +29,6 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
-from booth_review.build.crew_backup import CREW_BACKUP_LABEL
 from booth_review.build.named_games import (
     build_franchises,
     check_game_slugs,
@@ -209,9 +208,12 @@ def _build_freshness(tables: BuildTables, label: str | None = None) -> dict[str,
     # overrides sit on crews 506 did list and still advance the stamp.
     # D-14 (04.19): backup crews never move the 506 stamp either; an ESPN
     # Press Room booth covers one network family, so it can't claim a week.
+    # Phase 27: AA crews (filled or won over 506) never move it either.
     crew_filter = (
         pl.col("crew_matched") & ~pl.col("crew_patched") & ~pl.col("crew_backup").fill_null(False)
     )
+    if "crew_aa" in season_telecasts.columns:  # older telecasts.parquet lack it
+        crew_filter = crew_filter & ~pl.col("crew_aa").fill_null(False)
     crew_ids: set[str] = set(season_telecasts.filter(crew_filter)["telecast_id"].to_list())
     viewership_ids: set[str] = set(
         season_telecasts.filter(pl.col("plotted"))["telecast_id"].to_list()
@@ -823,7 +825,7 @@ def build_site_data(
             sched_crew.source_url if sched_crew is not None else None
         )
         scheduled_columns["crew_source_label"].append(
-            CREW_BACKUP_LABEL if sched_crew is not None else None
+            sched_crew.label if sched_crew is not None else None
         )
         for side in ("home", "away"):
             conf = row[f"{side}_conference"]
