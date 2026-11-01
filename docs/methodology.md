@@ -559,8 +559,10 @@ to a review file (`review_crew_aa_disagreements.csv`). The detail view reads
 table counts Awful Announcing crews in their own column. A crew Awful
 Announcing fills (506 named none) never moves the "crews through week N" stamp,
 but a 506 crew it replaced still does, since 506 named one. Awful Announcing
-crews are never drawn for the join sample, so the match rate stays the 506
-match rate.
+crews are never drawn for the join sample. As with ESPN Press Room, a crew Awful
+Announcing fills on a rated game counts toward the match rate on the coverage
+page. The check that stops a build when matches drop also counts the records 506
+alone matched, so a crew from Awful Announcing cannot hide a lost 506 crew.
 
 ESPN Press Room is a backup crew source for ESPN-family games. Its announcer
 schedules and weekly releases are saved by hand and imported, never fetched.

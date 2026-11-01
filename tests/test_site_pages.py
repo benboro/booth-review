@@ -458,7 +458,11 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at the Phase 27 adversarial review (2026-11-01, F4): the AA paragraph says an AA
 # fill never moves the crews stamp but a 506 crew AA replaced still does (probe: the previous
 # methodology.md reproduces the old digest, so only that sentence moved it).
-_METHODOLOGY_FLAG_OFF_SHA256 = "63b6e74bd62fafddb0665d0d2c49e21763038a0d9bcc0dae4c7f45af396b5041"
+# Re-pinned at the Phase 27 adversarial review (2026-11-01, F1): the AA paragraph says an AA
+# fill counts toward the coverage match rate, as an ESPN Press Room fill does, and the build
+# check also counts 506's own matches (probe: the previous methodology.md reproduces the old
+# digest, so only those sentences moved it).
+_METHODOLOGY_FLAG_OFF_SHA256 = "c13c80e945695560936afa459beefd371930bbaa541129252ced848421c80ecc"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
@@ -681,3 +685,11 @@ def test_static_toggle_markup_matches_index(page: str) -> None:
 def test_page_html_missing_script_file_raises(tmp_path: Path) -> None:
     with pytest.raises(SiteBuildError):
         write_pages(tmp_path, _fixture_site(), REPO_ROOT / "docs", site_src=tmp_path)
+
+
+def test_methodology_says_aa_fills_count_toward_the_match_rate() -> None:
+    """Phase 27 adversarial panel F1: AA fills of rated games count toward the coverage
+    match rate (as ESPN Press Room fills do); the page never claims it stays 506-only."""
+    rendered = " ".join(render_methodology(_DOCS, _fixture_site()).split())
+    assert "the match rate stays the 506 match rate" not in rendered
+    assert "counts toward the match rate on the coverage page" in rendered
