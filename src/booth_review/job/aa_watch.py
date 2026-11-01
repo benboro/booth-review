@@ -95,10 +95,22 @@ def run_crews_fetch(
     is recorded in the feed-watch state just before its one request goes out, and a
     later run in the same slot sends nothing (Phase 27 review WR-02)."""
     marked: list[str] = []
+    sent: list[bool] = []
 
     def mark_slot() -> None:
+        sent.append(True)
         if recheck_slot is not None and record_crews_recheck(runtime.paths, recheck_slot):
             marked.append(_FEED_STATE)
+
+    def commit_paths(paths: list[str]) -> None:
+        if not commit:
+            return
+        try:
+            runtime.vault.commit_batch(
+                batch_message("job", "aa", "crews", {"requests": 1}), paths=[*paths, *marked]
+            )
+        except BoothReviewError as exc:
+            _LOG.warning("aa crews: commit failed: %s", type(exc).__name__)
 
     try:
         if recheck_slot is not None and crews_rechecked(runtime.paths, recheck_slot):
@@ -116,27 +128,30 @@ def run_crews_fetch(
         )
     except (RobotsDisallowedError, PolicyRobotsError) as exc:
         _LOG.warning("aa crews: blocked: %s", type(exc).__name__)
+        if sent:
+            commit_paths(_FAILED_REQUEST_PATHS)
         return [aa_crews_skipped("robots")]
     except Exception as exc:
+        # Phase 27 review WR-03: a failed request (HTTP error, a post that fails
+        # validation, ...) still appended its audit line; commit it, as the CLI
+        # does, and say so in a fixed line with no URL or page text.
         _LOG.warning("aa crews: %s", type(exc).__name__)
-        return []
+        if sent:
+            commit_paths(_FAILED_REQUEST_PATHS)
+        return [aa_crews_skipped("error")]
     items: list[AttentionItem] = []
     if result.outcome == "stale_policy":
         items.append(aa_crews_skipped("policy"))
     elif result.outcome == "not_cached":
         items.append(aa_crews_skipped("not_cached"))
-    if commit and result.requests:
-        try:
-            runtime.vault.commit_batch(
-                batch_message("job", "aa", "crews", {"requests": result.requests}),
-                paths=[*result.touched, *marked],
-            )
-        except BoothReviewError as exc:
-            _LOG.warning("aa crews: commit failed: %s", type(exc).__name__)
+    if result.requests:
+        commit_paths(list(result.touched))
     return items
 
 
 _FEED_STATE = "ledger/aa_feed_watch.json"
+# What a failed crews request leaves behind: its audit line and the robots copy.
+_FAILED_REQUEST_PATHS = ["ledger/requests.jsonl", "raw/_robots/awfulannouncing.com"]
 
 _REQUEST_PATHS = [
     "ledger/aa_feed_watch.json",

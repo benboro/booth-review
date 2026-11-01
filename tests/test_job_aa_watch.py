@@ -56,6 +56,7 @@ class _Server:
         self.robots_requests = 0
         self.post_requests = 0
         self.post_status = 200
+        self.post_body = POST
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/robots.txt":
@@ -67,7 +68,7 @@ class _Server:
         self.post_requests += 1
         if request.headers.get("If-None-Match") == '"p1"':
             return httpx2.Response(304)
-        return httpx2.Response(self.post_status, content=POST, headers={"ETag": '"p1"'})
+        return httpx2.Response(self.post_status, content=self.post_body, headers={"ETag": '"p1"'})
 
     @property
     def total(self) -> int:
@@ -462,9 +463,37 @@ def test_crews_post_error_is_swallowed(vault_paths: DataPaths) -> None:
     server = _Server()
     server.post_status = 403
     items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2130)
-    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
     assert server.aa_requests <= 2
     assert not _crews_cached(vault_paths)
+
+
+@pytest.mark.parametrize("failure", ["http_500", "invalid_post"])
+def test_crews_failed_request_says_so_and_commits_its_audit_line(
+    vault_paths: DataPaths, failure: str
+) -> None:
+    """Phase 27 review WR-03: a failed fetch gets a fixed line (no URL, no page text)
+    and its request ledger line is committed, as the CLI does."""
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    if failure == "http_500":
+        server.post_status = 500
+    else:
+        server.post_body = b"<html><body><p>SENTINEL PAGE TEXT</p></body></html>"
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2230
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    line = items[1].line
+    assert "http" not in line and "SENTINEL" not in line
+    assert "awfulannouncing" not in line
+    assert server.post_requests == 1
+    assert not _crews_cached(vault_paths)
+    ((message, committed),) = vault.calls
+    assert "crews" in message
+    assert committed == ["ledger/requests.jsonl", "raw/_robots/awfulannouncing.com"]
+    ledger = (vault_paths.ledger / "requests.jsonl").read_text(encoding="utf-8")
+    assert "SENTINEL" not in ledger and ledger.strip()
 
 
 def test_crews_robots_disallow_posts_skipped_line(vault_paths: DataPaths) -> None:

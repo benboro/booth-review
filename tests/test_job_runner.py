@@ -2660,7 +2660,11 @@ def test_a_clean_full_run_keeps_exit_0_ok_and_zero_attention_with_a_reminder_due
 
     # Phase 25: a fresh AA policy check and a verified feed keep the Tue slot clean.
     _seed_aa_ready(paths)
-    handle = mock_transport_factory(_aa_responses(_espnpr_responses()))
+    responses = _aa_responses(_espnpr_responses())
+    # Phase 27: the Tuesday run then fetches the post it found (a failed fetch is an
+    # attention line since the Phase 27 review WR-03), so serve a valid one.
+    responses[_AA_POST] = (200, _CREWS_POST, {"ETag": '"p1"'})
+    handle = mock_transport_factory(responses)
     result = _wr12_job(paths, handle, fake_clock, _REMINDER_TUE).run()
 
     assert [i.kind for i in result.items].count("reminder_aa_cfb_link") == 1
