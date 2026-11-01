@@ -112,9 +112,12 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
 
 Coalescing with 506, in order, per game and network:
 
-1. A `crew_overrides.csv` row wins.
+1. A `crew_overrides.csv` row wins, whatever its status (one equal to 506's crew
+   included).
 2. A lone source fills.
-3. The same people from both: 506's crew and attribution are kept (corroborated).
+3. The same people from both, or an AA booth whose people are all in 506's crew
+   (AA drops reporters 506 may list): 506's crew and attribution are kept
+   (corroborated), with no review row.
 4. AA lists every person 506 lists, plus more: AA's whole booth fills (D-04), with
    a review row `relation=superset`.
 5. Any other difference goes to the newer page (D-02): 506's manifest `saved_at`
