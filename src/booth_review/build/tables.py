@@ -187,6 +187,9 @@ class BuildTables:
     booth_tiers: pl.DataFrame = field(default_factory=empty_booth_tiers_frame)
     # Phase 18: the current season's schedule inputs for telecasts_scheduled and the weekend stamp.
     schedule: ScheduleInputs = field(default_factory=ScheduleInputs)
+    # Phase 27: telecasts whose crew AA filled because 506 listed none (not the ones
+    # AA's booth replaced); they never move the "crews through week N" stamp.
+    aa_filled_ids: frozenset[str] = frozenset()
 
 
 def _combined_review_row(
@@ -680,6 +683,7 @@ def assemble_tables(
         second_source_gates=second.gates,
         second_source_accept_warnings=_accept_warnings(accept_lines, second, seasons),
         schedule=schedule,
+        aa_filled_ids=aa.filled_ids,
     )
 
 

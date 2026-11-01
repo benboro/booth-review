@@ -208,12 +208,14 @@ def _build_freshness(tables: BuildTables, label: str | None = None) -> dict[str,
     # overrides sit on crews 506 did list and still advance the stamp.
     # D-14 (04.19): backup crews never move the 506 stamp either; an ESPN
     # Press Room booth covers one network family, so it can't claim a week.
-    # Phase 27: AA crews (filled or won over 506) never move it either.
+    # Phase 27: an AA fill (506 listed no crew) never moves it either, but a crew
+    # 506 listed still counts when AA's booth replaced it (adversarial panel F4).
     crew_filter = (
-        pl.col("crew_matched") & ~pl.col("crew_patched") & ~pl.col("crew_backup").fill_null(False)
+        pl.col("crew_matched")
+        & ~pl.col("crew_patched")
+        & ~pl.col("crew_backup").fill_null(False)
+        & ~pl.col("telecast_id").is_in(sorted(tables.aa_filled_ids))
     )
-    if "crew_aa" in season_telecasts.columns:  # older telecasts.parquet lack it
-        crew_filter = crew_filter & ~pl.col("crew_aa").fill_null(False)
     crew_ids: set[str] = set(season_telecasts.filter(crew_filter)["telecast_id"].to_list())
     viewership_ids: set[str] = set(
         season_telecasts.filter(pl.col("plotted"))["telecast_id"].to_list()

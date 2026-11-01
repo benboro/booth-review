@@ -1490,10 +1490,14 @@ def test_freshness_crews_stamp_ignores_backup_crews(build_reference: Path) -> No
 
 
 def test_freshness_crews_stamp_ignores_aa_crews(build_reference: Path) -> None:
-    # Phase 27: an AA-sourced crew never moves the 506 stamp, though its week is plotted.
+    # Phase 27: an AA fill (506 listed no crew) never moves the 506 stamp, though its
+    # week is plotted.
+    from dataclasses import replace
+
     tables = _patched_freshness_tables(
         second_season_type="regular", second_week=3, second_patched=False, second_aa=True
     )
+    tables = replace(tables, aa_filled_ids=frozenset({"2-net-a"}))
     payload = _site(tables, build_reference)
     assert payload["freshness"]["crews_through_week"] == "2"
     assert payload["freshness"]["viewership_through_week"] == "3"
@@ -1501,6 +1505,17 @@ def test_freshness_crews_stamp_ignores_aa_crews(build_reference: Path) -> None:
         second_season_type="regular", second_week=3, second_patched=False
     )
     assert _site(plain, build_reference)["freshness"]["crews_through_week"] == "3"
+
+
+def test_freshness_crews_stamp_counts_a_506_crew_aa_replaced(build_reference: Path) -> None:
+    """Adversarial panel F4: 506 listed the latest week's crew and AA's booth replaced
+    it (aa_won or superset); 506 still supplied a crew, so the stamp stays at 3."""
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False, second_aa=True
+    )
+    assert tables.aa_filled_ids == frozenset()
+    payload = _site(tables, build_reference)
+    assert payload["freshness"]["crews_through_week"] == "3"
 
 
 def test_coverage_emits_matched_crew_backup_per_network_and_season(

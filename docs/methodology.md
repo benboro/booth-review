@@ -556,9 +556,11 @@ page wins, and a tie on page time, or a 506 listing with no kickoff time, keeps
 506. Booths are never merged person by person, and each disagreement is written
 to a review file (`review_crew_aa_disagreements.csv`). The detail view reads
 "Crew source: Awful Announcing ↗", linked to the exact post. The coverage
-table counts Awful Announcing crews in their own column. Awful Announcing
-crews never move the "crews through week N" stamp and are never drawn for the
-join sample, so the match rate stays the 506 match rate.
+table counts Awful Announcing crews in their own column. A crew Awful
+Announcing fills (506 named none) never moves the "crews through week N" stamp,
+but a 506 crew it replaced still does, since 506 named one. Awful Announcing
+crews are never drawn for the join sample, so the match rate stays the 506
+match rate.
 
 ESPN Press Room is a backup crew source for ESPN-family games. Its announcer
 schedules and weekly releases are saved by hand and imported, never fetched.

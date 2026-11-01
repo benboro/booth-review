@@ -455,7 +455,10 @@ def test_render_methodology_resolves_md_links_against_docs(
 # the 2.8.0 fixture, reproduces the old digest, so only that sentence moved it).
 # Re-pinned at the Phase 27 review (2026-11-01, docs): the AA paragraph says the job fetches
 # each post the feed watch found, not that posts are saved by hand (only that sentence moved).
-_METHODOLOGY_FLAG_OFF_SHA256 = "830fba0f1ede79103d189e20c0855e12335e8eba5eb15b5b29afed89dcf211a7"
+# Re-pinned at the Phase 27 adversarial review (2026-11-01, F4): the AA paragraph says an AA
+# fill never moves the crews stamp but a 506 crew AA replaced still does (probe: the previous
+# methodology.md reproduces the old digest, so only that sentence moved it).
+_METHODOLOGY_FLAG_OFF_SHA256 = "63b6e74bd62fafddb0665d0d2c49e21763038a0d9bcc0dae4c7f45af396b5041"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
