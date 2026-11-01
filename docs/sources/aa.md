@@ -92,6 +92,9 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
 - **URLs:** only the week links recorded in `ledger/aa_feed_watch.json`, on the
   AA host. The command never takes a URL argument.
 - **When:** the Tuesday reminder run fetches a post the first time it finds it.
+  If that request fails, the week is recorded in `ledger/aa_feed_watch.json`
+  (`crews_failed`), and the 22:30 backup and later Tuesday runs do not send it
+  again; they say so in a reminder line.
   Conditional re-checks (ETag / Last-Modified) run Friday 18:00 and Saturday
   08:00 ET, since AA edits a post through Saturday. They only re-check a post
   that is already cached and has a stored ETag or Last-Modified (otherwise the

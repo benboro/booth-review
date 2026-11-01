@@ -501,7 +501,12 @@ def test_crews_failed_request_says_so_and_commits_its_audit_line(
     assert not _crews_cached(vault_paths)
     ((message, committed),) = vault.calls
     assert "crews" in message
-    assert committed == ["ledger/requests.jsonl", "raw/_robots/awfulannouncing.com"]
+    # F8: the week's failure mark is committed with the audit line.
+    assert committed == [
+        "ledger/requests.jsonl",
+        "raw/_robots/awfulannouncing.com",
+        "ledger/aa_feed_watch.json",
+    ]
     ledger = (vault_paths.ledger / "requests.jsonl").read_text(encoding="utf-8")
     assert "SENTINEL" not in ledger and ledger.strip()
 
@@ -674,3 +679,50 @@ def test_redirecting_feed_and_post_each_count_one_request(vault_paths: DataPaths
     assert "aa_crews_skipped_error" in _kinds(items)
     assert (second.feed_requests, second.post_requests, second.redirect_hits) == (0, 1, 0)
     assert server.aa_requests + second.aa_requests == 2
+
+
+# -- Adversarial panel F8: a failed Tuesday post request is never sent again -------
+
+
+def test_failed_tuesday_post_is_not_requested_again_by_the_backup_run(
+    vault_paths: DataPaths,
+) -> None:
+    _ready(vault_paths)
+    first, vault = _Server(), _Vault()
+    first.post_status = 500
+    items = make_aa_cfb_resolver(_runtime(vault_paths, first, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_error"]
+    assert first.post_requests == 1
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert stored["crews_failed"] == ["2026-10"]
+    assert "ledger/aa_feed_watch.json" in vault.calls[-1][1]
+
+    for later in (T2230, T2330):
+        backup, vault2 = _Server(), _Vault()
+        items = make_aa_cfb_resolver(_runtime(vault_paths, backup, vault2), commit=True)(
+            2026, "10", later
+        )
+        assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_failed_before"]
+        assert "http" not in items[1].line and "awfulannouncing" not in items[1].line
+        assert backup.aa_requests == 0 and vault2.calls == []
+
+
+def test_failed_mark_does_not_stop_the_friday_recheck_of_a_cached_post(
+    vault_paths: DataPaths,
+) -> None:
+    """The Friday/Saturday rules are unchanged: they re-check a cached post."""
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT}, crews_failed=["2026-10"])
+    _cache_post(vault_paths)
+    server = _Server()
+    assert _recheck(vault_paths, server) == []
+    assert server.post_requests == 1
+
+
+def test_feed_state_without_failures_has_no_crews_failed_key(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert "crews_failed" not in stored
+    assert load_feed_state(vault_paths).crews_failed == []

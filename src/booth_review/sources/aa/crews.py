@@ -344,7 +344,8 @@ CREWS_SEASON = 2026
 _ROBOTS_CACHE = "raw/_robots/awfulannouncing.com"
 _REQUESTS_LEDGER = "ledger/requests.jsonl"
 
-# if_missing: fetch only when not cached (the Tuesday run). conditional: fetch, or
+# if_missing: fetch only when not cached and no earlier request for the week failed
+# (the Tuesday runs). conditional: fetch, or
 # re-check a cached post with its validators (the CLI). recheck: re-check a cached
 # post only, and only with a stored ETag or Last-Modified; never a first fetch or a
 # plain GET (the Friday/Saturday runs, Phase 27 review WR-02, adversarial panel F7).
@@ -355,6 +356,7 @@ CrewsOutcome = Literal[
     "cached",
     "not_cached",
     "no_validator",
+    "failed_before",
     "no_link",
     "stale_policy",
     "not_season",
@@ -408,7 +410,8 @@ def fetch_week_crews(
         return _result("not_season")
     if not policy_fresh(paths, "aa", now):
         return _result("stale_policy")
-    url = load_feed_state(paths).weeks.get(week_key(season, label))
+    state = load_feed_state(paths)
+    url = state.weeks.get(week_key(season, label))
     if url is None:
         return _result("no_link")
     _check_url(url)
@@ -416,6 +419,10 @@ def fetch_week_crews(
     cached = cache.status(req) == "cached"
     if mode == "if_missing" and cached:
         return CrewsFetchResult("cached", 0, url, req.cache_path, ())
+    if mode == "if_missing" and week_key(season, label) in state.crews_failed:
+        # The Tuesday request for this week already failed; it is never retried
+        # (adversarial panel F8).
+        return CrewsFetchResult("failed_before", 0, url, None, ())
     if mode == "recheck" and not cached:
         return CrewsFetchResult("not_cached", 0, url, None, ())
     if mode == "recheck" and cache.stored_validators(req) is None:

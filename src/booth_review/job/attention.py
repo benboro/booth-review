@@ -340,7 +340,7 @@ def aa_feed_blocked() -> AttentionItem:
 
 
 def aa_crews_skipped(
-    reason: Literal["policy", "robots", "not_cached", "no_validator", "error"],
+    reason: Literal["policy", "robots", "not_cached", "no_validator", "failed_before", "error"],
 ) -> AttentionItem:
     """Phase 27: the crews post was not fetched; fixed lines, no URL or page text."""
     if reason == "robots":
@@ -356,6 +356,12 @@ def aa_crews_skipped(
         line = (
             "aa crews post not re-checked: the week post is not cached and this run only "
             "re-checks, run booth-review collect aa --crews to fetch it"
+        )
+    elif reason == "failed_before":
+        # Adversarial panel F8: a failed request is never retried by the job.
+        line = (
+            "aa crews post not fetched: an earlier request for this week failed and the "
+            "job never retries it, check the log of that run"
         )
     elif reason == "no_validator":
         # Adversarial panel F7: a scheduled re-check is conditional or not sent.

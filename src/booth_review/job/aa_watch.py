@@ -42,6 +42,7 @@ from booth_review.sources.aa.feed import (
     crews_rechecked,
     load_feed_state,
     record_blind_week,
+    record_crews_failed,
     record_crews_recheck,
     week_key,
 )
@@ -102,6 +103,13 @@ def run_crews_fetch(
         if recheck_slot is not None and record_crews_recheck(runtime.paths, recheck_slot):
             marked.append(_FEED_STATE)
 
+    def mark_failed() -> None:
+        try:
+            if record_crews_failed(runtime.paths, season=season, label=label):
+                marked.append(_FEED_STATE)
+        except (VaultStateError, OSError, ValueError) as exc:
+            _LOG.warning("aa crews: failed mark not written: %s", type(exc).__name__)
+
     def commit_paths(paths: list[str]) -> None:
         if not commit:
             return
@@ -134,9 +142,13 @@ def run_crews_fetch(
     except Exception as exc:
         # Phase 27 review WR-03: a failed request (HTTP error, a post that fails
         # validation, ...) still appended its audit line; commit it, as the CLI
-        # does, and say so in a fixed line with no URL or page text.
+        # does, and say so in a fixed line with no URL or page text. A failed
+        # Tuesday request is recorded for its week, so the 22:30 backup and later
+        # Tuesday runs never send it again (adversarial panel F8).
         _LOG.warning("aa crews: %s", type(exc).__name__)
         if sent:
+            if mode == "if_missing":
+                mark_failed()
             commit_paths(_FAILED_REQUEST_PATHS)
         return [aa_crews_skipped("error")]
     items: list[AttentionItem] = []
@@ -146,6 +158,8 @@ def run_crews_fetch(
         items.append(aa_crews_skipped("not_cached"))
     elif result.outcome == "no_validator":
         items.append(aa_crews_skipped("no_validator"))
+    elif result.outcome == "failed_before":
+        items.append(aa_crews_skipped("failed_before"))
     if result.requests:
         commit_paths(list(result.touched))
     return items
