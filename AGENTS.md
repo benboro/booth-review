@@ -153,7 +153,8 @@ model, and build phases; read the relevant section before starting a phase.
   post body or crew data; the response is never cached, and `ledger/aa_feed_watch.json`
   holds only the feed validators, the verified feed URL, each week's post link or a mark
   that its plain reminder went out (after which that week is not checked again, so it
-  gets one comment), and the Friday and Saturday crews re-check slots already used. The
+  gets one comment), the Friday and Saturday crews re-check slots already used, and
+  each week whose Tuesday post request failed (which is not requested again). The
   feed is the `/schedules/feed/` category feed, or the site
   feed if a first `booth-review collect aa --feed --verify` request shows the category
   feed lacks the posts. It needs an AA policy check from the last 30 days with

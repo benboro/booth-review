@@ -51,8 +51,9 @@ def test_feed_watch_ledger_lists_recheck_slots() -> None:
     assert (
         _norm(
             "each week's post link or a mark that its plain reminder went out (after which "
-            "that week is not checked again, so it gets one comment), and the Friday and "
-            "Saturday crews re-check slots already used."
+            "that week is not checked again, so it gets one comment), the Friday and "
+            "Saturday crews re-check slots already used, and each week whose Tuesday post "
+            "request failed (which is not requested again)."
         )
         in _agents()
     )
