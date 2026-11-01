@@ -546,8 +546,8 @@ listing. If a public source shows that a crew 506 lists is wrong, that sourced
 booth replaces 506's the same way, but the coverage table's hand-confirmed
 count includes only telecasts 506 never gave a crew.
 
-Awful Announcing is a second crew source for 2026 college football. Its weekly
-announcing-schedule posts are saved by hand and imported. The order is a
+Awful Announcing is a second crew source for 2026 college football. The scheduled
+job fetches each weekly announcing-schedule post the feed watch found. The order is a
 hand-confirmed booth, then 506 Sports and Awful Announcing together, then ESPN
 Press Room. Where both name a booth for the same game, the whole booth comes
 from one of them: if one booth is a superset of the other (it names every

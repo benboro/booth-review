@@ -453,7 +453,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at the Phase 27 review (2026-11-01, WR-05): the AA crew-source paragraph says the
 # coverage table counts AA crews in their own column (probe: the previous methodology.md, with
 # the 2.8.0 fixture, reproduces the old digest, so only that sentence moved it).
-_METHODOLOGY_FLAG_OFF_SHA256 = "ef01184c168796f7d94b960ec81793f3f8e38e00fd1a2db479e63c6a0cc71112"
+# Re-pinned at the Phase 27 review (2026-11-01, docs): the AA paragraph says the job fetches
+# each post the feed watch found, not that posts are saved by hand (only that sentence moved).
+_METHODOLOGY_FLAG_OFF_SHA256 = "830fba0f1ede79103d189e20c0855e12335e8eba5eb15b5b29afed89dcf211a7"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
