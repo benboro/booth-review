@@ -58,13 +58,14 @@ from typing import Any, Final
 import polars as pl
 
 from booth_review.build.crew_overrides import CREW_OVERRIDE_SOURCE
+from booth_review.build.crew_people import register_provisional, working_registry
 from booth_review.build.second_sources import match_row_to_game
 from booth_review.config import DataPaths
 from booth_review.contract.models import crew_source_url_problem
 from booth_review.job.gaps506 import week_windows
 from booth_review.job.gaps_espnpr import espn_week_label
 from booth_review.people.normalize import fold_person, is_placeholder
-from booth_review.people.registry import PeopleRegistry, Person, register_names
+from booth_review.people.registry import PeopleRegistry
 from booth_review.people.roles import Role
 from booth_review.resolve.diagnose import UnmatchedRow, UnresolvedTeamRow
 from booth_review.resolve.games import GameIndex
@@ -184,6 +185,7 @@ class ScheduledCrew:
 
     entries: tuple[tuple[str, Role], ...]
     source_url: str
+    label: str = CREW_BACKUP_LABEL
 
 
 @dataclass(frozen=True)
@@ -283,27 +285,6 @@ def load_espnpr_booths(paths: DataPaths, seasons: Sequence[int] | None = None) -
 
 
 # -- People ----------------------------------------------------------------------------------
-
-
-def _working_registry(registry: PeopleRegistry, people: pl.DataFrame) -> PeopleRegistry:
-    """people.csv plus every person the 506 pass already added (provisional
-    persons included), so a backup name reuses the same person_id."""
-    persons: dict[str, Person] = dict(registry.persons)
-    for row in people.iter_rows(named=True):
-        person_id = row["person_id"]
-        if person_id in persons:
-            continue
-        role: Role = "pbp" if row["usual_role"] == "pbp" else "unknown"
-        if row["usual_role"] == "analyst":
-            role = "analyst"
-        persons[person_id] = Person(
-            person_id=person_id,
-            canonical_name=row["canonical_name"],
-            variants=tuple(row["variants"] or (row["canonical_name"],)),
-            usual_role=role,
-            role_override=None,
-        )
-    return PeopleRegistry(persons)
 
 
 def _booth_role(name: str, registry: PeopleRegistry) -> Role | None:
@@ -484,7 +465,7 @@ def apply_crew_backup(
             continue
         targets.setdefault(target, []).append(saved)
 
-    working = _working_registry(registry, people)
+    working = working_registry(registry, people)
     statuses: dict[str, str] = {}
     review_rows: list[dict[str, object]] = []
     fills: dict[str, tuple[tuple[str, ...], SavedBooth]] = {}
@@ -559,10 +540,9 @@ def apply_crew_backup(
                 name_counts[name] += 1
                 lo, hi = name_seasons.get(name, (season, season))
                 name_seasons[name] = (min(lo, season), max(hi, season))
-    ids_before = set(working.persons)
-    if name_counts:
-        working = register_names(working, dict(name_counts))
-    new_ids = sorted(set(working.persons) - ids_before)
+    working, new_ids, new_name_rows, people_rows = register_provisional(
+        working, name_counts, name_seasons
+    )
 
     def _booth_people(names: Sequence[str]) -> list[tuple[str, Role]]:
         person_ids: list[str] = []
@@ -637,29 +617,6 @@ def apply_crew_backup(
         .alias("crew_source_label"),
     )
 
-    new_name_rows: list[dict[str, object]] = []
-    people_rows: list[dict[str, object]] = []
-    for person_id in new_ids:
-        person = working.persons[person_id]
-        seasons = [name_seasons[v] for v in person.variants if v in name_seasons]
-        new_name_rows.append(
-            {
-                "name": person.canonical_name,
-                "occurrences": sum(name_counts[v] for v in person.variants if v in name_counts),
-                "season_first": min(lo for lo, _ in seasons) if seasons else None,
-                "season_last": max(hi for _, hi in seasons) if seasons else None,
-                "provisional_id": person_id,
-            }
-        )
-        people_rows.append(
-            {
-                "person_id": person_id,
-                "canonical_name": person.canonical_name,
-                "variants": sorted(person.variants),
-                "usual_role": person.usual_role,
-                "registered": False,
-            }
-        )
     people_out = people
     if people_rows:
         people_out = pl.concat([people, pl.DataFrame(people_rows, schema=people.schema)]).sort(
