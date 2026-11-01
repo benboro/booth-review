@@ -61,6 +61,10 @@ _LOG = logging.getLogger(__name__)
 # D-01 and the AGENTS.md rule: at most two AA requests per run, feed check included.
 AA_MAX_REQUESTS_PER_RUN = 2
 
+# A Friday/Saturday schedule run may start late; this many hours after the slot hour
+# still counts as that slot for the conditional crews re-check.
+CREWS_RECHECK_WINDOW_HOURS = 3
+
 _GUARDED_CLIENTS: weakref.WeakSet[object] = weakref.WeakSet()
 
 

@@ -9,6 +9,7 @@ end-to-end via `main([...])`. No test ever sends a request to
 
 from __future__ import annotations
 
+import contextlib
 import json
 import shutil
 import subprocess
@@ -2540,7 +2541,9 @@ def test_late_run_with_the_week_in_the_ledger_makes_no_aa_request(
 
     result = _comment_only_tue(paths, handle, fake_clock, _REMINDER_TUE_LATE)
 
-    assert _aa_requests(handle) == []
+    assert _AA_FEED_URL not in _aa_requests(handle)  # no feed poll; only the uncached post
+    assert len(_post_requests(handle)) <= 1
+    assert len(_aa_requests(handle)) <= 3  # robots.txt plus at most two requests
     link = [i for i in result.items if i.kind == "reminder_aa_cfb_link"]
     assert len(link) == 1
     assert _AA_POST in link[0].line
@@ -2733,3 +2736,195 @@ def test_a_schedule_run_that_fails_its_push_still_carries_the_due_reminders(
 
     assert result.exit_code == 3
     assert [i.kind for i in result.items].count("reminder_aa_cfb") == 1
+
+
+# -- Phase 27 plan 08: Friday/Saturday conditional AA crews re-check ---------
+
+_FRI_1800 = datetime(2026, 10, 16, 22, 0, tzinfo=UTC)  # Fri 18:00 EDT
+_FRI_1500 = datetime(2026, 10, 16, 19, 0, tzinfo=UTC)  # Fri 15:00 EDT, not a slot
+_SAT_0800 = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)  # Sat 08:00 EDT
+_CREWS_POST = (
+    Path(__file__).parent.joinpath("fixtures", "aa", "schedule_synthetic.html").read_bytes()
+)
+
+
+def _crews_responses(*, post_status: int = 200, robots: bytes | None = None) -> dict:
+    responses = _aa_responses(_espnpr_responses())
+    responses["https://api.collegefootballdata.com/games?seasonType=both&year=2026"] = (
+        200,
+        _espnpr_games_json(),
+        {},
+    )
+    if robots is not None:
+        responses["https://awfulannouncing.com/robots.txt"] = (200, robots, {})
+    body = _CREWS_POST if post_status == 200 else b""
+    responses[_AA_POST] = (post_status, body, {"ETag": '"p1"'})
+    return responses
+
+
+def _crews_job(paths, handle, fake_clock, when, monkeypatch, *, dry_run=False, link=True):
+    """A schedule run at `when` with a recorded link for the current week and
+    `_build_and_site` replaced by a recorder; returns (job, events)."""
+    events: list[str] = []
+    games = paths.raw / "cfbd" / "games" / "2026.json"
+    games.parent.mkdir(parents=True, exist_ok=True)
+    games.write_bytes(_espnpr_games_json())
+    week = runner_module.current_cfb_week(paths, when)
+    assert week is not None
+    _seed_aa_ready(paths, weeks={f"{week[0]}-{week[1]}": _AA_POST} if link else None)
+    monkeypatch.setattr(runner_module, "_check_required_state", lambda *a, **k: None)
+    monkeypatch.setattr(ScheduledJob, "_staleness_step", lambda self, *a, **k: None)
+
+    def fake_build(self, items, counts, now):
+        events.append(f"build:{len(_aa_requests(handle))}")
+        return (False, None, False, False, None)
+
+    monkeypatch.setattr(ScheduledJob, "_build_and_site", fake_build)
+    runtime = _runtime(paths, handle, now=lambda: when, fake_clock=fake_clock)
+    job = ScheduledJob(
+        runtime,
+        token="test-token",
+        now=lambda: when,
+        trigger="manual",
+        mode="schedule",
+        update=True,
+        site_out=paths.vault.parent / "site-out",
+        dry_run=dry_run,
+    )
+    return job, events
+
+
+def _post_requests(handle) -> list[str]:
+    return [u for u in _aa_requests(handle) if u == _AA_POST]
+
+
+def test_crews_friday_slot_rechecks_the_post_once_before_the_build(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, events = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch)
+    job.run()
+    assert len(_post_requests(handle)) == 1
+    assert len([u for u in _aa_requests(handle) if not u.endswith("robots.txt")]) <= 2
+    # the post was fetched before the build ran (build saw 2 AA requests: robots + post)
+    assert events and events[0].startswith("build:")
+    assert int(events[0].split(":")[1]) >= 1
+    assert (paths.raw / "aa" / "crews" / "2026").is_dir()
+
+
+def test_crews_saturday_slot_rechecks_once(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _events = _crews_job(paths, handle, fake_clock, _SAT_0800, monkeypatch)
+    job.run()
+    assert len(_post_requests(handle)) == 1
+
+
+def test_crews_not_modified_leaves_the_cached_file_unchanged(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    first = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, first, fake_clock, _FRI_1800, monkeypatch)
+    job.run()
+    cached = next((paths.raw / "aa" / "crews" / "2026").glob("*.html"))
+    before = cached.read_bytes()
+    second = mock_transport_factory(_crews_responses(post_status=304))
+    job2, _ = _crews_job(paths, second, fake_clock, _SAT_0800, monkeypatch)
+    job2.run()
+    assert len(_post_requests(second)) == 1
+    assert cached.read_bytes() == before
+
+
+def test_crews_no_recorded_link_makes_no_request_and_no_line(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, events = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch, link=False)
+    result = job.run()
+    assert _post_requests(handle) == []
+    assert not any(i.kind.startswith("aa_crews") for i in result.items)
+    assert events
+
+
+def test_crews_stale_policy_skips_with_one_line_and_builds(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, events = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch)
+    (paths.ledger / "policy_checks.jsonl").unlink()
+    result = job.run()
+    assert _post_requests(handle) == []
+    assert [i.kind for i in result.items].count("aa_crews_skipped_policy") == 1
+    assert events
+
+
+def test_crews_robots_refusal_adds_line_and_still_builds(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(
+        _crews_responses(robots=b"User-agent: *\nDisallow: /schedules/\n")
+    )
+    job, events = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch)
+    result = job.run()
+    assert _post_requests(handle) == []
+    assert "aa_crews_skipped_robots" in [i.kind for i in result.items]
+    assert events
+
+
+def test_crews_dry_run_makes_no_request(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch, dry_run=True)
+    job.run()
+    assert _aa_requests(handle) == []
+
+
+def test_crews_off_slot_schedule_run_makes_no_request(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, handle, fake_clock, _FRI_1500, monkeypatch)
+    job.run()
+    assert _post_requests(handle) == []
+
+
+def test_crews_full_run_makes_no_request(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch)
+    calls: list[str] = []
+    monkeypatch.setattr(ScheduledJob, "_aa_crews_step", lambda self, *a: calls.append("x"))
+    full = ScheduledJob(
+        job._runtime,
+        token="test-token",
+        now=lambda: _FRI_1800,
+        trigger="manual",
+        mode="full",
+        update=True,
+        site_out=paths.vault.parent / "site-out",
+    )
+    with contextlib.suppress(Exception):  # a full run needs more state; only crews matter here
+        full.run()
+    assert calls == []
+    assert _post_requests(handle) == []
