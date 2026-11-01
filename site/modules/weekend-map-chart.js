@@ -1,8 +1,8 @@
 // Weekend map figure (Phase 24, UI-SPEC "Marks"): paints the weekend map model with Plotly.
 //
-// Constant-trace figure (9 traces): outline, faded dots, normal dots, matched dots, ring
-// keyline, ring ink, hover ring, venue-hits, markers, always in that order and drawn bottom to
-// top, so Plotly.react diffs cleanly whatever the pick; unused slots carry empty arrays.
+// Constant-trace figure (10 traces): outline, faded dots, normal dots, matched dots, ring
+// keyline, ring ink, hover ring, venue-hits, markers, marker labels, always in that order and
+// drawn bottom to top, so Plotly.react diffs cleanly whatever the pick; unused slots carry empty arrays.
 // buildWeekendMapFigure is pure (model + geometry + env in, {traces, layout, config} out).
 // Data strings reach Plotly text only through escapeHover; hover labels are off (the page paints
 // its own tooltip from the key), so no hovertemplate carries data. The 'venue-hits' and
@@ -23,7 +23,7 @@ import {
   WEEKEND_MAP_DOT,
 } from './palette.js';
 
-/** The nine trace names in draw order. */
+/** The ten trace names in draw order. */
 export const WEEKEND_MAP_TRACE_NAMES = Object.freeze([
   'outline',
   'dots-faded',
@@ -34,6 +34,7 @@ export const WEEKEND_MAP_TRACE_NAMES = Object.freeze([
   'wk-hover',
   'venue-hits',
   'markers',
+  'marker-labels',
 ]);
 
 /** Map-local edge-marker label font: Roboto Condensed 400, 12 px (not bar-chart's weight 600). */
@@ -64,7 +65,9 @@ function layer(name, points, theme) {
     mode: 'markers',
     name,
     x: points.map((p) => p.x),
-    y: points.map((p) => p.y),
+    // A mark draws at `markY` when the model set one (the arrow-up triangle, lifted to centre
+    // on its point); rings, hit targets and labels use `y`.
+    y: points.map((p) => p.markY ?? p.y),
     customdata: points.map((p) => p.key),
     marker: {
       symbol: points.map((p) => p.symbol),
@@ -72,9 +75,6 @@ function layer(name, points, theme) {
       color: points.map((p) => colorOf(p, theme)),
       opacity: points.map((p) => (p.faded ? MAP_OPACITY.faded : 1)),
       line: markerLine(points, theme),
-      // Plotly's arrow-up has the key's even triangle (as tall as wide) but hangs from its tip,
-      // so it moves up half its size to sit centred on the venue like the other shapes.
-      standoff: points.map((p) => (p.symbol === 'arrow-up' ? p.size / 2 : 0)),
     },
     // The venue-hits trace carries hover and click, so the layers only draw.
     hoverinfo: 'skip',
@@ -129,16 +129,34 @@ function hitsTrace(points) {
   };
 }
 
-/** Edge markers in their window shape, one city label per site, haloed in the page colour. */
+/** Edge markers in their window shape; their city labels are the 'marker-labels' trace. */
 function markersTrace(markers, theme) {
   return {
     ...layer('markers', markers, theme),
+    hovertext: markers.map((m) => escapeHover(m.hoverLines?.text ?? '')),
+    hoverinfo: 'none',
+  };
+}
+
+/**
+ * One city label per edge site, haloed in the page colour. Its own trace so the label stays on
+ * the site's row when the labelled mark is a lifted triangle: invisible markers of the same size
+ * on each point keep Plotly's marker-size text offset, so labels sit where they always did.
+ */
+function markerLabelsTrace(markers, theme) {
+  return {
+    type: 'scatter',
     mode: 'markers+text',
+    name: 'marker-labels',
+    x: markers.map((m) => m.x),
+    y: markers.map((m) => m.y),
     text: markers.map((m) => escapeHover(m.text ?? '')),
     textposition: markers.map((m) => (m.side === 'left' ? 'middle left' : 'middle right')),
     textfont: { ...LABEL_FONT, color: MAP_MARKER_LABEL[theme], ...haloText(theme) },
-    hovertext: markers.map((m) => escapeHover(m.hoverLines?.text ?? '')),
-    hoverinfo: 'none',
+    marker: { size: markers.map((m) => m.size), opacity: 0, line: { width: 0 } },
+    hoverinfo: 'skip',
+    hovertemplate: null,
+    showlegend: false,
   };
 }
 
@@ -167,6 +185,7 @@ export function buildWeekendMapFigure(model, geometry, env) {
     ringTrace('wk-hover', hovered, WEEKEND_MAP_DOT.hoverRing, INK[theme]),
     hitsTrace(all),
     markersTrace(markers, theme),
+    markerLabelsTrace(markers, theme),
   ];
   const layout = frameLayout(
     {

@@ -591,6 +591,7 @@ def test_figure_trace_order_and_event_names(map_page: Page) -> None:
             "wk-hover",
             "venue-hits",
             "markers",
+            "marker-labels",
         ]
     )
     assert out["frozen"] is True

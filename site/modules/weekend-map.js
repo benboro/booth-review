@@ -334,6 +334,16 @@ export function buildWeekendMapModel(env) {
   // laid in a row that grows away from the edge so the single label stays beside the row.
   const markers = layoutMarkers(edge, ppu, mobile);
 
+  // Plotly's arrow-up (the key's even triangle, as tall as wide) hangs from its tip, so its mark
+  // is drawn half its size higher to sit centred on the point like the other shapes. Only the
+  // mark moves: rings, hit targets and edge labels stay on the point. (marker.standoff cannot do
+  // this; it moves an arrow away from its tip, i.e. further down.)
+  if (ppu > 0) {
+    for (const p of [...dots, ...markers]) {
+      if (p.symbol === 'arrow-up') p.markY = p.y - p.size / 2 / ppu;
+    }
+  }
+
   const notOnMap = notOnMapOrder(lost);
   const splatModel = splatVenueModel(dots);
   const counts = {

@@ -376,7 +376,8 @@ def test_the_gb_game_is_an_edge_marker_labelled_by_city(wkmap: Wk, theme: str) -
     page = wkmap(theme=theme)
     t = traces(page)
     assert t["markers"]["keys"] == [LONDON]
-    assert t["markers"]["text"] == ["London"]
+    assert t["marker-labels"]["text"] == ["London"]
+    assert t["marker-labels"]["y"] == t["markers"]["y"]  # a label stays on its row
     assert LONDON not in t["dots"]["keys"] + t["dots-faded"]["keys"]
     hover(page, LONDON)
     assert "London" in page.locator("#chart-tooltip").inner_text()
@@ -465,3 +466,33 @@ def test_map_to_timeline_keeps_focus_on_the_timeline_segment(wkmap: Wk) -> None:
     page.keyboard.press("Enter")
     page.wait_for_selector(".wk-map-box", state="detached", timeout=5000)
     assert page.evaluate("document.activeElement?.dataset?.wkId") == "wview:timeline"
+
+
+_MARK_CENTRES = """(keys) => {
+  // Rendered centre (CSS px) of each key's drawn mark and of its venue-hits twin, which shares
+  // the point the rings centre on.
+  const out = {};
+  for (const g of document.querySelectorAll('.wk-map-box .scatterlayer .trace')) {
+    const trace = g.__data__[0].trace;
+    const pts = g.querySelectorAll('path.point');
+    (trace.customdata || []).forEach((key, i) => {
+      if (!keys.includes(key) || !pts[i]) return;
+      const b = pts[i].getBoundingClientRect();
+      const kind = trace.name === 'venue-hits' ? 'hit' : 'mark';
+      out[key] = { ...(out[key] || {}), [kind]: [b.x + b.width / 2, b.y + b.height / 2] };
+    });
+  }
+  return out;
+}"""
+
+
+@pytest.mark.parametrize("theme", THEMES)
+def test_triangle_mark_is_centred_on_its_ring(wkmap: Wk, theme: str) -> None:
+    # Plotly's arrow-up hangs from its tip; the map lifts it so it centres on its point like the
+    # circle, and so the hover ring (centred on that point) surrounds it.
+    page = wkmap(theme=theme)
+    centres = page.evaluate(_MARK_CENTRES, [LATE, NOON_A])
+    for key in (LATE, NOON_A):
+        (mx, my), (hx, hy) = centres[key]["mark"], centres[key]["hit"]
+        assert abs(mx - hx) <= 1.0, key
+        assert abs(my - hy) <= 1.0, key

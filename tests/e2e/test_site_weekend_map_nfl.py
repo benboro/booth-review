@@ -176,7 +176,7 @@ def test_the_gb_games_are_edge_markers_labelled_by_city(
     _open(page, open_nfl_app, theme=theme)
     t = _traces(page)
     assert sorted(t["markers"]["keys"]) == sorted([LONDON_NIGHT, LONDON_EARLY])
-    assert [x for x in t["markers"]["text"] if x] == [
+    assert [x for x in t["marker-labels"]["text"] if x] == [
         "Londonish"
     ]  # the venue city (fixture), one label per site
     assert sorted(t["dots"]["keys"] + t["dots-faded"]["keys"]) == sorted(
