@@ -61,12 +61,32 @@ class Env:
             encoding="utf-8",
         )
         gh.chmod(0o755)
+        # `uv run booth-review audit overrides --release ...` is the pre-flight: the
+        # stub logs its arguments, runs UV_SIDE_EFFECT, and exits with UV_EXIT.
+        self.uv_log = tmp_path / "uv.log"
+        uv = bin_dir / "uv"
+        uv.write_text(
+            '#!/usr/bin/env bash\necho "$*" >> "$UV_LOG"\n'
+            'if [ -n "${UV_SIDE_EFFECT:-}" ]; then eval "$UV_SIDE_EFFECT"; fi\n'
+            'exit "${UV_EXIT:-0}"\n',
+            encoding="utf-8",
+        )
+        uv.chmod(0o755)
+        monkeypatch.setenv("UV_LOG", str(self.uv_log))
         monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("GH_LOG", str(self.log))
 
-    def run(self, *args: str, tag_env: str | None = None) -> subprocess.CompletedProcess[str]:
+    def run(
+        self,
+        *args: str,
+        tag_env: str | None = None,
+        uv_exit: int = 0,
+        uv_side_effect: str = "",
+    ) -> subprocess.CompletedProcess[str]:
         env = dict(os.environ)
         env["GH_TAG"] = tag_env or (args[-1] if args else "")
+        env["UV_EXIT"] = str(uv_exit)
+        env["UV_SIDE_EFFECT"] = uv_side_effect
         return subprocess.run(
             ["bash", str(SCRIPT), *args],
             cwd=self.repo,
@@ -78,6 +98,11 @@ class Env:
 
     def gh_calls(self) -> list[str]:
         return self.log.read_text(encoding="utf-8").splitlines() if self.log.exists() else []
+
+    def uv_calls(self) -> list[str]:
+        if not self.uv_log.exists():
+            return []
+        return self.uv_log.read_text(encoding="utf-8").splitlines()
 
     def remote_tags(self) -> str:
         return _git(self.origin, "tag", "--list")
@@ -160,3 +185,44 @@ def test_refuses_tag_already_on_origin(env: Env) -> None:
 def test_refuses_missing_vault(env: Env) -> None:
     shutil.rmtree(env.repo / "data" / "vault")
     _refused(env, env.run("v0.5.0"))
+
+
+PREFLIGHT = (
+    "run booth-review audit overrides --release --vault data/vault --reference data/reference"
+)
+
+
+def test_preflight_runs_with_explicit_paths(env: Env) -> None:
+    result = env.run("v0.5.0")
+    assert result.returncode == 0, result.stderr
+    assert env.uv_calls() == [PREFLIGHT]
+
+
+def test_refuses_when_preflight_fails(env: Env) -> None:
+    _refused(env, env.run("v0.5.0", uv_exit=1))
+    assert _git(env.repo, "tag", "--list") == ""
+    assert env.uv_calls() == [PREFLIGHT]
+
+
+def test_dry_run_also_runs_preflight(env: Env) -> None:
+    result = env.run("--dry-run", "v0.5.0", uv_exit=1)
+    assert result.returncode == 1
+    assert "would tag" not in result.stdout
+    assert "pre-flight failed" in result.stderr
+    assert env.uv_calls() == [PREFLIGHT]
+
+
+def test_preflight_runs_before_tagging(env: Env) -> None:
+    # The pre-flight sees no tag yet: it runs before `git tag`.
+    marker = env.repo.parent / "seen-tags.txt"
+    result = env.run("v0.5.0", uv_side_effect=f"git tag --list > '{marker}'")
+    assert result.returncode == 0, result.stderr
+    assert marker.read_text(encoding="utf-8") == ""
+    assert env.remote_tags() == "v0.5.0"
+
+
+def test_preflight_ignores_redirecting_env(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BOOTH_REVIEW_VAULT", "/elsewhere/vault")
+    monkeypatch.setenv("BOOTH_REVIEW_REFERENCE", "/elsewhere/reference")
+    assert env.run("v0.5.0").returncode == 0
+    assert env.uv_calls() == [PREFLIGHT]
