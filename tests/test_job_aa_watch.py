@@ -27,11 +27,13 @@ from booth_review.sources.aa.feed import (
     load_feed_state,
     save_feed_state,
 )
+from booth_review.transport.cache import RawCache
 from booth_review.transport.client import PoliteClient
 
 ET = ZoneInfo("America/New_York")
 FIXTURES = Path(__file__).parent / "fixtures" / "aa"
 FEED = (FIXTURES / "feed_schedules_synthetic.xml").read_bytes()
+POST = (FIXTURES / "schedule_synthetic.html").read_bytes()
 EMPTY_FEED = b'<rss version="2.0"><channel></channel></rss>'
 CURRENT = "https://awfulannouncing.com/schedules/your-2026-week-10-college-football-announcing-schedule.html"
 T2130 = datetime(2026, 11, 3, 21, 30, tzinfo=ET)
@@ -47,17 +49,29 @@ class _Server:
         self.robots = robots if robots is not None else b"User-agent: *\nAllow: /\n"
         self.feed_requests = 0
         self.robots_requests = 0
+        self.post_requests = 0
+        self.post_status = 200
 
     def __call__(self, request: httpx2.Request) -> httpx2.Response:
         if request.url.path == "/robots.txt":
             self.robots_requests += 1
             return httpx2.Response(200, content=self.robots)
-        self.feed_requests += 1
-        return httpx2.Response(self.status, content=self.feed)
+        if request.url.path == "/schedules/feed/" or "feed" in request.url.path:
+            self.feed_requests += 1
+            return httpx2.Response(self.status, content=self.feed)
+        self.post_requests += 1
+        if request.headers.get("If-None-Match") == '"p1"':
+            return httpx2.Response(304)
+        return httpx2.Response(self.post_status, content=POST, headers={"ETag": '"p1"'})
 
     @property
     def total(self) -> int:
-        return self.feed_requests + self.robots_requests
+        return self.feed_requests + self.robots_requests + self.post_requests
+
+    @property
+    def aa_requests(self) -> int:
+        """Feed plus post requests (robots.txt is not counted against the cap)."""
+        return self.feed_requests + self.post_requests
 
 
 class _Vault:
@@ -79,7 +93,9 @@ def _runtime(paths: DataPaths, server: _Server, vault: _Vault | None = None) -> 
     client = PoliteClient(
         transport=httpx2.MockTransport(server), clock=lambda: 0.0, sleep=lambda s: None
     )
-    return SimpleNamespace(paths=paths, client=client, vault=vault or _Vault())
+    return SimpleNamespace(
+        paths=paths, client=client, vault=vault or _Vault(), cache=RawCache(paths, client)
+    )
 
 
 def _policy(
@@ -174,7 +190,7 @@ def test_week_already_linked_makes_zero_requests(vault_paths: DataPaths) -> None
     server = _Server()
     items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
     assert _kinds(items) == ["reminder_aa_cfb_link"] and CURRENT in items[0].line
-    assert server.total == 0
+    assert server.feed_requests == 0  # only the crews post is fetched (Phase 27)
 
 
 @pytest.mark.parametrize("variant", ["none", "old", "terms_null", "unreadable"])
@@ -299,7 +315,7 @@ def test_commit_after_request_scopes_paths(vault_paths: DataPaths) -> None:
     _ready(vault_paths)
     vault = _Vault()
     make_aa_cfb_resolver(_runtime(vault_paths, _Server(), vault), commit=True)(2026, "10", T2130)
-    assert len(vault.calls) == 1
+    assert len(vault.calls) == 2  # feed paths, then the crews post (Phase 27)
     assert vault.calls[0][1] == [
         "ledger/aa_feed_watch.json",
         "ledger/requests.jsonl",
@@ -389,3 +405,91 @@ def test_commit_paths_name_only_the_aa_robots_file(vault_paths: DataPaths) -> No
     make_aa_cfb_resolver(_runtime(vault_paths, _Server(), vault), commit=True)(2026, "10", T2130)
     assert "raw/_robots/awfulannouncing.com" in vault.calls[0][1]
     assert "raw/_robots" not in vault.calls[0][1]
+
+
+# -- Phase 27 plan 08: the crews post fetch ----------------------------------
+
+CREWS_FILE = "raw/aa/crews/2026/wk-10.html"
+
+
+def _crews_cached(paths: DataPaths) -> bool:
+    return (paths.raw / "aa" / "crews" / "2026" / "wk-10.html").is_file()
+
+
+def test_crews_tuesday_first_find_fetches_post_within_cap(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    server, vault = _Server(), _Vault()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(
+        2026, "10", T2130
+    )
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert (server.feed_requests, server.post_requests) == (1, 1)
+    assert server.aa_requests <= 2
+    assert _crews_cached(vault_paths)
+    assert len(vault.calls) == 2
+    assert "aa crews" in vault.calls[1][0] or "crews" in vault.calls[1][0]
+    assert any(p == CREWS_FILE for p in vault.calls[1][1])
+    assert not any(p == CREWS_FILE for p in vault.calls[0][1])
+
+
+def test_crews_backup_run_sends_nothing_when_cached(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    first = _Server()
+    resolver = make_aa_cfb_resolver(_runtime(vault_paths, first), commit=False)
+    resolver(2026, "10", T2130)
+    backup = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, backup), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert backup.aa_requests == 0
+
+
+def test_crews_linked_but_uncached_fetches_exactly_one_post(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert (server.feed_requests, server.post_requests) == (0, 1)
+    assert _crews_cached(vault_paths)
+
+
+def test_crews_post_error_is_swallowed(vault_paths: DataPaths) -> None:
+    _ready(vault_paths)
+    server = _Server()
+    server.post_status = 403
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2130)
+    assert _kinds(items) == ["reminder_aa_cfb_link"]
+    assert server.aa_requests <= 2
+    assert not _crews_cached(vault_paths)
+
+
+def test_crews_robots_disallow_posts_skipped_line(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server(robots=b"User-agent: *\nDisallow: /schedules/\n")
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_robots"]
+    assert server.post_requests == 0
+
+
+def test_crews_stale_policy_sends_no_post_request(vault_paths: DataPaths) -> None:
+    _state(vault_paths)
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb", "aa_feed_policy_stale"]
+    assert server.aa_requests == 0
+
+
+def test_crews_linked_with_stale_policy_names_it_and_sends_nothing(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    server = _Server()
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
+    assert _kinds(items) == ["reminder_aa_cfb_link", "aa_crews_skipped_policy"]
+    assert server.aa_requests == 0
+
+
+def test_crews_other_season_touches_nothing(vault_paths: DataPaths) -> None:
+    _ready(vault_paths, weeks={"2025-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    t = datetime(2025, 11, 4, 21, 30, tzinfo=ET)
+    items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(2025, "10", t)
+    assert _kinds(items) == ["reminder_aa_cfb"]
+    assert server.total == 0 and vault.calls == []

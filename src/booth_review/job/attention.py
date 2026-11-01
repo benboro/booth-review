@@ -339,6 +339,18 @@ def aa_feed_blocked() -> AttentionItem:
     )
 
 
+def aa_crews_skipped(reason: Literal["policy", "robots"]) -> AttentionItem:
+    """Phase 27: the crews post was not fetched; fixed lines, no URL or page text."""
+    if reason == "robots":
+        line = "aa crews post not fetched: robots.txt refuses it or asks for a longer crawl delay"
+    else:
+        line = (
+            "aa crews post not fetched: aa policy check older than 30 days or terms not "
+            "confirmed, run booth-review collect aa --policy-check then --confirm-terms"
+        )
+    return AttentionItem(kind=f"aa_crews_skipped_{reason}", line=line, severity="attention")
+
+
 def reminder_fox_cfb(season: int, label: str) -> AttentionItem:
     """Phase 24 D-13: save the FOX Sports press college football release."""
     _require_cfb_week(label)

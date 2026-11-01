@@ -20,6 +20,7 @@ from booth_review.job.attention import (
     REMINDER_ESPNPR_CFB_URL,
     REMINDER_FOX_CFB_URL,
     AttentionItem,
+    aa_crews_skipped,
     aa_feed_blocked,
     aa_feed_policy_stale,
     aa_feed_unverified,
@@ -606,4 +607,12 @@ def test_aa_feed_attention_lines(builder, needle: str) -> None:
     assert item.severity == "attention"
     assert needle in item.line
     assert "booth-review collect aa" in item.line
+    _passes(item)
+
+
+@pytest.mark.parametrize("reason", ["robots", "policy"])
+def test_aa_crews_skipped_lines(reason: str) -> None:
+    item = aa_crews_skipped(reason)  # type: ignore[arg-type]
+    assert item.severity == "attention"
+    assert "http" not in item.line
     _passes(item)
