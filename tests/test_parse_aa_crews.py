@@ -163,3 +163,65 @@ def test_cache_path_zero_pads_the_week() -> None:
 def test_cache_path_rejects_a_non_numeric_label() -> None:
     with pytest.raises(ValueError, match="label"):
         crews_cache_path(2026, "x")
+
+
+# -- Phase 27 review WR-04: header drift is never a silently empty page ----------
+
+
+@pytest.mark.parametrize(
+    "header",
+    ["Saturday, November 7th", "Saturday, Nov. 7:", "Saturday November 7th:"],
+    ids=["ordinal", "abbrev-colon", "ordinal-colon"],
+)
+def test_ordinal_and_colon_headers_still_date_the_games(header: str) -> None:
+    html = _HTML.replace("Saturday, November 7", header)
+    booths = _parse(html).booths
+    assert len(booths) == 3
+    assert booths[1].date_et == date(2026, 11, 7)
+
+
+def test_unrecognised_headers_reject_the_page_with_a_count_only_error() -> None:
+    html = _HTML.replace("Friday November 6", "Friday the sixth").replace(
+        "Saturday, November 7", "Saturday the seventh"
+    )
+    with pytest.raises(AaCrewsParseError) as info:
+        _parse(html)
+    message = str(info.value)
+    assert "unparsed game lines" in message and "missing" in message
+    for text in ("Alpha", "Archer", "seventh", "Net1"):
+        assert text not in message
+
+
+def test_game_lines_before_the_first_header_are_counted_unparsed() -> None:
+    """Only the first header drifts: the games above the second header count as
+    unparsed (they were silently dropped), the rest still parse."""
+    parsed = _parse(_HTML.replace("Friday November 6", "Friday the sixth"))
+    assert len(parsed.booths) == 2
+    assert parsed.unparsed == 2 + 1
+    assert parsed.booths[0].date_et == date(2026, 11, 7)
+
+
+def test_intro_prose_before_the_header_is_not_a_game_line() -> None:
+    assert _parse().unparsed == 2  # the fixture's intro and site header add nothing
+
+
+def test_page_with_headers_and_only_unparsed_lines_is_rejected() -> None:
+    body = (
+        "<h3><u>Saturday, November 7</u></h3>\n"
+        "<p><strong>Golf at Hotel (7:00 p.m., Net5): </strong>Gil Grant (sideline)</p>\n"
+    )
+    start = _HTML.index("<h3>")
+    end = _HTML.index("<p>Closing invented prose")
+    with pytest.raises(AaCrewsParseError):
+        _parse(_HTML[:start] + body + _HTML[end:])
+
+
+def test_page_with_only_tbd_crews_is_valid_and_empty() -> None:
+    body = (
+        "<h3><u>Saturday, November 7</u></h3>\n"
+        "<p><strong>Echo U at Foxtrot (7:00 p.m., Net4): </strong>TBD</p>\n"
+    )
+    start = _HTML.index("<h3>")
+    end = _HTML.index("<p>Closing invented prose")
+    parsed = _parse(_HTML[:start] + body + _HTML[end:])
+    assert parsed.booths == [] and parsed.tbd == 1 and parsed.unparsed == 0

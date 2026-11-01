@@ -15,6 +15,9 @@ sits inside or outside the tag). Roles come from the post's own tags
 (play-by-play -> pbp, analyst -> analyst); reporters are dropped. A TBD crew is
 counted, a line that does not fit the shape or carries an unknown role is
 counted as unparsed, and a crew with no play-by-play is counted and skipped.
+A game line before any recognised day header is counted as unparsed too, and a
+post with no booth at all while it has unparsed game lines, or with no day header,
+raises ``AaCrewsParseError``, so header drift is never cached as a good page.
 
 The fetch half (``fetch_week_crews``) is shared by ``booth-review collect aa
 --crews`` and the scheduled job. Unlike the feed, a crews response is cached.
@@ -56,7 +59,8 @@ _MONTHS = {
         start=1,
     )
 }
-_HEADER_RE = re.compile(r"^[A-Za-z]+,?\s+([A-Za-z]+)\.?\s+(\d{1,2})$")
+# "Saturday, November 7", also "Saturday, Nov. 7th:" (Phase 27 review WR-04).
+_HEADER_RE = re.compile(r"^[A-Za-z]+,?\s+([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?:?$")
 _GAME_RE = re.compile(
     r"^(?P<matchup>.+?)\s*\((?P<time>[^,()]+),\s*(?P<net>[^()]+)\)\s*:\s*(?P<crew>.*)$"
 )
@@ -226,9 +230,13 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
             seen_header = True
             day = _header_date(text, season)
             continue
-        if not seen_header:
-            continue
         game = _GAME_RE.match(text)
+        if not seen_header:
+            # A game line with no day above it (an unrecognised header style).
+            if game is not None and _split_matchup(game.group("matchup")) is not None:
+                line += 1
+                unparsed += 1
+            continue
         if game is None:
             if _AT_RE.search(text) or _VS_RE.search(text):
                 line += 1
@@ -262,6 +270,11 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
                 source_url=url,
                 pointer=f"{slug}:{line}",
             )
+        )
+    if not booths and (unparsed or not seen_header):
+        raise AaCrewsParseError(
+            f"aa crews post has no booth: {unparsed} unparsed game lines, "
+            f"day header {'found' if seen_header else 'missing'}"
         )
     return ParsedCrews(
         url=url,

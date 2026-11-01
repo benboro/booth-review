@@ -272,6 +272,25 @@ def test_body_without_canonical_is_not_cached(
         rt.client.close()
 
 
+def test_header_drift_page_is_not_cached(git_vault, mock_transport_factory, patched_client) -> None:
+    """Phase 27 review WR-04: a post whose day headers no longer parse yields no
+    booth, so it fails validation and is never cached as a good page."""
+    drifted = POST.replace(b"Friday November 6", b"Friday the sixth").replace(
+        b"Saturday, November 7", b"Saturday the seventh"
+    )
+    handle = mock_transport_factory(_responses(body=drifted))
+    patched_client(handle)
+    rt = build_runtime(with_budget=False)
+    try:
+        _policy(git_vault)
+        _state(git_vault)
+        with pytest.raises(PageRejectedError):
+            _fetch(git_vault, rt.cache)
+        assert not (git_vault.raw / "aa" / "crews" / "2026" / "wk-10.html").exists()
+    finally:
+        rt.client.close()
+
+
 # --- CLI ---
 
 
