@@ -398,6 +398,33 @@ def test_same_people_keep_506_and_count_an_agreement() -> None:
     assert result.telecast_people.height == 2
 
 
+@pytest.mark.parametrize("s506_time", [T_OLD, T_NEW], ids=["aa-newer", "506-newer"])
+def test_aa_subset_of_506_keeps_506_and_counts_an_agreement(s506_time: datetime) -> None:
+    """Phase 27 review CR-02: 506 lists three people and AA two of them (AA drops
+    reporters), so even a newer AA page agrees and never shrinks 506's crew."""
+    tels = [_tel(crew_matched=True, crew_source_label="506 Sports")]
+    tp = [
+        _tp("100-espn", "avery-lane", 0),
+        _tp("100-espn", "morgan-pike", 1),
+        _tp("100-espn", "quinn-harrow", 2),
+    ]
+    result = _run(tels, [_page([_booth(PBP_ANALYST)])], tp, s506={(SEASON, "10"): s506_time})
+    assert result.statuses == {"100-espn": "agrees"}
+    assert result.counts["agreements"] == 1 and result.counts["disagreements"] == 0
+    assert result.review_rows == [] and result.won_ids == frozenset()
+    assert {pid for pid, _ in _crew_of(result)} == {"avery-lane", "morgan-pike", "quinn-harrow"}
+    tel = result.telecasts.to_dicts()[0]
+    assert tel["crew_aa"] is False and tel["crew_source_label"] == "506 Sports"
+
+
+def test_aa_subset_with_an_unknown_name_is_still_a_difference() -> None:
+    tels = [_tel(crew_matched=True)]
+    tp = [_tp("100-espn", "avery-lane", 0), _tp("100-espn", "morgan-pike", 1)]
+    booth = (("Avery Lane", "pbp"), ("Invented Newcomer", "analyst"))
+    result = _run(tels, [_page([_booth(booth)])], tp)
+    assert result.statuses == {"100-espn": "aa_won"}
+
+
 def test_strict_superset_wins_even_when_506_is_newer() -> None:
     tels = [_tel(crew_matched=True)]
     tp = [_tp("100-espn", "avery-lane", 0)]

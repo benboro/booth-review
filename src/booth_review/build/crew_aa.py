@@ -11,7 +11,9 @@ coalesces them with 506's crews:
   takes AA's whole booth, credited "Awful Announcing" with the post's canonical
   URL. `crew_aa` marks it; `crew_patched` is never set, so the 506 match-rate
   separation holds.
-- A 506 crew with the same people is kept and counted as an agreement.
+- A 506 crew with the same people is kept and counted as an agreement. So is
+  one that lists every AA person plus others (AA's parse drops reporters 506
+  may list): a subset is no evidence against 506.
 - D-04: when AA's booth is a strict superset of 506's people, AA's whole booth
   wins whatever the page times say, and a review row is written.
 - D-02: otherwise the newer page wins, AA's `article:modified_time` (else the
@@ -438,7 +440,9 @@ def apply_crew_aa(
                 continue
             wins[telecast_id] = (winner, True)
             continue
-        if None not in aa_ids and known == current:
+        # Every AA person is in 506's crew (equal, or 506 also lists a reporter
+        # AA's parse dropped): an agreement; 506's crew and credit stay.
+        if None not in aa_ids and known and known <= current:
             statuses[telecast_id] = "agrees"
             counts["agreements"] += 1
             continue
