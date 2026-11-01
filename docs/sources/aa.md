@@ -84,6 +84,43 @@ the table's source cell names Awful Announcing, linked to the post, and the
 detail panel adds "View original source (Awful Announcing) ↗" and says the
 figure was read from its ratings post and is not listed on Ratings Reference.
 
+## Crew posts (2026)
+
+For the 2026 college football season only, `booth-review collect aa --crews`
+fetches the weekly announcing-schedule posts and the build reads their crews.
+
+- **URLs:** only the week links recorded in `ledger/aa_feed_watch.json`, on the
+  AA host. The command never takes a URL argument.
+- **When:** the Tuesday reminder run fetches a post the first time it finds it.
+  Conditional re-checks (ETag / Last-Modified) run Friday 18:00 and Saturday
+  08:00 ET, since AA edits a post through Saturday. `--week N` re-checks an
+  already-recorded week by hand.
+- **Cap:** at most 2 AA requests per run, the feed check included, at least 3 s
+  apart, with the project user agent and robots.txt.
+- **Gate:** an AA policy check from the last 30 days with confirmed terms. When
+  it is stale, the run skips the fetch and says so in the reminder.
+- **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault.
+- **Parser:** one line per game, shaped like
+  `Away at Home (time, Network): Name (play-by-play), Name (analyst), Name (reporter)`.
+  Reporters are dropped, `TBD` is counted, and a line that does not parse is
+  counted, never guessed.
+
+Coalescing with 506, in order, per game and network:
+
+1. A `crew_overrides.csv` row wins.
+2. A lone source fills.
+3. The same people from both: 506's crew and attribution are kept (corroborated).
+4. AA lists every person 506 lists, plus more: AA's whole booth fills (D-04), with
+   a review row `relation=superset`.
+5. Any other difference goes to the newer page (D-02): 506's manifest `saved_at`
+   (else `fetched_at`) against AA's `article:modified_time` (else the fetch time of
+   the last HTTP 200 line). A tie keeps 506. Each such case writes a row to
+   `interim/review_crew_aa_disagreements.csv`; the build never fails over it.
+6. ESPN Press Room fills only what is still blank.
+
+AA crews never move the "crews through week N" stamp. Each crew is credited to its
+exact post, and AA's crews come down if AA objects.
+
 ## Storage
 
 The cached sitemaps and posts live only in the private vault, under `raw/aa/`.
