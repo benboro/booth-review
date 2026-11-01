@@ -484,14 +484,56 @@ def test_unknown_person_is_a_count_only_failure() -> None:
     assert str(exc.value) == "crew_overrides.csv: 1 row(s) name an unknown person_id"
 
 
-@pytest.mark.parametrize("plotted", [True, False])
-def test_unplotted_or_missing_telecast_is_a_count_only_failure(plotted: bool) -> None:
+_MISSING_TEXT = "crew_overrides.csv: 2 row(s) name a telecast the build does not have"
+
+
+@pytest.mark.parametrize("plotted", [False, None])
+def test_unplotted_main_telecast_takes_the_override(plotted: bool | None) -> None:
+    tels, people = _frames([_tel(2002, plotted=plotted, rated=False, rr_telecast_ids=[])], [])
+    result = apply_crew_overrides(
+        tels, people, {(2002, "net-a"): _override(game_id=2002)}, _registry("p-a", "p-b"), _COUNTS
+    )
+    row = result.telecasts.row(0, named=True)
+    assert row["crew_matched"] is True
+    assert row["crew_patched"] is True
+    assert row["crew_source_label"] == "Example Press Room"
+    sources = result.telecast_people.filter(pl.col("telecast_id") == "2002-net-a")["source"]
+    assert set(sources.to_list()) == {"crew_override"}
+    assert result.telecast_people.height == 2
+
+
+def test_missing_telecast_is_a_count_only_failure() -> None:
     tels, people = _frames([_tel(2002, plotted=False)], [])
-    key = (2002, "net-a") if not plotted else (9999, "net-a")
-    override = _override(game_id=key[0])
     with pytest.raises(CrewOverrideError) as exc:
-        apply_crew_overrides(tels, people, {key: override}, _registry("p-a", "p-b"), _COUNTS)
-    assert str(exc.value) == "crew_overrides.csv: 2 row(s) name a telecast the build does not plot"
+        apply_crew_overrides(
+            tels,
+            people,
+            {(9999, "net-a"): _override(game_id=9999)},
+            _registry("p-a", "p-b"),
+            _COUNTS,
+        )
+    assert str(exc.value) == _MISSING_TEXT
+
+
+def test_alt_only_telecast_is_a_count_only_failure() -> None:
+    tels, people = _frames([_tel(2002, feed_type="alt")], [])
+    with pytest.raises(CrewOverrideError) as exc:
+        apply_crew_overrides(
+            tels,
+            people,
+            {(2002, "net-a"): _override(game_id=2002)},
+            _registry("p-a", "p-b"),
+            _COUNTS,
+        )
+    assert str(exc.value) == _MISSING_TEXT
+
+
+def test_unrated_override_leaves_rated_counts_alone() -> None:
+    tels, people = _frames([_tel(2002, plotted=False, rated=False, rr_telecast_ids=[])], [])
+    result = apply_crew_overrides(
+        tels, people, {(2002, "net-a"): _override(game_id=2002)}, _registry("p-a", "p-b"), _COUNTS
+    )
+    assert result.season_counts == _COUNTS
 
 
 def test_no_overrides_returns_inputs_unchanged() -> None:

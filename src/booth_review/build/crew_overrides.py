@@ -188,6 +188,9 @@ def apply_crew_overrides(
     override's booth replaces it. Every status but `redundant` carries the
     `crew_source_url`/`crew_source_label` pair, since the shown crew is the
     override's. So `crew_matched & ~crew_patched` is exactly the 506 match.
+
+    The target may be any main telecast, plotted or not (AAC-04); overrides on
+    unplotted telecasts apply but do not appear in the gap review.
     """
     new_counts = {season: dict(counts) for season, counts in season_counts.items()}
     counts = dict.fromkeys(("applied", "patched", "redundant", "differs", "corrections", "rows"), 0)
@@ -203,7 +206,7 @@ def apply_crew_overrides(
     if unknown:
         raise CrewOverrideError(f"crew_overrides.csv: {unknown} row(s) name an unknown person_id")
 
-    mains = telecasts.filter((pl.col("feed_type") == "main") & pl.col("plotted").fill_null(False))
+    mains = telecasts.filter(pl.col("feed_type") == "main")
     by_key = {
         (row["game_id"], row["network_id"]): row
         for row in mains.select(
@@ -212,12 +215,10 @@ def apply_crew_overrides(
         .join(telecasts.select("telecast_id", "rr_telecast_ids"), on="telecast_id")
         .iter_rows(named=True)
     }
-    unplotted = sum(
-        len(override.people) for key, override in overrides.items() if key not in by_key
-    )
-    if unplotted:
+    missing = sum(len(override.people) for key, override in overrides.items() if key not in by_key)
+    if missing:
         raise CrewOverrideError(
-            f"crew_overrides.csv: {unplotted} row(s) name a telecast the build does not plot"
+            f"crew_overrides.csv: {missing} row(s) name a telecast the build does not have"
         )
 
     existing_main: dict[str, set[str]] = {}
