@@ -92,6 +92,7 @@ from booth_review.resolve import network_diagnose
 from booth_review.runtime import Runtime, build_runtime
 from booth_review.seasons import season_of, season_window
 from booth_review.sources.aa.collector import AaCollector
+from booth_review.sources.aa.crews import CREWS_SEASON, fetch_week_crews
 from booth_review.sources.aa.feed import (
     AA_FEED_CANDIDATES,
     FeedNotVerifiedError,
@@ -377,8 +378,19 @@ def build_parser() -> argparse.ArgumentParser:
                 choices=sorted(AA_FEED_CANDIDATES),
                 help="with --feed: one request to verify that candidate feed carries the posts",
             )
+            psecond.add_argument(
+                "--crews",
+                action="store_true",
+                help="Phase 27: fetch this week's recorded CFB announcing-schedule post "
+                "(2026 only) through the cache",
+            )
+            psecond.add_argument(
+                "--week",
+                type=int,
+                help="with --crews: a 2026 week whose post link the feed watch recorded",
+            )
         else:
-            psecond.set_defaults(feed=False, verify=None)
+            psecond.set_defaults(feed=False, verify=None, crews=False, week=None)
 
     pcfbd = collect_sub.add_parser("cfbd", help="collect CFBD season data or the venue list")
     cfbd_target = pcfbd.add_mutually_exclusive_group(required=True)
@@ -1307,7 +1319,90 @@ def _collect_aa_feed(args: argparse.Namespace) -> int:
         runtime.client.close()
 
 
+def _collect_aa_crews(args: argparse.Namespace) -> int:
+    """Phase 27: fetch one recorded 2026 crews post (D-01); outcome and URL only."""
+    paths = DataPaths.from_env()
+    now = _feed_now()
+    if not policy_fresh(paths, "aa", now):
+        print(
+            "error: policy check older than 30 days or not approved; run --policy-check",
+            file=sys.stderr,
+        )
+        return 4
+    if args.week is not None:
+        label = str(args.week)
+    else:
+        week = current_cfb_week(paths, now)
+        if week is None:
+            print("aa crews: no current cfb week, nothing to fetch")
+            return 0
+        label = week[1]
+    if week_key(CREWS_SEASON, label) not in load_feed_state(paths).weeks:
+        print(f"aa crews week {label}: no recorded link")
+        return 0
+    runtime = build_runtime(with_budget=False)
+    try:
+        runtime.client.add_robots_listener(robots_guard("aa"))
+        try:
+            result = fetch_week_crews(
+                runtime.cache,
+                paths,
+                season=CREWS_SEASON,
+                label=label,
+                now=now,
+                mode="conditional",
+                budget=1,
+                dry_run=args.dry_run,
+            )
+        except (
+            PolicyRobotsError,
+            RobotsDisallowedError,
+            RobotsUnavailableError,
+            UnknownHostError,
+        ) as exc:
+            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            return 4
+        except BoothReviewError as exc:
+            # The request was made and its audit row appended: commit it.
+            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            if not args.no_commit:
+                runtime.vault.commit_batch(
+                    batch_message("collect", "aa", "crews", {"requests": 1}),
+                    paths=["ledger/requests.jsonl", "raw/_robots/awfulannouncing.com"],
+                )
+            return 4
+        if result.outcome == "dry_run":
+            print("aa crews: planned 1 request")
+            return 0
+        if result.outcome == "stale_policy":
+            print(
+                "error: policy check older than 30 days or not approved; run --policy-check",
+                file=sys.stderr,
+            )
+            return 4
+        print(
+            f"aa crews week {label}: {result.outcome}, requests {result.requests}"
+            + (f" {result.url}" if result.url else "")
+        )
+        if result.touched and not args.no_commit:
+            runtime.vault.commit_batch(
+                batch_message("collect", "aa", "crews", {"requests": result.requests}),
+                paths=list(result.touched),
+            )
+        return 0
+    finally:
+        runtime.client.close()
+
+
 def _collect_second(args: argparse.Namespace, source: PolicySource) -> int:
+    if getattr(args, "crews", False):
+        if args.feed or args.verify or args.season or args.policy_check or args.confirm_terms:
+            print("error: --crews runs on its own", file=sys.stderr)
+            return 2
+        return _collect_aa_crews(args)
+    if getattr(args, "week", None) is not None:
+        print("error: --week needs --crews", file=sys.stderr)
+        return 2
     if getattr(args, "feed", False):
         if args.season or args.policy_check or args.confirm_terms:
             print("error: --feed runs on its own", file=sys.stderr)
