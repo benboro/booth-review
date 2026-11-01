@@ -327,6 +327,8 @@ class PoliteClient:
             return response
 
         try:
+            if policy.retry_mode == "single":
+                return attempt()
             if policy.retry_mode == "standard":
                 return self._send_with_standard_retries(attempt)
             return self._send_with_budgeted_retries(attempt)
