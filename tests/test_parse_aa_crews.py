@@ -61,7 +61,7 @@ def test_two_analysts_keep_both_in_order_and_names_survive() -> None:
     booth = _parse().booths[1]
     assert booth.people == (
         ("Dee Dunn Jr.", "pbp"),
-        ("Eli O’Neil III", "analyst"),
+        ("Eli O'Neil III", "analyst"),
         ("José Núñez", "analyst"),
     )
 
