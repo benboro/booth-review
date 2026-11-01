@@ -339,10 +339,16 @@ def aa_feed_blocked() -> AttentionItem:
     )
 
 
-def aa_crews_skipped(reason: Literal["policy", "robots"]) -> AttentionItem:
+def aa_crews_skipped(reason: Literal["policy", "robots", "not_cached"]) -> AttentionItem:
     """Phase 27: the crews post was not fetched; fixed lines, no URL or page text."""
     if reason == "robots":
         line = "aa crews post not fetched: robots.txt refuses it or asks for a longer crawl delay"
+    elif reason == "not_cached":
+        # Phase 27 review WR-02: the Friday/Saturday runs only re-check a cached post.
+        line = (
+            "aa crews post not re-checked: the week post is not cached and this run only "
+            "re-checks, run booth-review collect aa --crews to fetch it"
+        )
     else:
         line = (
             "aa crews post not fetched: aa policy check older than 30 days or terms not "

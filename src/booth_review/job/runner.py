@@ -416,13 +416,22 @@ class ScheduledJob:
 
     def _aa_crews_step(self, items: list[AttentionItem], now: datetime) -> None:
         """Friday 18:00 / Saturday 08:00 ET: one conditional re-check of the week's AA
-        crews post, before the build so it sees the page (D-01). It never raises."""
+        crews post, before the build so it sees the page (D-01). It never raises.
+
+        Phase 27 review WR-02: a re-check only (no first fetch of an uncached post),
+        and at most one request per slot occurrence, however many runs land in it."""
         try:
             local = now.astimezone(EASTERN)
-            if not any(
-                local.weekday() == weekday and 0 <= local.hour - hour < CREWS_RECHECK_WINDOW_HOURS
-                for weekday, hour in SCHEDULE_ONLY
-            ):
+            slot = next(
+                (
+                    f"{local.date().isoformat()}T{hour:02d}"
+                    for weekday, hour in SCHEDULE_ONLY
+                    if local.weekday() == weekday
+                    and 0 <= local.hour - hour < CREWS_RECHECK_WINDOW_HOURS
+                ),
+                None,
+            )
+            if slot is None:
                 return
             week = current_cfb_week(self._runtime.paths, now)
             if week is None:
@@ -433,9 +442,10 @@ class ScheduledJob:
                     season=week[0],
                     label=week[1],
                     now=now,
-                    mode="conditional",
+                    mode="recheck",
                     budget=1,
                     commit=self._commit_enabled,
+                    recheck_slot=slot,
                 )
             )
         except Exception as exc:

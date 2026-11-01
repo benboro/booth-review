@@ -610,7 +610,7 @@ def test_aa_feed_attention_lines(builder, needle: str) -> None:
     _passes(item)
 
 
-@pytest.mark.parametrize("reason", ["robots", "policy"])
+@pytest.mark.parametrize("reason", ["robots", "policy", "not_cached"])
 def test_aa_crews_skipped_lines(reason: str) -> None:
     item = aa_crews_skipped(reason)  # type: ignore[arg-type]
     assert item.severity == "attention"

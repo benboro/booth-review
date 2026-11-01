@@ -39,8 +39,10 @@ from booth_review.runtime import Runtime
 from booth_review.sources.aa.crews import fetch_week_crews
 from booth_review.sources.aa.feed import (
     check_week,
+    crews_rechecked,
     load_feed_state,
     record_blind_week,
+    record_crews_recheck,
     week_key,
 )
 from booth_review.sources.policy import PolicyRobotsError, policy_fresh, robots_guard
@@ -82,12 +84,25 @@ def run_crews_fetch(
     season: int,
     label: str,
     now: datetime,
-    mode: Literal["if_missing", "conditional"],
+    mode: Literal["if_missing", "conditional", "recheck"],
     budget: int,
     commit: bool,
+    recheck_slot: str | None = None,
 ) -> list[AttentionItem]:
-    """One crews fetch plus its commit; returns attention lines. It never raises."""
+    """One crews fetch plus its commit; returns attention lines. It never raises.
+
+    With `recheck_slot` (the Friday/Saturday re-check, ET `YYYY-MM-DDTHH`), the slot
+    is recorded in the feed-watch state just before its one request goes out, and a
+    later run in the same slot sends nothing (Phase 27 review WR-02)."""
+    marked: list[str] = []
+
+    def mark_slot() -> None:
+        if recheck_slot is not None and record_crews_recheck(runtime.paths, recheck_slot):
+            marked.append(_FEED_STATE)
+
     try:
+        if recheck_slot is not None and crews_rechecked(runtime.paths, recheck_slot):
+            return []
         install_aa_guard(runtime)
         result = fetch_week_crews(
             runtime.cache,
@@ -97,6 +112,7 @@ def run_crews_fetch(
             now=now,
             mode=mode,
             budget=budget,
+            on_request=mark_slot,
         )
     except (RobotsDisallowedError, PolicyRobotsError) as exc:
         _LOG.warning("aa crews: blocked: %s", type(exc).__name__)
@@ -107,16 +123,20 @@ def run_crews_fetch(
     items: list[AttentionItem] = []
     if result.outcome == "stale_policy":
         items.append(aa_crews_skipped("policy"))
+    elif result.outcome == "not_cached":
+        items.append(aa_crews_skipped("not_cached"))
     if commit and result.requests:
         try:
             runtime.vault.commit_batch(
                 batch_message("job", "aa", "crews", {"requests": result.requests}),
-                paths=list(result.touched),
+                paths=[*result.touched, *marked],
             )
         except BoothReviewError as exc:
             _LOG.warning("aa crews: commit failed: %s", type(exc).__name__)
     return items
 
+
+_FEED_STATE = "ledger/aa_feed_watch.json"
 
 _REQUEST_PATHS = [
     "ledger/aa_feed_watch.json",

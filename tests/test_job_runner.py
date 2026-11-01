@@ -2762,9 +2762,12 @@ def _crews_responses(*, post_status: int = 200, robots: bytes | None = None) -> 
     return responses
 
 
-def _crews_job(paths, handle, fake_clock, when, monkeypatch, *, dry_run=False, link=True):
-    """A schedule run at `when` with a recorded link for the current week and
-    `_build_and_site` replaced by a recorder; returns (job, events)."""
+def _crews_job(
+    paths, handle, fake_clock, when, monkeypatch, *, dry_run=False, link=True, cached=True
+):
+    """A schedule run at `when` with a recorded link for the current week (its post
+    already cached unless `cached` is False) and `_build_and_site` replaced by a
+    recorder; returns (job, events)."""
     events: list[str] = []
     games = paths.raw / "cfbd" / "games" / "2026.json"
     games.parent.mkdir(parents=True, exist_ok=True)
@@ -2772,6 +2775,11 @@ def _crews_job(paths, handle, fake_clock, when, monkeypatch, *, dry_run=False, l
     week = runner_module.current_cfb_week(paths, when)
     assert week is not None
     _seed_aa_ready(paths, weeks={f"{week[0]}-{week[1]}": _AA_POST} if link else None)
+    if cached:
+        post = paths.raw / "aa" / "crews" / str(week[0]) / f"wk-{int(week[1]):02d}.html"
+        post.parent.mkdir(parents=True, exist_ok=True)
+        if not post.exists():
+            post.write_bytes(_CREWS_POST)
     monkeypatch.setattr(runner_module, "_check_required_state", lambda *a, **k: None)
     monkeypatch.setattr(ScheduledJob, "_staleness_step", lambda self, *a, **k: None)
 
@@ -2833,6 +2841,7 @@ def test_crews_not_modified_leaves_the_cached_file_unchanged(
     first = mock_transport_factory(_crews_responses())
     job, _ = _crews_job(paths, first, fake_clock, _FRI_1800, monkeypatch)
     job.run()
+    assert len(_post_requests(first)) == 1
     cached = next((paths.raw / "aa" / "crews" / "2026").glob("*.html"))
     before = cached.read_bytes()
     second = mock_transport_factory(_crews_responses(post_status=304))
@@ -2840,6 +2849,56 @@ def test_crews_not_modified_leaves_the_cached_file_unchanged(
     job2.run()
     assert len(_post_requests(second)) == 1
     assert cached.read_bytes() == before
+
+
+def test_crews_uncached_post_is_never_first_fetched_on_a_recheck_slot(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    """Phase 27 review WR-02: Friday/Saturday only re-check a cached post; with no
+    cached copy the run sends nothing and says so in a fixed line with no URL."""
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, events = _crews_job(paths, handle, fake_clock, _FRI_1800, monkeypatch, cached=False)
+    result = job.run()
+    assert _post_requests(handle) == []
+    (line,) = [i for i in result.items if i.kind == "aa_crews_skipped_not_cached"]
+    assert "http" not in line.line and "awfulannouncing" not in line.line
+    assert not (paths.raw / "aa" / "crews" / "2026").is_dir()
+    assert events
+
+
+def test_crews_recheck_slot_sends_at_most_one_request_across_runs(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    """Phase 27 review WR-02: the 20:00 backup (or a manual schedule run) inside the
+    Friday 18:00 slot sends no second request; Saturday's slot still re-checks."""
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    first = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, first, fake_clock, _FRI_1800, monkeypatch)
+    job.run()
+    assert len(_post_requests(first)) == 1
+    watch = paths.ledger / "aa_feed_watch.json"
+    saved = watch.read_text(encoding="utf-8")
+    assert json.loads(saved)["crews_rechecked"] == ["2026-10-16T18"]
+
+    for later in (_FRI_1800 + timedelta(hours=2), _FRI_1800 + timedelta(minutes=30)):
+        again = mock_transport_factory(_crews_responses(post_status=304))
+        job2, events = _crews_job(paths, again, fake_clock, later, monkeypatch)
+        watch.write_text(saved, encoding="utf-8")  # the helper re-seeds the watch state
+        result = job2.run()
+        assert _post_requests(again) == []
+        assert not any(i.kind.startswith("aa_crews") for i in result.items)
+        assert events
+
+    saturday = mock_transport_factory(_crews_responses(post_status=304))
+    job3, _ = _crews_job(paths, saturday, fake_clock, _SAT_0800, monkeypatch)
+    watch.write_text(saved, encoding="utf-8")
+    job3.run()
+    assert len(_post_requests(saturday)) == 1
+    state = json.loads(watch.read_text(encoding="utf-8"))
+    assert state["crews_rechecked"] == ["2026-10-16T18", "2026-10-17T08"]
 
 
 def test_crews_no_recorded_link_makes_no_request_and_no_line(

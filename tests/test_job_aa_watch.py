@@ -18,7 +18,12 @@ import pytest
 
 from booth_review.config import DataPaths
 from booth_review.errors import VaultBusyError, VaultCommitError
-from booth_review.job.aa_watch import AA_WATCH_SEASON, LAST_POLL_LOCAL, make_aa_cfb_resolver
+from booth_review.job.aa_watch import (
+    AA_WATCH_SEASON,
+    LAST_POLL_LOCAL,
+    make_aa_cfb_resolver,
+    run_crews_fetch,
+)
 from booth_review.job.attention import reminder_aa_cfb
 from booth_review.job.reminders import due_reminders
 from booth_review.sources.aa.feed import (
@@ -493,3 +498,61 @@ def test_crews_other_season_touches_nothing(vault_paths: DataPaths) -> None:
     items = make_aa_cfb_resolver(_runtime(vault_paths, server, vault), commit=True)(2025, "10", t)
     assert _kinds(items) == ["reminder_aa_cfb"]
     assert server.total == 0 and vault.calls == []
+
+
+# -- Phase 27 review WR-02: the Friday/Saturday re-check ------------------------
+
+SLOT = "2026-11-06T18"
+T_FRI = datetime(2026, 11, 6, 18, 0, tzinfo=ET)
+
+
+def _recheck(paths: DataPaths, server: _Server, vault: _Vault | None = None) -> list:
+    return run_crews_fetch(
+        _runtime(paths, server, vault),
+        season=2026,
+        label="10",
+        now=T_FRI,
+        mode="recheck",
+        budget=1,
+        commit=True,
+        recheck_slot=SLOT,
+    )
+
+
+def test_recheck_of_an_uncached_post_sends_nothing(vault_paths: DataPaths) -> None:
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    server, vault = _Server(), _Vault()
+    items = _recheck(vault_paths, server, vault)
+    assert _kinds(items) == ["aa_crews_skipped_not_cached"]
+    assert "http" not in items[0].line
+    assert server.total == 0 and vault.calls == []
+    assert load_feed_state(vault_paths).crews_rechecked == []
+
+
+def test_recheck_marks_its_slot_commits_it_and_never_repeats(vault_paths: DataPaths) -> None:
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    post = vault_paths.raw / "aa" / "crews" / "2026" / "wk-10.html"
+    post.parent.mkdir(parents=True)
+    post.write_bytes(POST)
+    server, vault = _Server(), _Vault()
+    assert _recheck(vault_paths, server, vault) == []
+    assert server.post_requests == 1
+    assert load_feed_state(vault_paths).crews_rechecked == [SLOT]
+    ((_, committed),) = vault.calls
+    assert "ledger/aa_feed_watch.json" in committed and CREWS_FILE in committed
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert stored["crews_rechecked"] == [SLOT]
+
+    again, vault2 = _Server(), _Vault()
+    assert _recheck(vault_paths, again, vault2) == []
+    assert again.total == 0 and vault2.calls == []
+
+
+def test_feed_state_without_rechecks_keeps_its_old_shape(vault_paths: DataPaths) -> None:
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    stored = json.loads((vault_paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert "crews_rechecked" not in stored
+    with pytest.raises(ValueError, match="slot key"):
+        _state(vault_paths, crews_rechecked=["friday"])

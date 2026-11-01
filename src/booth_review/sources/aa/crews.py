@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Literal
@@ -277,11 +278,15 @@ CREWS_SEASON = 2026
 _ROBOTS_CACHE = "raw/_robots/awfulannouncing.com"
 _REQUESTS_LEDGER = "ledger/requests.jsonl"
 
-CrewsMode = Literal["if_missing", "conditional"]
+# if_missing: fetch only when not cached (the Tuesday run). conditional: fetch, or
+# re-check a cached post with its validators (the CLI). recheck: re-check a cached
+# post only; never a first fetch (the Friday/Saturday runs, Phase 27 review WR-02).
+CrewsMode = Literal["if_missing", "conditional", "recheck"]
 CrewsOutcome = Literal[
     "fetched",
     "not_modified",
     "cached",
+    "not_cached",
     "no_link",
     "stale_policy",
     "not_season",
@@ -323,10 +328,13 @@ def fetch_week_crews(
     mode: CrewsMode,
     budget: int,
     dry_run: bool = False,
+    on_request: Callable[[], None] | None = None,
 ) -> CrewsFetchResult:
     """Fetch one week's recorded crews post through the cache (D-01, D-03).
 
-    Robots and host errors propagate; the caller installed ``robots_guard``.
+    ``on_request`` runs just before the one request is sent (the job records its
+    re-check slot there). Robots and host errors propagate; the caller installed
+    ``robots_guard``.
     """
     if season != CREWS_SEASON:
         return _result("not_season")
@@ -340,6 +348,8 @@ def fetch_week_crews(
     cached = cache.status(req) == "cached"
     if mode == "if_missing" and cached:
         return CrewsFetchResult("cached", 0, url, req.cache_path, ())
+    if mode == "recheck" and not cached:
+        return CrewsFetchResult("not_cached", 0, url, None, ())
     if budget < 1:
         return _result("no_budget", url)
     if dry_run:
@@ -351,6 +361,8 @@ def fetch_week_crews(
         parse=_parse_adapter,
         error=AaCrewsParseError,
     )
+    if on_request is not None:
+        on_request()
     result = cache.get_or_fetch(req, refresh=cached, validate=validate)
     outcome: CrewsOutcome = "not_modified" if result.outcome == "not_modified" else "fetched"
     vault_path = f"raw/{req.cache_path}"

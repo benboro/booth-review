@@ -93,8 +93,11 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
   AA host. The command never takes a URL argument.
 - **When:** the Tuesday reminder run fetches a post the first time it finds it.
   Conditional re-checks (ETag / Last-Modified) run Friday 18:00 and Saturday
-  08:00 ET, since AA edits a post through Saturday. `--week N` re-checks an
-  already-recorded week by hand.
+  08:00 ET, since AA edits a post through Saturday. They only re-check a post
+  that is already cached (an uncached post is skipped, with a reminder line),
+  and each slot sends at most one request: the slot is recorded in
+  `ledger/aa_feed_watch.json` (`crews_rechecked`), so a backup or manual run in
+  the same slot sends none. `--week N` re-checks an already-recorded week by hand.
 - **Cap:** at most 2 AA requests per run, the feed check included, at least 3 s
   apart, with the project user agent and robots.txt.
 - **Gate:** an AA policy check from the last 30 days with confirmed terms. When
