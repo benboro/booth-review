@@ -15,7 +15,12 @@ sits inside or outside the tag). Roles come from the post's own tags
 (play-by-play -> pbp, analyst -> analyst); reporters are dropped. A TBD crew is
 counted, a line that does not fit the shape or carries an unknown role is
 counted as unparsed, and a crew with no play-by-play is counted and skipped.
-Nothing here fetches or executes anything.
+
+The fetch half (``fetch_week_crews``) is shared by ``booth-review collect aa
+--crews`` and the scheduled job. Unlike the feed, a crews response is cached.
+The only URLs it ever fetches are the ``weeks`` values the feed watch recorded in
+``ledger/aa_feed_watch.json`` (D-01), after the policy gate and the feed URL
+whitelist; it takes no URL argument. Only season 2026 is ever fetched (D-03).
 """
 
 from __future__ import annotations
@@ -24,9 +29,11 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
+from booth_review.config import DataPaths
 from booth_review.people.roles import Role
+from booth_review.sources.aa.feed import _check_url, load_feed_state, week_key
 from booth_review.sources.aa.index import on_host
 from booth_review.sources.aa.parser import (
     _classes,
@@ -36,6 +43,10 @@ from booth_review.sources.aa.parser import (
     post_url_from_html,
 )
 from booth_review.sources.espnpr.parser import _AT_RE, _VS_RE, _clean
+from booth_review.sources.gapcollect import post_validator
+from booth_review.sources.policy import policy_fresh
+from booth_review.transport.cache import RawCache
+from booth_review.transport.types import FetchRequest
 
 _MONTHS = {
     name: number
@@ -259,4 +270,90 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
         unparsed=unparsed,
         tbd=tbd,
         no_pbp=no_pbp,
+    )
+
+
+CREWS_SEASON = 2026
+_ROBOTS_CACHE = "raw/_robots/awfulannouncing.com"
+_REQUESTS_LEDGER = "ledger/requests.jsonl"
+
+CrewsMode = Literal["if_missing", "conditional"]
+CrewsOutcome = Literal[
+    "fetched",
+    "not_modified",
+    "cached",
+    "no_link",
+    "stale_policy",
+    "not_season",
+    "no_budget",
+    "dry_run",
+]
+
+
+def crews_request(season: int, label: str, url: str) -> FetchRequest:
+    return FetchRequest(
+        source="aa", season=season, url=url, cache_path=crews_cache_path(season, label)
+    )
+
+
+@dataclass(frozen=True)
+class CrewsFetchResult:
+    outcome: CrewsOutcome
+    requests: int
+    url: str | None
+    cache_path: str | None
+    touched: tuple[str, ...]
+
+
+def _result(outcome: CrewsOutcome, url: str | None = None) -> CrewsFetchResult:
+    return CrewsFetchResult(outcome, 0, url, None, ())
+
+
+def _parse_adapter(html: str, *, url: str, season: int) -> ParsedCrews:
+    return parse_crews(html, season=season)
+
+
+def fetch_week_crews(
+    cache: RawCache,
+    paths: DataPaths,
+    *,
+    season: int,
+    label: str,
+    now: datetime,
+    mode: CrewsMode,
+    budget: int,
+    dry_run: bool = False,
+) -> CrewsFetchResult:
+    """Fetch one week's recorded crews post through the cache (D-01, D-03).
+
+    Robots and host errors propagate; the caller installed ``robots_guard``.
+    """
+    if season != CREWS_SEASON:
+        return _result("not_season")
+    if not policy_fresh(paths, "aa", now):
+        return _result("stale_policy")
+    url = load_feed_state(paths).weeks.get(week_key(season, label))
+    if url is None:
+        return _result("no_link")
+    _check_url(url)
+    req = crews_request(season, label, url)
+    cached = cache.status(req) == "cached"
+    if mode == "if_missing" and cached:
+        return CrewsFetchResult("cached", 0, url, req.cache_path, ())
+    if budget < 1:
+        return _result("no_budget", url)
+    if dry_run:
+        return _result("dry_run", url)
+    validate = post_validator(
+        "aa",
+        season,
+        url_from_html=post_url_from_html,
+        parse=_parse_adapter,
+        error=AaCrewsParseError,
+    )
+    result = cache.get_or_fetch(req, refresh=cached, validate=validate)
+    outcome: CrewsOutcome = "not_modified" if result.outcome == "not_modified" else "fetched"
+    vault_path = f"raw/{req.cache_path}"
+    return CrewsFetchResult(
+        outcome, 1, url, req.cache_path, (vault_path, _REQUESTS_LEDGER, _ROBOTS_CACHE)
     )
