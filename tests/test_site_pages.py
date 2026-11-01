@@ -423,7 +423,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # Re-pinned at Phase 26 Plan 10 (sign-off): the 27 em-dashes in methodology.md and the
 # known-gaps text it splices in become commas, colons, semicolons and parentheses.
 # Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
-_METHODOLOGY_FLAG_OFF_SHA256 = "f96bea18dab8fbd62d196cc7011a4cce943bb0bbdb3d688c0c15e0d508da4d0c"
+# Re-pinned at Phase 27 Plan 07: the methodology gains an Awful Announcing crew-source paragraph
+# (probe: the previous methodology.md reproduces the old digest, so only that prose moved it).
+_METHODOLOGY_FLAG_OFF_SHA256 = "0bdfe60fc6dcd0eb375515a1adb4937f6d9cd6efc50191cd903acca82a50a341"
 
 _NFL_ANCHORS = (
     "nfl-special-games",
