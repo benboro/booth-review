@@ -83,6 +83,12 @@ Phase 27 Plan 06: the build now writes a header-only review_crew_aa_disagreement
 (its digest is the sha256 of the header line alone; the synthetic vault has no AA
 pages). The other 27 pinned digests, telecasts, telecast_people and site-data.json
 among them, are unchanged, so no figure or crew changed.
+
+Phase 27 review (2026-11-01): CR-01 (overrides of any status beat AA) and CR-02 (an AA
+booth inside 506's crew is an agreement) moved no digest, since the synthetic vault has no
+AA pages. WR-05: contract 2.8.0 adds coverage matched_crew_aa (0 on every synthetic
+coverage row); site-data.json with that field dropped and the version set back to 2.7.0
+hashes to the Phase 27 Plan 06 digest (cce9771409a8...), so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -181,7 +187,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "cce9771409a80899f0aa10221be449ead4b6feffe00dbad59a73684b6f96d3ed"
+        "3244f6b46d0cab05317c40f00cd0da866eab99c66774f2f58505de37c87ba34a"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

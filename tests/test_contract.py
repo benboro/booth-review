@@ -267,6 +267,26 @@ def _missing_matched_crew_backup(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+# Phase 27 review WR-05 (contract 2.8.0): coverage matched_crew_aa.
+def _matched_crew_aa_negative(data: dict[str, Any]) -> dict[str, Any]:
+    data["coverage"][0]["matched_crew_aa"] = -1
+    return data
+
+
+def _matched_crew_aa_with_others_exceeds(data: dict[str, Any]) -> dict[str, Any]:
+    # Each alone fits; with the hand-confirmed crews the AA crews exceed matched_crew.
+    row = data["coverage"][0]
+    row["matched_crew_patched"] = row["matched_crew"]
+    row["matched_crew_backup"] = 0
+    row["matched_crew_aa"] = 1
+    return data
+
+
+def _missing_matched_crew_aa(data: dict[str, Any]) -> dict[str, Any]:
+    del data["coverage"][0]["matched_crew_aa"]
+    return data
+
+
 def _missing_crew_source_url_column(data: dict[str, Any]) -> dict[str, Any]:
     del data["telecasts"]["crew_source_url"]
     return data
@@ -533,6 +553,9 @@ _BROKEN_VARIANTS = [
         _matched_crew_backup_with_patched_exceeds, id="matched-crew-backup-with-patched-exceeds"
     ),
     pytest.param(_missing_matched_crew_backup, id="missing-matched-crew-backup"),
+    pytest.param(_matched_crew_aa_negative, id="matched-crew-aa-negative"),
+    pytest.param(_matched_crew_aa_with_others_exceeds, id="matched-crew-aa-with-others-exceeds"),
+    pytest.param(_missing_matched_crew_aa, id="missing-matched-crew-aa"),
     pytest.param(_bowl_index_out_of_range, id="bowl-index-out-of-range"),
     pytest.param(_bowl_core_not_in_name, id="bowl-core-not-in-name"),
     pytest.param(_bowl_on_regular_game, id="bowl-on-regular-game"),
@@ -593,6 +616,23 @@ def test_broken_variant_raises(mutate: Any) -> None:
     ],
 )
 def test_matched_crew_backup_errors_name_the_row(mutate: Any, message: str) -> None:
+    broken = mutate(copy.deepcopy(_load_fixture()))
+    with pytest.raises(ValidationError, match=re.escape(message)):
+        validate_site_data(broken)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (_matched_crew_aa_negative, "coverage[0].matched_crew_aa: must not be negative"),
+        (
+            _matched_crew_aa_with_others_exceeds,
+            "coverage[0].matched_crew_aa: with matched_crew_patched and matched_crew_backup"
+            " exceeds matched_crew",
+        ),
+    ],
+)
+def test_matched_crew_aa_errors_name_the_row(mutate: Any, message: str) -> None:
     broken = mutate(copy.deepcopy(_load_fixture()))
     with pytest.raises(ValidationError, match=re.escape(message)):
         validate_site_data(broken)
@@ -822,7 +862,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.7.0"
+    data["schema_version"] = "2.8.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {

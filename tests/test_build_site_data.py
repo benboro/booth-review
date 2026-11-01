@@ -1520,6 +1520,25 @@ def test_coverage_emits_matched_crew_backup_per_network_and_season(
         assert row["matched_crew_patched"] == 0
 
 
+def test_coverage_emits_matched_crew_aa_per_network_and_season(
+    build_reference: Path,
+) -> None:
+    """Phase 27 review WR-05: an Awful Announcing crew counts in matched_crew and
+    matched_crew_aa only, never as a 506 match."""
+    tables = _patched_freshness_tables(
+        second_season_type="regular", second_week=3, second_patched=False, second_aa=True
+    )
+    payload = _site(tables, build_reference)
+    rows = payload["coverage"]
+    assert isinstance(rows, list)
+    assert {row["network"] is None for row in rows} == {True, False}
+    for row in rows:
+        assert row["matched_crew"] == 2
+        assert row["matched_crew_aa"] == 1
+        assert row["matched_crew_backup"] == 0
+        assert row["matched_crew_patched"] == 0
+
+
 def test_freshness_unpatched_crew_advances_stamp(build_reference: Path) -> None:
     tables = _patched_freshness_tables(
         second_season_type="regular", second_week=3, second_patched=False
@@ -1650,7 +1669,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.7.0"
+    assert payload["schema_version"] == "2.8.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]

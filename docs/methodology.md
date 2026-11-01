@@ -555,7 +555,8 @@ person the other does), the superset wins; otherwise the booth from the newer
 page wins, and a tie on page time, or a 506 listing with no kickoff time, keeps
 506. Booths are never merged person by person, and each disagreement is written
 to a review file (`review_crew_aa_disagreements.csv`). The detail view reads
-"Crew source: Awful Announcing ↗", linked to the exact post. Awful Announcing
+"Crew source: Awful Announcing ↗", linked to the exact post. The coverage
+table counts Awful Announcing crews in their own column. Awful Announcing
 crews never move the "crews through week N" stamp and are never drawn for the
 join sample, so the match rate stays the 506 match rate.
 

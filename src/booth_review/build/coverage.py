@@ -44,6 +44,7 @@ COVERAGE_COLUMNS: tuple[str, ...] = (
     "matched_crew",
     "crew_patched",
     "crew_backup",
+    "crew_aa",
     "records_with_crew",
     "crew_rate",
     "match_rate",
@@ -77,6 +78,7 @@ _BUCKET_KEYS: tuple[str, ...] = (
     "matched_crew",
     "crew_patched",
     "crew_backup",
+    "crew_aa",
     "headline_present",
     "headline_second_source",
     "excitement_present",
@@ -197,6 +199,10 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 bucket["crew_patched"] += 1
             if row["crew_backup"]:
                 bucket["crew_backup"] += 1
+            # Phase 27 review WR-05: an Awful Announcing crew (a fill or a newer AA
+            # booth that replaced 506's) is not a 506 match.
+            if row["crew_aa"]:
+                bucket["crew_aa"] += 1
 
         has_headline = row["headline_claim_id"] is not None
         if has_headline:
@@ -247,6 +253,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "matched_crew": bucket["matched_crew"],
                 "crew_patched": bucket["crew_patched"],
                 "crew_backup": bucket["crew_backup"],
+                "crew_aa": bucket["crew_aa"],
                 "records_with_crew": None,
                 "crew_rate": _rate(bucket["matched_crew"], bucket["rated_telecasts"]),
                 "match_rate": None,
@@ -284,6 +291,7 @@ def build_coverage(tables: BuildTables) -> CoverageReport:
                 "matched_crew": summed["matched_crew"],
                 "crew_patched": summed["crew_patched"],
                 "crew_backup": summed["crew_backup"],
+                "crew_aa": summed["crew_aa"],
                 "records_with_crew": diag.get("records_with_crew"),
                 "crew_rate": _rate(summed["matched_crew"], summed["rated_telecasts"]),
                 "match_rate": diagnostics.join08_by_season.get(season),

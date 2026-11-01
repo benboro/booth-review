@@ -123,8 +123,9 @@ Coalescing with 506, in order, per game and network:
    `interim/review_crew_aa_disagreements.csv`; the build never fails over it.
 6. ESPN Press Room fills only what is still blank.
 
-AA crews never move the "crews through week N" stamp. Each crew is credited to its
-exact post, and AA's crews come down if AA objects.
+AA crews never move the "crews through week N" stamp, and the coverage table
+counts them in their own column (`matched_crew_aa`), never as 506 matches. Each
+crew is credited to its exact post, and AA's crews come down if AA objects.
 
 ## Storage
 

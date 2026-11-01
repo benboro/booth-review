@@ -875,6 +875,7 @@ def build_site_data(
                 "matched_crew": _as_int(crow["matched_crew"]),
                 "matched_crew_patched": _as_int(crow["crew_patched"]),
                 "matched_crew_backup": _as_int(crow["crew_backup"]),
+                "matched_crew_aa": _as_int(crow["crew_aa"]),
                 "match_rate": crow["match_rate"],
                 "headline_present": _as_int(crow["headline_present"]),
                 "excitement_present": _as_int(crow["excitement_present"]),

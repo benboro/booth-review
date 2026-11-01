@@ -59,7 +59,12 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # freshness.weekend.
 # Re-pinned at Phase 18 Plan 13 (F1): the fixture gains the per-game week label column.
 # Re-pinned at Phase 18 Plan 13 (F7): telecasts_scheduled gains empty crew columns.
-_SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad479b51"
+# All three re-pinned at the Phase 27 review (2026-11-01, WR-05): contract 2.8.0 adds coverage
+# matched_crew_aa, 0 on every fixture row (dropping it and setting the version back to 2.7.0
+# gives the old site-data digest cec8bf26b5e0...); coverage.html gains the "Of which Awful
+# Announcing" column (dropping its header and cells gives the old coverage digest
+# c0475d22f70c...); the index moves only through its site-data cache-bust version.
+_SITE_DATA_SHA256 = "534196a957ee24f64259a6cb693eccf35bd29c0dd4f0e2c8015e4edd8e33e1a1"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
@@ -70,7 +75,8 @@ _SITE_DATA_SHA256 = "cec8bf26b5e0f5b1aaa165cfe335d80582e308af4ceea75a3657ab4aad4
 # Re-pinned at Phase 26 Plan 05: footer credit blocks, spaced nav, semicolon freshness, title.
 # Re-pinned at Phase 26 Plan 10 (sign-off): the freshness line binds "Week" to its number and the
 # last two words with no-break spaces.
-_COVERAGE_SHA256 = "c0475d22f70cef579abe5008fa44e1f4996e12313a291e250ffbecc95dd720e6"
+# Re-pinned at the Phase 27 review (2026-11-01, WR-05): the "Of which Awful Announcing" column.
+_COVERAGE_SHA256 = "3bccea98ca1ced27ad13a8eddb8bfda3635fe05ebda934221c037acbf0a32f86"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -101,7 +107,9 @@ _COVERAGE_SHA256 = "c0475d22f70cef579abe5008fa44e1f4996e12313a291e250ffbecc95dd7
 # Re-pinned at Phase 26 Plan 08: the retired toolbar measuring script's preload and script tag
 # removed (2 removed lines).
 # Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
-_INDEX_PRE_PHASE_SHA256 = "11b5b64019f60fbdbb336b771c400e243a2dbaac8098c1445cc574f7dc9be767"
+# Re-pinned at the Phase 27 review (2026-11-01, WR-05): contract 2.8.0 moves the index only
+# through its site-data cache-bust version (cec8bf26b5 -> 534196a957, the one changed line).
+_INDEX_PRE_PHASE_SHA256 = "9cc2157925ab2ecec8a987eb41af060c6f18418eac40df682660891de61a3ea0"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'
