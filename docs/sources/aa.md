@@ -98,8 +98,9 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
   and each slot sends at most one request: the slot is recorded in
   `ledger/aa_feed_watch.json` (`crews_rechecked`), so a backup or manual run in
   the same slot sends none. `--week N` re-checks an already-recorded week by hand.
-- **Cap:** at most 2 AA requests per run, the feed check included, at least 3 s
-  apart, with the project user agent and robots.txt.
+- **Cap:** at most 2 AA requests per run (the feed and the post; the robots.txt
+  check before them is not counted), at least 3 s apart, with the project user agent
+  and robots.txt. A request that fails is never retried.
 - **Gate:** an AA policy check from the last 30 days with confirmed terms. When
   it is stale, the run skips the fetch and says so in the reminder.
 - **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault.

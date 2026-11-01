@@ -12,8 +12,10 @@ APPROVED = [
     "- **When:** it fetches a post on the Tuesday reminder run that finds it. It "
     "re-checks the post with conditional requests (ETag / Last-Modified) on the Friday "
     "18:00 and Saturday 08:00 ET runs.",
-    "- **How:** at most 2 AA requests per run, at least 3 s apart, with the project "
-    "user agent and robots.txt. Each response is cached under `raw/aa/crews/2026/`.",
+    "- **How:** at most 2 AA requests per run (the feed and the post; the robots.txt "
+    "check before them is not counted), at least 3 s apart, with the project user agent "
+    "and robots.txt. A request that fails is never retried. Each response is cached "
+    "under `raw/aa/crews/2026/`.",
     "- **Policy check:** it needs the same AA policy check as the feed watch: done "
     "within the last 30 days, with terms confirmed. When that check is stale, or "
     "robots.txt refuses the post, the run skips the fetch and says so in the reminder. "
@@ -43,6 +45,17 @@ def test_approved_bullets_present_in_order() -> None:
 
 def test_feed_watch_sentence_reworded() -> None:
     assert "itself never parses or stores a post body or crew data" in _agents()
+
+
+def test_feed_watch_ledger_lists_recheck_slots() -> None:
+    assert (
+        _norm(
+            "each week's post link or a mark that its plain reminder went out (after which "
+            "that week is not checked again, so it gets one comment), and the Friday and "
+            "Saturday crews re-check slots already used."
+        )
+        in _agents()
+    )
 
 
 def test_crew_bullet_between_feed_watch_and_espn() -> None:
