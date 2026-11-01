@@ -225,3 +225,63 @@ def test_page_with_only_tbd_crews_is_valid_and_empty() -> None:
     end = _HTML.index("<p>Closing invented prose")
     parsed = _parse(_HTML[:start] + body + _HTML[end:])
     assert parsed.booths == [] and parsed.tbd == 1 and parsed.unparsed == 0
+
+
+# -- Adversarial panel F2/F3: only weekday headers date games, and drift clears ---
+
+
+def test_header_with_a_year_dates_its_games() -> None:
+    """F3: "Weekday, Month D, YYYY" is a header, so the Saturday game is not dated
+    by the Thursday header above it."""
+    html = _HTML.replace("Friday November 6", "Thursday November 5").replace(
+        "Saturday, November 7", "Saturday, November 7, 2026"
+    )
+    parsed = _parse(html)
+    assert parsed.booths[0].date_et == date(2026, 11, 5)
+    assert [b.date_et for b in parsed.booths[1:]] == [date(2026, 11, 7)] * 2
+    assert parsed.unparsed == 2
+
+
+def test_unrecognised_day_heading_clears_the_date_above_it() -> None:
+    """F3: a weekday heading that does not parse ends the previous day; the games
+    under it count as unparsed instead of inheriting Friday's date."""
+    parsed = _parse(_HTML.replace("Saturday, November 7", "Saturday the seventh"))
+    assert [b.date_et for b in parsed.booths] == [date(2026, 11, 6)]
+    assert parsed.unparsed == 6
+    assert parsed.tbd == 0
+
+
+@pytest.mark.parametrize("prose", ["Notes Dec 9", "Updated Nov. 5"])
+def test_prose_with_a_month_and_day_is_not_a_header(prose: str) -> None:
+    """F2: a header must start with a weekday; prose between games keeps the date."""
+    marker = "<p><strong>Team C vs. Team D"
+    html = _HTML.replace(marker, f"<p>{prose}</p>\n{marker}", 1)
+    parsed = _parse(html)
+    assert [b.date_et for b in parsed.booths[1:]] == [date(2026, 11, 7)] * 2
+
+
+def test_prose_before_the_first_header_is_not_a_header() -> None:
+    """F2: "Updated Nov. 5" above the first header does not date the games under it."""
+    html = _HTML.replace("Friday November 6", "Friday the sixth").replace(
+        "<p>Here is the invented schedule",
+        "<p>Updated Nov. 5</p>\n<p>Here is the invented schedule",
+    )
+    parsed = _parse(html)
+    assert [b.date_et for b in parsed.booths] == [date(2026, 11, 7)] * 2
+    assert parsed.unparsed == 2 + 1
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ("Friday, January 8", date(2027, 1, 8)),
+        ("Sat., Jan. 2", date(2027, 1, 2)),
+        ("Monday, May 3", date(2027, 5, 3)),
+        ("Saturday, December 5", date(2026, 12, 5)),
+        ("Sat, Aug. 29", date(2026, 8, 29)),
+    ],
+)
+def test_january_to_may_headers_belong_to_the_next_year(header: str, expected: date) -> None:
+    """F2: bowl and playoff dates (January to May) take season + 1."""
+    parsed = _parse(_HTML.replace("Friday November 6", header))
+    assert parsed.booths[0].date_et == expected

@@ -6,7 +6,8 @@ All page content is private vault data, so every error message is count-only:
 no text from the page is echoed.
 
 The post body (``entry-content``) holds ``<h3>`` day headers ("Saturday,
-November 7", with or without the comma) and one ``<p>`` per game::
+November 7", with or without the comma; a header starts with a weekday, and
+January to May dates fall in the next year) and one ``<p>`` per game::
 
     Away at Home (7:30 p.m., Network): Name (play-by-play), Name (analyst), ...
 
@@ -15,7 +16,8 @@ sits inside or outside the tag). Roles come from the post's own tags
 (play-by-play -> pbp, analyst -> analyst); reporters are dropped. A TBD crew is
 counted, a line that does not fit the shape or carries an unknown role is
 counted as unparsed, and a crew with no play-by-play is counted and skipped.
-A game line before any recognised day header is counted as unparsed too, and a
+A game line before any recognised day header, or under a weekday heading that
+does not parse, is counted as unparsed too, and a
 post with no booth at all while it has unparsed game lines, or with no day header,
 raises ``AaCrewsParseError``, so header drift is never cached as a good page.
 
@@ -59,8 +61,23 @@ _MONTHS = {
         start=1,
     )
 }
-# "Saturday, November 7", also "Saturday, Nov. 7th:" (Phase 27 review WR-04).
-_HEADER_RE = re.compile(r"^[A-Za-z]+,?\s+([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?:?$")
+_WEEKDAYS = frozenset(
+    {
+        "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "mon", "tue", "tues", "wed", "thu", "thur", "thurs", "fri", "sat", "sun",
+    }
+)  # fmt: skip
+# "Saturday, November 7", also "Saturday, Nov. 7th:" (Phase 27 review WR-04) and
+# "Saturday, November 7, 2026". The first word must be a weekday (full or
+# abbreviated), so prose such as "Updated Nov. 5" is never a header (adversarial
+# panel F2).
+_HEADER_RE = re.compile(
+    r"^([A-Za-z]+)\.?,?\s+([A-Za-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?:?$"
+)
+# A short block led by a weekday that is not a recognised header still ends the
+# previous day, so the games under it count as unparsed instead of inheriting the
+# date above (adversarial panel F3).
+_DAY_LIKE_MAX = 40
 _GAME_RE = re.compile(
     r"^(?P<matchup>.+?)\s*\((?P<time>[^,()]+),\s*(?P<net>[^()]+)\)\s*:\s*(?P<crew>.*)$"
 )
@@ -150,21 +167,33 @@ def crews_cache_path(season: int, label: str) -> str:
 
 
 def _header_date(text: str, season: int) -> date | None:
+    """The date of a day header, or None when ``text`` is not one.
+
+    January to May belong to the season's bowls and playoff, so they take the next
+    calendar year; a header that states its year keeps that year.
+    """
     match = _HEADER_RE.match(text)
-    if match is None:
+    if match is None or match.group(1).lower() not in _WEEKDAYS:
         return None
-    month = _MONTHS.get(match.group(1)[:3].lower())
+    month = _MONTHS.get(match.group(2)[:3].lower())
     if month is None:
         return None
+    year = int(match.group(4)) if match.group(4) else season + (1 if month <= 5 else 0)
     try:
-        return date(season, month, int(match.group(2)))
+        return date(year, month, int(match.group(3)))
     except ValueError:
         return None
 
 
-def _is_header(text: str) -> bool:
-    match = _HEADER_RE.match(text)
-    return match is not None and match.group(1)[:3].lower() in _MONTHS
+def _is_day_like(text: str) -> bool:
+    """A short weekday-led block with no game shape (an unrecognised day header)."""
+    first = text.split(maxsplit=1)[0].rstrip(",.:").lower() if text else ""
+    return (
+        first in _WEEKDAYS
+        and len(text) <= _DAY_LIKE_MAX
+        and "(" not in text
+        and not (_AT_RE.search(text) or _VS_RE.search(text))
+    )
 
 
 def _split_matchup(matchup: str) -> tuple[str, str] | None:
@@ -226,9 +255,13 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
     line = 0
     for block in parser.blocks:
         text = _clean(block.text)
-        if _is_header(text):
+        header_day = _header_date(text, season)
+        if header_day is not None:
             seen_header = True
-            day = _header_date(text, season)
+            day = header_day
+            continue
+        if _is_day_like(text):
+            day = None
             continue
         game = _GAME_RE.match(text)
         if not seen_header:
