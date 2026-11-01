@@ -346,13 +346,15 @@ _REQUESTS_LEDGER = "ledger/requests.jsonl"
 
 # if_missing: fetch only when not cached (the Tuesday run). conditional: fetch, or
 # re-check a cached post with its validators (the CLI). recheck: re-check a cached
-# post only; never a first fetch (the Friday/Saturday runs, Phase 27 review WR-02).
+# post only, and only with a stored ETag or Last-Modified; never a first fetch or a
+# plain GET (the Friday/Saturday runs, Phase 27 review WR-02, adversarial panel F7).
 CrewsMode = Literal["if_missing", "conditional", "recheck"]
 CrewsOutcome = Literal[
     "fetched",
     "not_modified",
     "cached",
     "not_cached",
+    "no_validator",
     "no_link",
     "stale_policy",
     "not_season",
@@ -416,6 +418,9 @@ def fetch_week_crews(
         return CrewsFetchResult("cached", 0, url, req.cache_path, ())
     if mode == "recheck" and not cached:
         return CrewsFetchResult("not_cached", 0, url, None, ())
+    if mode == "recheck" and cache.stored_validators(req) is None:
+        # A scheduled re-check is conditional or not sent at all (adversarial panel F7).
+        return CrewsFetchResult("no_validator", 0, url, None, ())
     if budget < 1:
         return _result("no_budget", url)
     if dry_run:

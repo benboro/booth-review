@@ -431,3 +431,50 @@ def test_cli_rejected_body_exits_4_and_commits_audit(
     assert "error: PageRejectedError" in capsys.readouterr().err
     assert len(commits) == 1
     assert "ledger/requests.jsonl" in commits[0][1]
+
+
+# -- Adversarial panel F7: a scheduled re-check is conditional or not sent ---------
+
+
+def test_headerless_304_keeps_the_stored_etag_for_the_next_recheck(
+    git_vault, mock_transport_factory, patched_client
+) -> None:
+    """Fetched with ETag p1, then a 304 with no validators: the next re-check still
+    sends If-None-Match "p1" (the real cache logic, mock transport only)."""
+    responses = _responses()
+    responses[URL10] = (200, POST, {"ETag": '"p1"'})
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+    rt = build_runtime(with_budget=False)
+    try:
+        _policy(git_vault)
+        _state(git_vault)
+        assert _fetch(git_vault, rt.cache).outcome == "fetched"
+        responses[URL10] = (304, b"", {})
+        assert _fetch(git_vault, rt.cache, mode="recheck").outcome == "not_modified"
+        assert _fetch(git_vault, rt.cache, mode="recheck").outcome == "not_modified"
+        posts = _post_requests(handle)
+        assert len(posts) == 3
+        assert [p.headers.get("if-none-match") for p in posts] == [None, '"p1"', '"p1"']
+    finally:
+        rt.client.close()
+
+
+def test_recheck_without_a_stored_validator_sends_nothing(
+    git_vault, mock_transport_factory, patched_client
+) -> None:
+    responses = _responses()
+    responses[URL10] = (200, POST, {})
+    handle = mock_transport_factory(responses)
+    patched_client(handle)
+    rt = build_runtime(with_budget=False)
+    try:
+        _policy(git_vault)
+        _state(git_vault)
+        assert _fetch(git_vault, rt.cache).outcome == "fetched"
+        result = _fetch(git_vault, rt.cache, mode="recheck")
+        assert result.outcome == "no_validator" and result.requests == 0
+        assert result.touched == ()
+        assert len(_post_requests(handle)) == 1
+    finally:
+        rt.client.close()

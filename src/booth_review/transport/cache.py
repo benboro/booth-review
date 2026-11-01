@@ -255,6 +255,14 @@ class RawCache:
             return path.read_bytes()
         return None
 
+    def stored_validators(self, req: FetchRequest) -> Validators | None:
+        """The validators a conditional re-fetch of ``req`` would send, or None
+        when no stored entry has an ETag or Last-Modified."""
+        found = self._manifest.latest_validators(req.url)
+        if found is None or (found.etag is None and found.last_modified is None):
+            return None
+        return found
+
     def get_or_fetch(
         self,
         req: FetchRequest,
@@ -324,7 +332,17 @@ class RawCache:
         if resp.status_code == 304:
             content = path.read_bytes()
             self._validate(req, resp, fetched_at, content, validate)
-            self._manifest.append(self._entry(req, resp, fetched_at, content=content, path=path))
+            # A 304 updates only the validators it sends; one it omits keeps the
+            # stored value, so the next conditional request still carries it
+            # (Phase 27 adversarial panel F7).
+            prior = self._manifest.latest_validators(req.url)
+            kept = Validators(
+                etag=resp.etag or (prior.etag if prior else None),
+                last_modified=resp.last_modified or (prior.last_modified if prior else None),
+            )
+            self._manifest.append(
+                self._entry(req, resp, fetched_at, content=content, path=path, validators=kept)
+            )
             self.counters["not_modified"] += 1
             return CacheResult(content=content, outcome="not_modified", path=path)
 
@@ -388,7 +406,9 @@ class RawCache:
         *,
         content: bytes,
         path: Path,
+        validators: Validators | None = None,
     ) -> ManifestEntry:
+        stored = validators or Validators(etag=resp.etag, last_modified=resp.last_modified)
         return ManifestEntry(
             url=req.url,
             source=req.source,
@@ -396,8 +416,8 @@ class RawCache:
             kind=req.kind,
             fetched_at=fetched_at,
             status=resp.status_code,
-            etag=resp.etag,
-            last_modified=resp.last_modified,
+            etag=stored.etag,
+            last_modified=stored.last_modified,
             sha256=hashlib.sha256(content).hexdigest(),
             path=path.relative_to(self._paths.raw).as_posix(),
             bytes=len(content),

@@ -94,8 +94,9 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
 - **When:** the Tuesday reminder run fetches a post the first time it finds it.
   Conditional re-checks (ETag / Last-Modified) run Friday 18:00 and Saturday
   08:00 ET, since AA edits a post through Saturday. They only re-check a post
-  that is already cached (an uncached post is skipped, with a reminder line),
-  and each slot sends at most one request: the slot is recorded in
+  that is already cached and has a stored ETag or Last-Modified (otherwise the
+  run sends nothing and says so in a reminder line, so a re-check is never a plain
+  request), and each slot sends at most one request: the slot is recorded in
   `ledger/aa_feed_watch.json` (`crews_rechecked`), so a backup or manual run in
   the same slot sends none. `--week N` re-checks an already-recorded week by hand.
 - **Cap:** at most 2 AA requests per run (the feed and the post; the robots.txt
@@ -103,7 +104,9 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
   and robots.txt. A request that fails is never retried.
 - **Gate:** an AA policy check from the last 30 days with confirmed terms. When
   it is stale, the run skips the fetch and says so in the reminder.
-- **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault.
+- **Cache:** `raw/aa/crews/2026/wk-NN.html` in the private vault. A 304 that
+  omits a validator keeps the one stored before it, so the next re-check still
+  sends it.
 - **Parser:** one line per game, shaped like
   `Away at Home (time, Network): Name (play-by-play), Name (analyst), Name (reporter)`.
   Reporters are dropped, `TBD` is counted, and a line that does not parse is

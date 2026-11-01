@@ -466,6 +466,46 @@ def test_refresh_sends_conditional_headers_and_304_returns_cached(
     lines = _manifest_lines(vault_paths)
     assert lines[-1]["status"] == 304
     assert lines[-1]["path"] == cache_path
+    # Phase 27 adversarial panel F7: a 304 without validators keeps the stored ones.
+    assert lines[-1]["etag"] == '"abc"'
+    assert lines[-1]["last_modified"] == "Wed, 21 Oct 2015 07:28:00 GMT"
+
+
+def test_304_updates_only_the_validators_it_sends(vault_paths, mock_transport_factory) -> None:
+    """Phase 27 adversarial panel F7: a 304 carrying a new ETag but no Last-Modified
+    stores the new ETag and keeps the stored Last-Modified."""
+    url = "https://ratingsreference.com/api/telecast/b.json"
+    cache_path = "ratingsref/telecast/2025/b.json"
+    dest = vault_paths.raw / cache_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(b"{}")
+    prior_entry = {
+        "url": url,
+        "source": "ratingsref",
+        "season": 2025,
+        "kind": "page",
+        "fetched_at": "2026-01-01T00:00:00Z",
+        "status": 200,
+        "etag": '"old"',
+        "last_modified": "Wed, 21 Oct 2015 07:28:00 GMT",
+        "sha256": hashlib.sha256(b"{}").hexdigest(),
+        "path": cache_path,
+        "bytes": 2,
+        "final_url": url,
+    }
+    vault_paths.manifest.write_text(json.dumps(prior_entry, sort_keys=True) + "\n")
+    handle = mock_transport_factory(
+        {
+            "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+            url: (304, b"", {"ETag": '"new"'}),
+        }
+    )
+    cache = RawCache(vault_paths, _client(handle))
+    req = FetchRequest(source="ratingsref", season=2025, url=url, cache_path=cache_path)
+    assert cache.get_or_fetch(req, refresh=True).outcome == "not_modified"
+    last = _manifest_lines(vault_paths)[-1]
+    assert (last["etag"], last["last_modified"]) == ('"new"', "Wed, 21 Oct 2015 07:28:00 GMT")
+    assert cache.stored_validators(req) is not None
 
 
 # -- Guards -----------------------------------------------------------------------

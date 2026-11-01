@@ -559,12 +559,48 @@ def test_recheck_of_an_uncached_post_sends_nothing(vault_paths: DataPaths) -> No
     assert load_feed_state(vault_paths).crews_rechecked == []
 
 
+def _cache_post(paths: DataPaths, *, etag: str | None = '"p1"') -> None:
+    """A cached week-10 post and its manifest line (with or without an ETag)."""
+    rel = "aa/crews/2026/wk-10.html"
+    post = paths.raw / rel
+    post.parent.mkdir(parents=True)
+    post.write_bytes(POST)
+    line = {
+        "url": CURRENT,
+        "source": "aa",
+        "season": 2026,
+        "kind": "page",
+        "fetched_at": "2026-11-04T02:30:00Z",
+        "status": 200,
+        "etag": etag,
+        "last_modified": None,
+        "sha256": None,
+        "path": rel,
+        "bytes": len(POST),
+        "final_url": CURRENT,
+    }
+    paths.manifest.parent.mkdir(parents=True, exist_ok=True)
+    with paths.manifest.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def test_recheck_without_a_stored_validator_sends_nothing(vault_paths: DataPaths) -> None:
+    """Adversarial panel F7: a re-check is conditional or not sent; never a plain GET."""
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    _cache_post(vault_paths, etag=None)
+    server, vault = _Server(), _Vault()
+    items = _recheck(vault_paths, server, vault)
+    assert _kinds(items) == ["aa_crews_skipped_no_validator"]
+    assert "http" not in items[0].line and "awfulannouncing" not in items[0].line
+    assert server.total == 0 and vault.calls == []
+    assert load_feed_state(vault_paths).crews_rechecked == []
+
+
 def test_recheck_marks_its_slot_commits_it_and_never_repeats(vault_paths: DataPaths) -> None:
     _policy(vault_paths, now=T_FRI)
     _state(vault_paths, weeks={"2026-10": CURRENT})
-    post = vault_paths.raw / "aa" / "crews" / "2026" / "wk-10.html"
-    post.parent.mkdir(parents=True)
-    post.write_bytes(POST)
+    _cache_post(vault_paths)
     server, vault = _Server(), _Vault()
     assert _recheck(vault_paths, server, vault) == []
     assert server.post_requests == 1

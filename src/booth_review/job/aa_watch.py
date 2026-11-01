@@ -144,6 +144,8 @@ def run_crews_fetch(
         items.append(aa_crews_skipped("policy"))
     elif result.outcome == "not_cached":
         items.append(aa_crews_skipped("not_cached"))
+    elif result.outcome == "no_validator":
+        items.append(aa_crews_skipped("no_validator"))
     if result.requests:
         commit_paths(list(result.touched))
     return items

@@ -2784,6 +2784,24 @@ def _crews_job(
         post.parent.mkdir(parents=True, exist_ok=True)
         if not post.exists():
             post.write_bytes(_CREWS_POST)
+            # Its fetch's manifest line: a re-check needs a stored validator (F7).
+            entry = {
+                "url": _AA_POST,
+                "source": "aa",
+                "season": week[0],
+                "kind": "page",
+                "fetched_at": "2026-10-14T01:30:00Z",
+                "status": 200,
+                "etag": '"p1"',
+                "last_modified": None,
+                "sha256": None,
+                "path": post.relative_to(paths.raw).as_posix(),
+                "bytes": len(_CREWS_POST),
+                "final_url": _AA_POST,
+            }
+            paths.manifest.parent.mkdir(parents=True, exist_ok=True)
+            with paths.manifest.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(entry) + "\n")
     monkeypatch.setattr(runner_module, "_check_required_state", lambda *a, **k: None)
     monkeypatch.setattr(ScheduledJob, "_staleness_step", lambda self, *a, **k: None)
 
