@@ -7,8 +7,10 @@
 # `uv lock`, update the literal in tests/test_vault_workflow.py, open a PR,
 # merge it, then run this script from the merged main. It refuses unless the
 # worktree is clean, the branch is main, HEAD equals origin/main, and the tag
-# matches pyproject's version. The vault repo is read from data/vault's origin
-# at run time; it is never written down or printed.
+# matches pyproject's version, and its pre-flight passes (`booth-review audit
+# overrides --release`: data/vault matches its origin, and every crew override
+# targets a plotted telecast). The vault repo is read from data/vault's origin at
+# run time; it is never written down or printed.
 #
 # Rollback: `gh variable set JOB_REF --repo <vault> --body <previous tag>`.
 set -euo pipefail
@@ -55,6 +57,13 @@ url=$(git -C data/vault remote get-url origin 2>/dev/null) || die "data/vault ha
 slug=$(printf '%s' "$url" | sed -nE 's#.*github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$#\1#p')
 slug="${slug%.git}"
 [ -n "$slug" ] || die "could not parse the vault origin URL"
+
+# Pre-flight, before tagging (dry runs too): data/vault must match its origin with
+# its telecasts table committed, and every crew_overrides.csv row must target a
+# telecast that build plots, or the job's build fails on the new tag (v0.18.4).
+# The paths are passed explicitly so BOOTH_REVIEW_* variables cannot redirect it.
+uv run booth-review audit overrides --release --vault data/vault --reference data/reference \
+  || die "pre-flight failed"
 
 short=$(git rev-parse --short HEAD)
 if [ "$dry_run" = "true" ]; then

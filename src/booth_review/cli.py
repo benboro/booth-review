@@ -29,6 +29,12 @@ from booth_review.audit.completeness import (
     write_completeness,
 )
 from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
+from booth_review.audit.overrides import (
+    TELECASTS,
+    check_overrides_plotted,
+    release_problems,
+    safe_loader_message,
+)
 from booth_review.build import combined as build_combined
 from booth_review.build import sample as build_sample
 from booth_review.build.pipeline import BuildOutcome, run_build
@@ -50,6 +56,7 @@ from booth_review.deploy.publish import SUBDIR_DEFAULT, publish_site
 from booth_review.errors import (
     BoothReviewError,
     FreezeRefusedError,
+    ReferenceTableError,
     RobotsDisallowedError,
     RobotsUnavailableError,
     SiteBuildError,
@@ -468,6 +475,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit_completeness.add_argument("--season", required=True, type=parse_season_spec)
     audit_completeness.add_argument("--no-commit", action="store_true")
+    audit_overrides = audit_sub.add_parser(
+        "overrides",
+        help="release pre-flight: every crew override targets a plotted telecast in the last build",
+    )
+    audit_overrides.add_argument(
+        "--release",
+        action="store_true",
+        help="also require the vault to match its origin with its telecasts table committed",
+    )
+    audit_overrides.add_argument("--vault", type=Path, help="vault working copy (default: env)")
+    audit_overrides.add_argument(
+        "--reference", type=Path, help="reference directory (default: env)"
+    )
 
     freeze = sub.add_parser("freeze", help="D-06 freeze seasons after a completeness check")
     freeze.add_argument("--season", required=True, type=parse_season_spec)
@@ -1893,6 +1913,43 @@ def _spike_join(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- audit overrides -----------------------------------------------------------------------
+
+
+def _audit_overrides(args: argparse.Namespace) -> int:
+    """Exit 1 when a crew_overrides.csv row names a telecast the vault's last
+    build does not plot (the job build would fail on it), or a release
+    pre-flight condition fails; 2 when that build's telecasts table is missing.
+    Reads only; writes and commits nothing. Every line printed is fixed text,
+    a count, or a line number."""
+    if args.release and (args.vault is None or args.reference is None):
+        print("crew overrides: --release needs --vault and --reference")
+        return 2
+    vault = args.vault if args.vault is not None else DataPaths.from_env().vault
+    reference = args.reference if args.reference is not None else reference_dir()
+    if args.release:
+        problems = release_problems(vault, reference)
+        for problem in problems:
+            print(f"crew overrides: {problem}")
+        if problems:
+            return 1
+    try:
+        result = check_overrides_plotted(reference, vault / TELECASTS)
+    except FileNotFoundError:
+        print("crew overrides: no telecasts.parquet in the vault; pull the vault first")
+        return 2
+    except ReferenceTableError as exc:
+        print(safe_loader_message(exc))
+        return 1
+    bad = result.unplotted_lines
+    print(f"crew overrides: {result.telecasts} telecasts checked, {len(bad)} not plotted")
+    if bad:
+        lines = ", ".join(str(line) for line in bad)
+        print(f"crew_overrides.csv: line(s) {lines} name a telecast the build does not plot")
+        return 1
+    return 0
+
+
 # -- audit completeness --------------------------------------------------------------------
 
 
@@ -2595,6 +2652,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "audit":
             if args.audit_command == "completeness":
                 return _audit_completeness(args)
+            if args.audit_command == "overrides":
+                return _audit_overrides(args)
             raise AssertionError(f"unknown audit command: {args.audit_command!r}")
         if args.command == "freeze":
             return _freeze(args)
