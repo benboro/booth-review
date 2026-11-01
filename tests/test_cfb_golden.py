@@ -74,6 +74,10 @@ changed.
 Phase 09 (MLB module): the MLB isolation characterizations below pass on HEAD and must keep
 passing. The input_stamp assertion for raw/mlb/ manifest lines is owned by plan 09-02
 (TDD red then green), because on HEAD input_stamp only skips nfl/ paths.
+
+Phase 27 Plan 05: telecasts gain crew_aa (all False in the synthetic vault, which has no
+AA pages); telecasts.parquet with that column dropped hashes to the earlier digest
+(ba7234232dd8...), so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -178,7 +182,7 @@ _GOLDEN: dict[str, str] = {
         "b1a1dfe384aedae6bbe88a851792065fd4f60d94ef338faad6054abc5710b0d2"
     ),
     "processed/telecasts.parquet": (
-        "ba7234232dd841ce4ff84a45fc78643379df8c4029875af9fc4fcd40aa2c69fc"
+        "b5dc840100e63bf542efc554256179b4e23df4b576181b798c7fc95732f9a598"
     ),
     "processed/viewership.parquet": (
         "9f4c6a8905644a1dbb02beb9b49e8d71cbcba17955f7957d024097b1af1d1f0e"
