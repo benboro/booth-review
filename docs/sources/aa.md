@@ -116,7 +116,11 @@ fetches the weekly announcing-schedule posts and the build reads their crews.
 - **Parser:** one line per game, shaped like
   `Away at Home (time, Network): Name (play-by-play), Name (analyst), Name (reporter)`.
   Reporters are dropped, `TBD` is counted, and a line that does not parse is
-  counted, never guessed. A game line above every recognised day header counts as
+  counted, never guessed. A `TBD` or `TBA` name is never a person: it is dropped
+  from the booth, and a booth with no named play-by-play counts as TBD. A day
+  header starts with a weekday ("Saturday, November 7", optionally with a year);
+  January to May dates fall in the season's next year. A game line above every
+  recognised day header, or under a weekday heading that does not parse, counts as
   unparsed, and a post with no booth while it has unparsed game lines (or with no
   day header at all) fails validation, so it is never cached as a good page.
 
