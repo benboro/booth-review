@@ -31,7 +31,7 @@ from booth_review.audit.completeness import (
 from booth_review.audit.freeze import FreezeResult, Waiver, freeze_seasons, parse_waiver
 from booth_review.audit.overrides import (
     TELECASTS,
-    check_overrides_plotted,
+    check_overrides_exist,
     release_problems,
     safe_loader_message,
 )
@@ -477,7 +477,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit_completeness.add_argument("--no-commit", action="store_true")
     audit_overrides = audit_sub.add_parser(
         "overrides",
-        help="release pre-flight: every crew override targets a plotted telecast in the last build",
+        help="release pre-flight: every crew override targets a main telecast in the last build",
     )
     audit_overrides.add_argument(
         "--release",
@@ -1934,18 +1934,18 @@ def _audit_overrides(args: argparse.Namespace) -> int:
         if problems:
             return 1
     try:
-        result = check_overrides_plotted(reference, vault / TELECASTS)
+        result = check_overrides_exist(reference, vault / TELECASTS)
     except FileNotFoundError:
         print("crew overrides: no telecasts.parquet in the vault; pull the vault first")
         return 2
     except ReferenceTableError as exc:
         print(safe_loader_message(exc))
         return 1
-    bad = result.unplotted_lines
-    print(f"crew overrides: {result.telecasts} telecasts checked, {len(bad)} not plotted")
+    bad = result.missing_lines
+    print(f"crew overrides: {result.telecasts} telecasts checked, {len(bad)} missing")
     if bad:
         lines = ", ".join(str(line) for line in bad)
-        print(f"crew_overrides.csv: line(s) {lines} name a telecast the build does not plot")
+        print(f"crew_overrides.csv: line(s) {lines} name a telecast the build does not have")
         return 1
     return 0
 

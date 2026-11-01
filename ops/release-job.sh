@@ -9,7 +9,7 @@
 # worktree is clean, the branch is main, HEAD equals origin/main, and the tag
 # matches pyproject's version, and its pre-flight passes (`booth-review audit
 # overrides --release`: data/vault matches its origin, and every crew override
-# targets a plotted telecast). The vault repo is read from data/vault's origin at
+# targets a main telecast the last build has, plotted or unrated). The vault repo is read from data/vault's origin at
 # run time; it is never written down or printed.
 #
 # Rollback: `gh variable set JOB_REF --repo <vault> --body <previous tag>`.

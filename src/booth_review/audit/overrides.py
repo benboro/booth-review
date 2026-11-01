@@ -1,8 +1,10 @@
-"""Release pre-flight: every crew override must target a plotted main telecast.
+"""Release pre-flight: every crew override must target a main telecast that exists
+in the vault's last build.
 
 `apply_crew_overrides` refuses an override whose (cfbd_game_id, network_id) is
-not a plotted main telecast, which fails the scheduled job's build. The loader
-and the synthetic-fixture tests cannot see that, so `ops/release-job.sh` runs
+not a main telecast of the build (plotted or unrated, AAC-04), which fails the
+scheduled job's build. The loader and the synthetic-fixture tests cannot see
+that, so `ops/release-job.sh` runs
 `booth-review audit overrides --release` against the vault's last build before
 it tags. In release mode the vault must match its origin and the build's
 telecasts table must be the committed one, so the check sees what the job's
@@ -31,25 +33,23 @@ _SAFE_LOADER_MESSAGE = re.compile(rf"^{re.escape(OVERRIDES_FILE)}: line \d+: [^\
 @dataclass(frozen=True)
 class OverrideCheck:
     telecasts: int  # override telecasts checked
-    unplotted_lines: tuple[int, ...]  # crew_overrides.csv first line of each unplotted one
+    missing_lines: tuple[int, ...]  # crew_overrides.csv first line of each missing one
 
 
-def check_overrides_plotted(reference_dir: Path, telecasts_path: Path) -> OverrideCheck:
-    """Compare crew_overrides.csv keys with the plotted main telecasts in a
+def check_overrides_exist(reference_dir: Path, telecasts_path: Path) -> OverrideCheck:
+    """Compare crew_overrides.csv keys with the main telecasts (plotted or not) in a
     build's telecasts.parquet. Raises FileNotFoundError when the table is missing."""
     overrides = load_crew_overrides(reference_dir)
     if not telecasts_path.is_file():
         raise FileNotFoundError(telecasts_path.name)
     plotted = (
-        pl.read_parquet(telecasts_path, columns=["game_id", "network_id", "feed_type", "plotted"])
-        .filter((pl.col("feed_type") == "main") & pl.col("plotted").fill_null(False))
+        pl.read_parquet(telecasts_path, columns=["game_id", "network_id", "feed_type"])
+        .filter(pl.col("feed_type") == "main")
         .select("game_id", "network_id")
     )
     keys = set(plotted.iter_rows())
-    unplotted = tuple(
-        sorted(override.line for key, override in overrides.items() if key not in keys)
-    )
-    return OverrideCheck(telecasts=len(overrides), unplotted_lines=unplotted)
+    missing = tuple(sorted(override.line for key, override in overrides.items() if key not in keys))
+    return OverrideCheck(telecasts=len(overrides), missing_lines=missing)
 
 
 def safe_loader_message(error: ReferenceTableError) -> str:
