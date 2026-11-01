@@ -361,6 +361,25 @@ def test_shipped_unplayed_cell_opens_with_its_crew_credit(wk: Callable[..., Page
     assert page.evaluate("document.activeElement.dataset.wkId") == "g:cfb:t:19"
 
 
+def test_unplayed_cell_credits_an_awful_announcing_crew(wk: Callable[..., Page]) -> None:
+    # Phase 27: an AA-sourced crew on an unplayed game is credited to its post, as a link.
+    url = "https://awfulannouncing.com/college-football/example-week-announcing-schedule.html"
+
+    def tweak(raw: dict[str, Any]) -> None:
+        unrated = raw["telecasts_unrated"]
+        unrated["crew_source_label"][-1] = "Awful Announcing"
+        unrated["crew_source_url"][-1] = url
+
+    page = wk(tweak=tweak)
+    page.locator(LEAD).focus()
+    page.locator(LEAD).press("Enter")
+    dialog = page.locator("dialog[open]")
+    expect(dialog).to_be_visible()
+    link = dialog.locator("a", has_text="Crew source: Awful Announcing")
+    assert link.count() == 1
+    assert link.get_attribute("href") == url
+
+
 def _panel_text(page: Page, selector: str) -> str:
     cell = page.locator(selector)
     cell.focus()

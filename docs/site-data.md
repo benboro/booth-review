@@ -124,7 +124,12 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   null for an empty crew, and the contract rejects one without the others. Once 506 lists
   the game it moves to `telecasts_unrated`, where a 506 crew outranks the backup booth.
   In the current season the same booth also fills an unplotted telecast 506 listed with no
-  crew, so the precedence (override > 506 > ESPN Press Room) holds for upcoming games.
+  crew, so the precedence (override > 506 and Awful Announcing > ESPN Press Room) holds
+  for upcoming games.
+- `crew_source_label` may also be `Awful Announcing`, with `crew_source_url` the exact
+  announcing-schedule post, on a scheduled row or on an unrated or played telecast whose
+  crew came from that post. A scheduled row's label follows its source, so an Awful
+  Announcing booth is credited to Awful Announcing and an ESPN one to ESPN Press Room.
 - No booth, cause, points, spread or excitement ships, since the game has none by
   definition, and no game or telecast id or completed flag does either (CFBD display
   fields only). The block rejects any column it does not declare.

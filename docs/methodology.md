@@ -546,6 +546,19 @@ listing. If a public source shows that a crew 506 lists is wrong, that sourced
 booth replaces 506's the same way, but the coverage table's hand-confirmed
 count includes only telecasts 506 never gave a crew.
 
+Awful Announcing is a second crew source for 2026 college football. Its weekly
+announcing-schedule posts are saved by hand and imported. The order is a
+hand-confirmed booth, then 506 Sports and Awful Announcing together, then ESPN
+Press Room. Where both name a booth for the same game, the whole booth comes
+from one of them: if one booth is a superset of the other (it names every
+person the other does), the superset wins; otherwise the booth from the newer
+page wins, and a tie on page time, or a 506 listing with no kickoff time, keeps
+506. Booths are never merged person by person, and each disagreement is written
+to a review file (`review_crew_aa_disagreements.csv`). The detail view reads
+"Crew source: Awful Announcing ↗", linked to the exact post. Awful Announcing
+crews never move the "crews through week N" stamp and are never drawn for the
+join sample, so the match rate stays the 506 match rate.
+
 ESPN Press Room is a backup crew source for ESPN-family games. Its announcer
 schedules and weekly releases are saved by hand and imported, never fetched.
 Crews follow a fixed order: a hand-confirmed booth, then 506 Sports, then ESPN
