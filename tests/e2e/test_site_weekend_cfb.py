@@ -746,3 +746,28 @@ def test_map_switch_round_trip(wk: Callable[..., Page]) -> None:
     page.wait_for_function("!location.search.includes('wview=map')")
     page.wait_for_selector(".wk-row")
     assert page.locator(".js-plotly-plot").count() == 0
+
+
+def test_neutral_site_city_in_tooltip_table_and_panel(wk: Callable[..., Page]) -> None:
+    """A neutral-site scheduled game names its city in the timeline tooltip and its panel's
+    location line; a neutral ESPN+ game writes it inline, with the country when abroad."""
+
+    def tweak(raw: dict[str, Any]) -> None:
+        sched = raw["telecasts_scheduled"]
+        sched["neutral"][0] = True
+        sched["place"][0] = 3  # Foxhollow Park, Atlanta, GA
+        sched["neutral"][10] = True
+        sched["place"][10] = 7  # Harbour Park, Dublin, IE
+
+    page = wk(tweak=tweak)
+    match = page.locator(f"{FOX_NOON} .wk-match")
+    assert match.get_attribute("title") == "Played in Atlanta, GA"
+    assert "Played in Atlanta, GA." in (page.locator(FOX_NOON).get_attribute("aria-label") or "")
+    game = page.locator(f'.wk-crow[data-wk-id="{ESPN_PLUS}"] .wk-c-game')
+    assert game.inner_text().endswith(" vs Lakeview (Dublin, Ireland)")
+    page.locator(FOX_NOON).click()
+    expect(page.locator("#detail-panel")).to_be_visible()
+    assert (
+        page.locator("#panel-body .panel-location").text_content()
+        == "Foxhollow Park, Atlanta, GA (neutral site)"
+    )

@@ -435,3 +435,25 @@ def test_map_switch_round_trip(nfl_guarded_page: Page, open_nfl_app: OpenNfl) ->
     nfl_guarded_page.wait_for_function("!location.search.includes('wview=map')")
     nfl_guarded_page.wait_for_selector(".wk-row")
     assert nfl_guarded_page.locator(".js-plotly-plot").count() == 0
+
+
+def test_international_game_names_its_city(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+    """An international game's matchup tooltip and accessible name say where it is played,
+    and its panel's location line carries "(neutral site)"."""
+    page = nfl_guarded_page
+    _open(page, open_nfl_app)
+    match = page.locator(".wk-cell .wk-match[title]")
+    assert match.count() == 1
+    assert match.get_attribute("title") == "Played in Londonish, United Kingdom"
+    cell = page.locator(".wk-cell:has(.wk-match[title])")
+    assert "Played in Londonish, United Kingdom." in (cell.get_attribute("aria-label") or "")
+    assert "Londonish" not in cell.inner_text()
+    cell.click()
+    dialog = page.locator("dialog[open]").first
+    dialog.wait_for()
+    assert (
+        dialog.locator(".panel-location").text_content()
+        == "Test Park, Londonish, United Kingdom (neutral site)"
+    )
+    # The fixture's slot is itself named International; only the separate flag goes.
+    assert dialog.locator(".panel-facts").text_content() == "Slot: International."

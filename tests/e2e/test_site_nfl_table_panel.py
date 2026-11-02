@@ -387,3 +387,46 @@ def test_panel_on_mobile(nfl_mobile_page: Page, open_flagon_cfb: Callable[..., N
     assert nfl_mobile_page.locator("#nfl-panel-title").is_visible()
     nfl_mobile_page.locator("#nfl-detail-panel .panel-close").click()
     assert nfl_mobile_page.evaluate("window.__p.isOpen()") is False
+
+
+def test_panel_location_line(run: Callable[[str], Any]) -> None:
+    """The location line sits under the date; an international game adds "(neutral site)"
+    and drops "International." from the facts, which only a venue-less row keeps."""
+    got = run("""
+      const p = PN.createDetailPanel(host, {});
+      const d = document.getElementById('nfl-detail-panel');
+      const read = (row) => {
+        p.open(row);
+        return {
+          paras: [...d.querySelectorAll('.panel-body > p')].map((x) => x.textContent),
+          loc: d.querySelector('.panel-location')?.textContent ?? null,
+          second: d.querySelector('.panel-body > :nth-child(2)').className,
+          imgs: d.querySelectorAll('img[src=x]').length,
+        };
+      };
+      const home = { name: 'Fixture Field', city: 'Faketown', state: 'TX', country: 'US' };
+      const abroad = { name: 'Test Park', city: 'Londonish', state: null, country: 'GB' };
+      const evil = { name: '<img src=x onerror=alert(1)>', city: 'Faketown', state: 'TX', country: 'US' };
+      const out = {
+        home: read(mk({ venue: home })),
+        intl: read(mk({ venue: abroad, international: true })),
+        bare: read(mk({ venue: null, international: true })),
+        upcoming: read(mk({ venue: abroad, international: true, upcoming: true, unplayed: true })),
+        evil: read(mk({ venue: evil })),
+      };
+      p.close();
+      return out;
+    """)
+    assert got["home"]["loc"] == "Fixture Field, Faketown, TX"
+    assert got["home"]["second"] == "panel-location"
+    assert got["intl"]["loc"] == "Test Park, Londonish, United Kingdom (neutral site)"
+    intl_facts = next(x for x in got["intl"]["paras"] if x.startswith("Slot:"))
+    assert "International." not in intl_facts
+    assert got["bare"]["loc"] is None
+    assert "International." in next(x for x in got["bare"]["paras"] if x.startswith("Slot:"))
+    assert got["upcoming"]["loc"] == "Test Park, Londonish, United Kingdom (neutral site)"
+    assert "International." not in next(
+        x for x in got["upcoming"]["paras"] if x.startswith("Slot:")
+    )
+    assert got["evil"]["loc"] == "<img src=x onerror=alert(1)>, Faketown, TX"
+    assert got["evil"]["imgs"] == 0

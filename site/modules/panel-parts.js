@@ -7,6 +7,7 @@
 
 import { networkMark } from './network.js';
 import { makeRolePill, nameWithRoles } from './pill.js';
+import { venueTitle } from './venue.js';
 
 /**
  * Returns `url` unchanged when it parses as an `http:`/`https:` URL, else
@@ -119,4 +120,22 @@ export function liveOpener(el) {
   const id = el.dataset?.wkId;
   if (!id) return null;
   return [...document.querySelectorAll('[data-wk-id]')].find((n) => n.dataset.wkId === id) ?? null;
+}
+
+/**
+ * The modal's location line under the date, "AT&T Stadium, Arlington, TX", with
+ * " (neutral site)" after it when `neutral`; null when the game has no venue. Shared by the
+ * CFB and NFL modals. Text only, so a venue name never becomes markup.
+ * @param {{name?: string, city?: string, state?: string, country?: string}|null} venue
+ * @param {boolean} neutral
+ * @returns {HTMLParagraphElement|null}
+ */
+export function locationLine(venue, neutral) {
+  if (venue == null) return null;
+  const where = venueTitle(venue);
+  if (!where) return null;
+  const p = document.createElement('p');
+  p.className = 'panel-location';
+  p.textContent = neutral ? `${where} (neutral site)` : where;
+  return p;
 }

@@ -998,3 +998,74 @@ def test_ticks_continue_across_a_filled_lane_up_to_midnight(wk_page: Page) -> No
     assert len(labels) == 11
     # The cell itself stays a 3.5-hour block at 120 px/hour.
     assert _widths(wk_page, "#wk-host .wk-cell") == [420 - 2]
+
+
+# ---- Where a neutral-site game is played ----
+
+_ARLINGTON = {"name": "AT&T Stadium", "city": "Arlington", "state": "TX", "country": "US"}
+_LONDON = {"name": "Wembley Stadium", "city": "London", "state": None, "country": "GB"}
+
+
+def test_neutral_cell_names_its_city_in_tooltip_and_label_only(wk_page: Page) -> None:
+    """A neutral-site cell puts "Played in City, ST" on the matchup's tooltip and in the
+    accessible name, never in the cell text, and the cell keeps its size. A home game with
+    a venue gets neither; a game abroad names its country."""
+    plain = [
+        _known(key="n", neutral=True, away="TCU", home="Kansas State"),
+        _known(key="h", away="Utah", home="Texas", kickoffMin=930, venue=_ARLINGTON),
+        _known(key="w", neutral=True, away="Navy", home="Army", kickoffMin=1140),
+    ]
+    _mount(wk_page, plain)
+    before = wk_page.locator(_cell("n")).bounding_box()
+    with_venue = [
+        {**plain[0], "venue": _ARLINGTON},
+        plain[1],
+        {**plain[2], "venue": _LONDON},
+    ]
+    _mount(wk_page, with_venue)
+    assert wk_page.locator(_cell("n")).bounding_box() == before
+    match = wk_page.locator(f"{_cell('n')} .wk-match")
+    assert match.inner_text() == "TCU vs Kansas State"
+    assert match.get_attribute("title") == "Played in Arlington, TX"
+    assert "Arlington" not in wk_page.locator(_cell("n")).inner_text()
+    assert wk_page.locator(_cell("n")).get_attribute("aria-label") == (
+        "12:00 pm, TCU vs Kansas State, FOX. Played in Arlington, TX."
+        " Joe Fowler and Pat Herbstreit."
+    )
+    assert wk_page.locator(f"{_cell('h')} .wk-match").get_attribute("title") is None
+    assert "Played in" not in (wk_page.locator(_cell("h")).get_attribute("aria-label") or "")
+    assert (
+        wk_page.locator(f"{_cell('w')} .wk-match").get_attribute("title")
+        == "Played in London, United Kingdom"
+    )
+
+
+def test_compact_table_writes_neutral_city_inline(wk_page: Page) -> None:
+    """The ESPN+ and regional table writes a neutral site's city in parentheses after the
+    matchup; a home game stays as it was."""
+    games = [
+        _known(key="a"),
+        _plus(key="p1", neutral=True, away="TCU", home="Kansas State", venue=_ARLINGTON),
+        _plus(key="p2", away="Utah", home="Texas", kickoffMin=1140, venue=_ARLINGTON),
+    ]
+    _mount(wk_page, games)
+    rows = wk_page.locator("#wk-host .wk-compact-table tbody tr")
+    assert rows.nth(0).locator(".wk-c-game").inner_text() == "TCU vs Kansas State (Arlington, TX)"
+    assert rows.nth(1).locator(".wk-c-game").inner_text() == "Utah @ Texas"
+    assert "Played in Arlington, TX." in (rows.nth(0).get_attribute("aria-label") or "")
+
+
+def test_hostile_venue_text_stays_literal_on_this_weekend(wk_page: Page) -> None:
+    payload = "<img src=x onerror=alert(1)>"
+    venue = {"name": payload, "city": payload, "state": "TX", "country": "US"}
+    games = [
+        _known(key="n", neutral=True, venue=venue),
+        _plus(key="p", neutral=True, venue=venue),
+    ]
+    _mount(wk_page, games)
+    assert wk_page.locator(f"{_cell('n')} .wk-match").get_attribute("title") == (
+        f"Played in {payload}, TX"
+    )
+    assert wk_page.locator("#wk-host .wk-c-game").inner_text().endswith(f"({payload}, TX)")
+    # Network logos are images too; only the payload's own src would mark an injection.
+    assert wk_page.locator("#wk-host img[src=x]").count() == 0

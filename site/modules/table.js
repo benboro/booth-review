@@ -29,6 +29,7 @@ import { attachScrollCue } from './scroll-cue.js';
 import { crewList, makeRolePill, nameWithRoles } from './pill.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
+import { playedInText } from './venue.js';
 
 const tableEl = document.getElementById('games-table');
 const emptyEl = document.getElementById('table-empty');
@@ -166,6 +167,11 @@ function buildRow(data, state, onDetails, i) {
   const matchupTd = document.createElement('td');
   matchupTd.className = 'matchup';
   matchupTd.textContent = formatMatchup(data, i, { withScore: true });
+  // Too many columns for inline text: a neutral-site game names its city in a tooltip.
+  if (t.neutral[i]) {
+    const playedIn = playedInText(data.lookups.venues?.[t.place?.[i]]);
+    if (playedIn) matchupTd.title = playedIn;
+  }
   tr.appendChild(matchupTd);
 
   const networkTd = document.createElement('td');
