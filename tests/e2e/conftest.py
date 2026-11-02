@@ -431,6 +431,23 @@ def click_mode_toggle(page: Page, toggle: str, mode: str) -> None:
     page.wait_for_function("(m) => location.search.includes(m)", arg=mode, timeout=5000)
 
 
+_OPEN_FILTER_POPOVER = "document.querySelector('.filter-popover:popover-open')"
+
+
+def click_clear_all(page: Page) -> None:
+    """Clicks Clear all filters once no filter popover is open.
+
+    An open popover can cover the button, and the click Playwright lands once it stops
+    covering can be swallowed as the popover's light dismiss, so the filters never clear
+    (the flaky CI timeout of 2026-10-28 and 2026-11-01). Close it with Escape first, as a
+    keyboard user would.
+    """
+    if page.evaluate(f"!!{_OPEN_FILTER_POPOVER}"):
+        page.keyboard.press("Escape")
+        page.wait_for_function(f"!{_OPEN_FILTER_POPOVER}")
+    page.click("#clear-filters")
+
+
 @pytest.fixture
 def multichannel(fixture_raw: dict[str, Any]) -> dict[str, Any]:
     """The synthetic two-channel override (telecast 8 on `net-e`)."""

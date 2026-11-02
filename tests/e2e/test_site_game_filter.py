@@ -14,6 +14,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import click_clear_all
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -311,7 +312,7 @@ def test_game_reset_clears_only_game_and_clear_all_clears_both(
     assert "school=northfield" in guarded_page.url
 
     open_app(guarded_page, "?game=lakeshore&school=northfield")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     _wait_url(
         guarded_page, "!location.search.includes('game=') && !location.search.includes('school=')"
     )
@@ -663,7 +664,7 @@ def test_reset_and_clear_all_clear_the_game_search(
     _open_game(guarded_page)
     guarded_page.locator("#game-search").fill("bridge")
     guarded_page.keyboard.press("Escape")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     _wait_url(guarded_page, "!location.search.includes('game=')")
     _open_game(guarded_page)
     assert guarded_page.input_value("#game-search") == ""

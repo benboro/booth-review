@@ -7,6 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import click_clear_all
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -135,7 +136,7 @@ def test_clear_all_and_resets_keep_the_switch(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
     open_app(guarded_page, "?dots=hide&school=northfield&slot=prime")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === '?dots=hide'")
     assert _pressed(guarded_page, HIDE) == "true"
     open_app(guarded_page, "?dots=hide&school=northfield")

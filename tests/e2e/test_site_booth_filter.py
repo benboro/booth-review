@@ -11,6 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import click_clear_all
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -167,7 +168,7 @@ def test_section_reset_and_clear_all_clear_the_pick(
 
     guarded_page.goto(guarded_page.url.split("?")[0] + "?booth=a")
     guarded_page.wait_for_function("window.__testHooks && window.__testHooks.ready === true")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
     expect(guarded_page.locator("#trigger-booth .filter-value")).to_have_text("Any")
 

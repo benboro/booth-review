@@ -12,6 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import click_clear_all
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -237,7 +238,7 @@ def test_school_reset_and_clear_all_turn_head_to_head_off(
     _wait_search(guarded_page, "location.search === '?dots=hide'")
 
     open_app(guarded_page, H2H + "&dots=hide&slot=prime")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     _wait_search(guarded_page, "location.search === '?dots=hide'")
 
 

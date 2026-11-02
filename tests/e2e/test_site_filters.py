@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from conftest import click_mode_toggle, expand_family
+from conftest import click_clear_all, click_mode_toggle, expand_family
 from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -488,7 +488,7 @@ def test_clear_all_filters_resets_every_filter_and_the_url(
     guarded_page.check("input[name='slot'][value='prime']")
     guarded_page.wait_for_function("location.search.includes('slot=prime')")
 
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
 
     assert _visible_count(guarded_page) == 19
@@ -512,7 +512,7 @@ def test_clear_all_filters_also_clears_people(
     guarded_page.check("#school-list input[value='northfield']")
     guarded_page.wait_for_function("location.search.includes('school=northfield')")
 
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
 
     state = guarded_page.evaluate("window.__testHooks.getState()")
@@ -1386,7 +1386,7 @@ def test_group_reset_and_clear_all_stay_consistent(
     """A4: Clear all filters still resets every group (and people), leaving
     every Reset disabled."""
     open_app(guarded_page, "?people=pat-rowan&role=pbp&school=northfield&postseason=only")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
     states = guarded_page.evaluate(
         "() => Array.from(document.querySelectorAll('.group-reset'))"
@@ -1775,7 +1775,7 @@ def test_facet_clear_all_and_reset_restore_defaults(
     for net_id in ("net-b", "net-d", "net-e"):  # Dale's games are on net-a and net-c only
         expect(_net_row(guarded_page, net_id)).to_be_hidden()
     guarded_page.keyboard.press("Escape")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     _open_networks(guarded_page)
     expected = {"net-a": 5, "net-b": 5, "net-c": 4, "net-d": 3, "net-e": 2}
     for net_id, n in expected.items():
@@ -2319,7 +2319,7 @@ def test_clear_all_filters_sits_at_the_right_end_of_the_count_line(
         "document.querySelector('#summary .sum-right').lastElementChild.id"
     )
     assert last == "clear-filters"
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
     assert guarded_page.locator("#toolbar .is-changed").count() == 0
     state = guarded_page.evaluate("window.__testHooks.getState()")
@@ -2350,7 +2350,7 @@ def test_clear_all_filters_is_disabled_until_a_filter_changes(
     live = _clear_state(guarded_page, "#clear-filters")
     assert live["aria"] == "false"
     assert live["border"] == guarded_page.evaluate(_TOKEN_COLOR_JS, "--ink")
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function(
         "document.getElementById('clear-filters').getAttribute('aria-disabled') === 'true'"
     )
