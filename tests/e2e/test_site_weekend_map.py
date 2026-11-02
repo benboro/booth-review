@@ -496,3 +496,35 @@ def test_triangle_mark_is_centred_on_its_ring(wkmap: Wk, theme: str) -> None:
         (mx, my), (hx, hy) = centres[key]["mark"], centres[key]["hit"]
         assert abs(mx - hx) <= 1.0, key
         assert abs(my - hy) <= 1.0, key
+
+
+def _click_in_place(page: Page, wk_id: str) -> None:
+    """A real mouse click at the control's centre: locator.click() would scroll it into view."""
+    box = page.locator(f'[data-wk-id="{wk_id}"]').first.bounding_box()
+    assert box is not None, wk_id
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
+def test_view_day_and_week_changes_keep_the_scroll_position(wkmap: Wk) -> None:
+    # A rebuild empties the panel (or moves the map node out of it) and then reads a size, so the
+    # page used to shrink for one layout and the browser clamped the scroll to the top.
+    page = wkmap()
+    page.wait_for_function(_SPLAT_READY, timeout=15000)
+    steps = [
+        "wview:timeline",  # Map -> Timeline (destroy, then a fresh mount)
+        "wview:map",  # Timeline -> Map
+        "day:2026-10-02",  # day pick: the view rebuilds itself, outside the app's render
+        "day:2026-10-03",
+        "step:prev",  # week step, Map -> Map in place
+        "step:next",
+    ]
+    for wk_id in steps:
+        page.evaluate("window.scrollTo(0, 250)")
+        assert page.evaluate("scrollY") == 250, wk_id
+        _click_in_place(page, wk_id)
+        assert page.evaluate("scrollY") == 250, wk_id
+        if wk_id == "wview:timeline":
+            settle(page)
+        else:
+            wait_drawn(page)
+        assert page.evaluate("scrollY") == 250, wk_id
