@@ -198,6 +198,16 @@ h1, h2, h3 {
   margin: 0 0 var(--space-md) 0;
 }
 
+/* Notes 2026-11-02: a ranked team's rank sits as a superscript before its name in the modal
+   title, with no "#". line-height 0 keeps the raised figure from opening the title's line box,
+   so a ranked title is exactly as tall as an unranked one (things stay put). */
+.title-rank {
+  font-size: 0.6em;
+  vertical-align: 0.7em;
+  line-height: 0;
+  margin-right: 0.12em;
+}
+
 /* ---------- Top bar ---------- */
 
 /* D-21: the top bar now holds only the site title -- the person search

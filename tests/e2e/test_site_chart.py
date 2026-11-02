@@ -1609,10 +1609,7 @@ def test_tooltip_mode_trace_config(
             (
                 "inert:",
                 "unrated-inert:",
-                "highlight-halo",
-                "unrated-lead-halo:",
-                "unrated-lead-filled-halo:",
-                "lead-halo:",
+                "highlight-halo-unrated-open",
                 "unrated-lead-rim:",
             )
         ):
@@ -1637,10 +1634,7 @@ def test_tooltip_mode_trace_config(
             (
                 "inert:",
                 "unrated-inert:",
-                "highlight-halo",
-                "unrated-lead-halo:",
-                "unrated-lead-filled-halo:",
-                "lead-halo:",
+                "highlight-halo-unrated-open",
                 "unrated-lead-rim:",
             )
         ):
@@ -1665,7 +1659,6 @@ def test_tooltip_mode_trace_config(
                 "unrated-inert:",
                 "unrated-active:",
                 "lead:",
-                "lead-halo:",
                 "unrated-lead",
             )
         ):
@@ -1708,6 +1701,9 @@ _HIGHLIGHT_POINTS_JS = """
   const sentinel = gd.layout.annotations[0].x;
   const out = [];
   for (let i = 0; i < trace.x.length; i += 1) {
+    // A shape's ACCENT halo is the point just before it, with the same customdata
+    // (notes 2026-11-02); only the shapes themselves are returned.
+    if (trace.customdata[i] === trace.customdata[i + 1]) continue;
     const symbol = Array.isArray(trace.marker.symbol)
       ? trace.marker.symbol[i] : trace.marker.symbol;
     const size = Array.isArray(trace.marker.size) ? trace.marker.size[i] : trace.marker.size;
@@ -1895,16 +1891,24 @@ def test_compare_shapes_have_no_edge_speckles(
     assert total == 0, f"{total} speckle pixel(s) found around compare-mode highlight markers"
 
 
-# Sets the D-33 halo trace's (`gd.data.at(-2)`, `meta: 'highlight-halo'`)
-# marker opacity, leaving every other trace and the layout untouched, so the
-# halo-border test can measure the same crops with and without the halo.
-# Resolves false when the halo trace is not where D-33 puts it.
-_SET_HALO_OPACITY_JS = """
-(opacity) => {
+# Shrinks every D-33 halo point of the highlight trace (`gd.data.at(-1)`; each halo sits just
+# before its shape with the same customdata, notes 2026-11-02) to its shape's own size, so it is
+# hidden under the shape, leaving every other point, trace and the layout untouched. The
+# halo-border test then measures the same crops with and without the halo. Resolves false
+# when the trace has no halo point.
+_HIDE_HALOS_JS = """
+() => {
   const gd = document.getElementById('chart');
-  const index = gd.data.length - 2;
-  if (index < 0 || gd.data[index].meta !== 'highlight-halo') return false;
-  return window.Plotly.restyle(gd, { 'marker.opacity': opacity }, [index]).then(() => true);
+  const index = gd.data.length - 1;
+  const t = gd.data[index];
+  if (t.meta !== 'highlight' || !Array.isArray(t.marker.size)) return false;
+  const size = t.marker.size.slice();
+  let halos = 0;
+  for (let k = 0; k + 1 < size.length; k += 1) {
+    if (t.customdata[k] === t.customdata[k + 1]) { size[k] = size[k + 1]; halos += 1; }
+  }
+  if (halos === 0) return false;
+  return window.Plotly.restyle(gd, { 'marker.size': [size] }, [index]).then(() => true);
 }
 """
 
@@ -1999,7 +2003,7 @@ def test_compare_shapes_have_accent_halo_border(
     # counts in the band with or without a halo, so each marker's count is
     # compared against the same crop with the halo trace hidden: the
     # difference is the halo's own border.
-    assert guarded_page.evaluate(_SET_HALO_OPACITY_JS, 0), "halo trace not found at data.at(-2)"
+    assert guarded_page.evaluate(_HIDE_HALOS_JS), "no halo point in the highlight trace"
     guarded_page.wait_for_timeout(300)
     without_halo = band_counts()
 
@@ -2045,95 +2049,45 @@ def test_compare_highlight_trace_config(
 def test_compare_halo_trace_config(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-33: with at least one non-circle highlight point, a halo trace
-    (`meta: 'highlight-halo'`) sits at `gd.data.at(-2)`, immediately before
-    the `highlight` trace at `gd.data.at(-1)`. It carries exactly the
-    non-circle highlight points, with the same x/y and symbol, a solid
-    ACCENT[theme] fill, each point's own highlight size + 3, `line.width`
-    0, `opacity` 1, and is inert to hover/click (`hoverinfo: 'skip'`,
-    `hovertemplate: null`). The highlight trace itself is unchanged: still
-    `line.width` 0 on every non-circle point and >= 12px."""
+    """D-33, notes 2026-11-02: every non-circle highlight shape has its own ACCENT halo point
+    directly before it in the `highlight` trace (`gd.data.at(-1)`), so overlapping shapes keep
+    their whole borders: the same customdata, x/y and symbol, a solid ACCENT[theme] fill, the
+    shape's size + 3 and `line.width` 0. Circles take the ACCENT line instead and have no halo.
+    No separate `highlight-halo` trace remains. The shapes themselves keep `line.width` 0 and
+    are >= 12px."""
     open_app(guarded_page, _COMPARE_ALL_SHAPES_QUERY)
-    result = guarded_page.evaluate(
-        "() => { const gd = document.getElementById('chart'); "
-        "const highlight = gd.data.at(-1); "
-        "const halo = gd.data.at(-2); "
-        "return { highlightMeta: highlight.meta, haloMeta: halo.meta, "
-        "haloX: halo.x, haloY: halo.y, haloSymbol: halo.marker.symbol, "
-        "haloSize: halo.marker.size, haloColor: halo.marker.color, "
-        "haloLineWidth: halo.marker.line.width, haloOpacity: halo.marker.opacity, "
-        "haloHoverinfo: halo.hoverinfo, haloHovertemplate: halo.hovertemplate, "
-        "haloShowlegend: halo.showlegend, "
-        "highlightX: highlight.x, highlightY: highlight.y, "
-        "highlightSymbol: highlight.marker.symbol, "
-        "highlightSize: highlight.marker.size, "
-        "highlightLineWidth: highlight.marker.line.width }; }"
+    t = guarded_page.evaluate(
+        "() => { const gd = document.getElementById('chart'); const h = gd.data.at(-1); "
+        "return { meta: h.meta, metas: gd.data.map((d) => d.meta), x: h.x, y: h.y, "
+        "customdata: h.customdata, symbol: h.marker.symbol, size: h.marker.size, "
+        "color: h.marker.color, lineWidth: h.marker.line.width, opacity: h.marker.opacity }; }"
     )
-
-    assert result["highlightMeta"] == "highlight"
-    assert result["haloMeta"] == "highlight-halo"
-    assert result["haloShowlegend"] is False
-    assert result["haloHoverinfo"] == "skip"
-    assert not result["haloHovertemplate"]
-    assert result["haloOpacity"] == 1
-
-    # The halo's points are exactly the non-circle highlight points, same
-    # x/y and symbol, in the same order.
-    non_circle_idx = [i for i, s in enumerate(result["highlightSymbol"]) if s != "circle"]
-    assert len(non_circle_idx) > 0, "fixture selection has no non-circle compare shape to check"
-    assert len(result["haloX"]) == len(non_circle_idx)
-    for halo_i, hi in enumerate(non_circle_idx):
-        assert result["haloX"][halo_i] == result["highlightX"][hi]
-        assert result["haloY"][halo_i] == result["highlightY"][hi]
-        assert result["haloSymbol"][halo_i] == result["highlightSymbol"][hi]
-
-        halo_size = (
-            result["haloSize"][halo_i]
-            if isinstance(result["haloSize"], list)
-            else result["haloSize"]
-        )
-        highlight_size = (
-            result["highlightSize"][hi]
-            if isinstance(result["highlightSize"], list)
-            else result["highlightSize"]
-        )
-        assert halo_size == highlight_size + 3
-
-        halo_line_width = (
-            result["haloLineWidth"][halo_i]
-            if isinstance(result["haloLineWidth"], list)
-            else result["haloLineWidth"]
-        )
-        assert halo_line_width == 0
-
-    halo_color = result["haloColor"]
-    halo_colors = halo_color if isinstance(halo_color, list) else [halo_color] * len(non_circle_idx)
-    assert all(c == _ACCENT["light"] for c in halo_colors)
-
-    # The highlight trace itself is unchanged by the halo's addition: still
-    # line.width 0 and size >= 12 on every non-circle point.
-    for hi in non_circle_idx:
-        hl_width = (
-            result["highlightLineWidth"][hi]
-            if isinstance(result["highlightLineWidth"], list)
-            else result["highlightLineWidth"]
-        )
-        assert hl_width == 0
-        hl_size = (
-            result["highlightSize"][hi]
-            if isinstance(result["highlightSize"], list)
-            else result["highlightSize"]
-        )
-        assert hl_size >= 12
+    assert t["meta"] == "highlight"
+    assert "highlight-halo" not in t["metas"]
+    assert t["opacity"] == 1
+    cd = t["customdata"]
+    halo_at = [k for k in range(len(cd) - 1) if cd[k] == cd[k + 1]]
+    shape_at = [k for k in range(len(cd)) if k not in halo_at]
+    assert sorted(set(cd)) == sorted(cd[k] for k in shape_at), "one shape per game"
+    non_circle = [k for k in shape_at if t["symbol"][k] != "circle"]
+    assert non_circle, "fixture selection has no non-circle compare shape to check"
+    assert [k + 1 for k in halo_at] == non_circle, "every non-circle shape, only those, has a halo"
+    for k in non_circle:
+        h = k - 1
+        assert (t["x"][h], t["y"][h], t["symbol"][h]) == (t["x"][k], t["y"][k], t["symbol"][k])
+        assert t["size"][h] == t["size"][k] + 3
+        assert t["color"][h] == _ACCENT["light"]
+        assert t["lineWidth"][h] == 0
+        assert t["lineWidth"][k] == 0
+        assert t["size"][k] >= 12
 
 
 def test_no_halo_trace_with_no_selection(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-33: with no non-circle highlight points (nobody selected here), the
-    halo trace either doesn't exist or has zero points -- either way,
-    `data.at(-1)` is still the `highlight` trace, unchanged from before this
-    plan."""
+    """D-33: with nobody selected there are no highlight points and no halo trace (halos are
+    paired points inside the highlight trace since notes 2026-11-02); `data.at(-1)` is still
+    the `highlight` trace."""
     open_app(guarded_page, "")
     result = guarded_page.evaluate(
         "() => { const gd = document.getElementById('chart'); "

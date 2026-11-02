@@ -10,8 +10,8 @@
  * rings are filled SURFACE circles with a family-colored line (never an open
  * symbol, whose SDF glyph speckles, notes-2 #1), and with a size filter active
  * passing unrated games draw like rated dots (notes-2 #5, amends D-03);
- * two highlight overlays -- `highlight-halo-unrated`/`highlight-halo-unrated-open`/`highlight-unrated`
- * (styled like the rated highlight) then the rated halo and `highlight`, always last --
+ * two highlight overlays -- `highlight-halo-unrated-open`/`highlight-unrated` (styled like the
+ * rated highlight) then `highlight`, always last, each shape's ACCENT halo paired before it --
  * plus a highlight overlay drawn last, the D-03 n/a strip, log-axis ticks,
  * the UI-SPEC's minimal hover content, and the phone/desktop layout.
  * Plotly's own legend is off everywhere (`showlegend: false`); the HTML
@@ -111,6 +111,33 @@ const LEAD_CASING_SIZE = 18;
  * marker gutter.js allows for. */
 const LEAD_RIM_GROWTH = 4;
 const FALLBACK_PLOT_HEIGHT = 420;
+
+/**
+ * Pairs every star with its own casing or rim star, drawn directly before it in the same
+ * trace (notes 2026-11-02). With the casings in a trace beneath all the stars, two
+ * overlapping stars shared one merged outline; drawn pairwise, a star in front covers the
+ * outline of the star behind it, so each star keeps its whole border. Both points of a pair
+ * carry the game's customdata and text, so hover and click hit the game either way.
+ * @param {{x: Array, y: Array, customdata: number[], text: string[]}} bucket
+ * @param {{color: string, size: number, opacity: number}} rim
+ * @param {{color: string, size: number, opacity: number}} fill
+ * @returns {{x: Array, y: Array, customdata: number[], text: string[], color: string[], size: number[], opacity: number[]}}
+ */
+export function pairStarsWithRims(bucket, rim, fill) {
+  const out = { x: [], y: [], customdata: [], text: [], color: [], size: [], opacity: [] };
+  for (let k = 0; k < bucket.x.length; k += 1) {
+    for (const m of [rim, fill]) {
+      out.x.push(bucket.x[k]);
+      out.y.push(bucket.y[k]);
+      out.customdata.push(bucket.customdata[k]);
+      if (bucket.text.length) out.text.push(bucket.text[k]);
+      out.color.push(m.color);
+      out.size.push(m.size);
+      out.opacity.push(m.opacity);
+    }
+  }
+  return out;
+}
 
 /**
  * The vertical split of the plot: the log viewers axis on top, a fixed gap row, then
@@ -548,34 +575,21 @@ export function buildFigure(data, view, state, env) {
     // same-colored dots it overlaps. Plain filled surface star: no marker.line, no open symbol.
     // Phase 17: with dots enlarged the casing becomes a thin DOT_OUTLINE rim instead, so stars
     // carry the same outline as the enlarged dots (dark in light, light in dark).
-    const rimMarker = { symbol: 'star', color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + LEAD_RIM_GROWTH, opacity: activeOpacity, line: { width: 0 } };
-    const casingMarker = view.enlargeDots
-      ? rimMarker
-      : { symbol: 'star', color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1, line: { width: 0 } };
-    leadCasingTraces.push({
-      type: 'scattergl',
-      mode: 'markers',
-      meta: `lead-halo:${family}`,
-      showlegend: false,
-      x: lead.x,
-      y: lead.y,
-      hoverinfo: 'skip',
-      hovertemplate: null,
-      marker: casingMarker,
+    // Notes 2026-11-02: each casing or rim is paired with its own star in the star's trace
+    // (pairStarsWithRims), so overlapping stars no longer share one merged outline.
+    const rim = { color: DOT_OUTLINE[theme], size: LEAD_STAR_SIZE + LEAD_RIM_GROWTH, opacity: activeOpacity };
+    const casing = view.enlargeDots ? rim : { color: SURFACE[theme], size: LEAD_CASING_SIZE, opacity: 1 };
+    const starFill = { color, size: LEAD_STAR_SIZE, opacity: activeOpacity };
+    const pairedMarker = (paired) => ({
+      symbol: 'star',
+      color: paired.color,
+      size: paired.size,
+      opacity: paired.opacity,
+      line: { width: 0 },
     });
+    const pairedLead = pairStarsWithRims(lead, casing, starFill);
     // The filled band star (non-Viewers modes) gets the rim too, only while dots are enlarged.
-    leadCasingTraces.push({
-      type: 'scattergl',
-      mode: 'markers',
-      meta: `unrated-lead-filled-halo:${family}`,
-      showlegend: false,
-      yaxis: 'y2',
-      x: view.enlargeDots ? uLeadFilled.x : [],
-      y: view.enlargeDots ? uLeadFilled.y : [],
-      hoverinfo: 'skip',
-      hovertemplate: null,
-      marker: rimMarker,
-    });
+    const pairedBand = view.enlargeDots ? pairStarsWithRims(uLeadFilled, rim, starFill) : null;
     // Review F2: the empty no-rating star (Viewers mode) gets the same outline while dots are
     // enlarged, as a larger DOT_OUTLINE open star around it at the dots' 1px weight, so the
     // star stays empty inside two concentric outlines. Always pushed, possibly empty.
@@ -599,13 +613,17 @@ export function buildFigure(data, view, state, env) {
       },
     });
     leadTraces.push({
-      ...leadBase(`lead:${family}`, lead, null),
-      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+      ...leadBase(`lead:${family}`, pairedLead, null),
+      marker: pairedMarker(pairedLead),
     });
-    leadTraces.push({
-      ...leadBase(`unrated-lead-filled:${family}`, uLeadFilled, 'y2'),
-      marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
-    });
+    leadTraces.push(
+      pairedBand
+        ? { ...leadBase(`unrated-lead-filled:${family}`, pairedBand, 'y2'), marker: pairedMarker(pairedBand) }
+        : {
+            ...leadBase(`unrated-lead-filled:${family}`, uLeadFilled, 'y2'),
+            marker: { symbol: 'star', color, size: LEAD_STAR_SIZE, opacity: activeOpacity, line: { width: 0 } },
+          },
+    );
     leadTraces.push({
       ...leadBase(`unrated-lead:${family}`, uLead, 'y2'),
       // Phase 17 (user sign-off): a truly empty star, so the band's rings show through it, at
@@ -627,13 +645,7 @@ export function buildFigure(data, view, state, env) {
   const hsize = [];
   const hsymbol = [];
   const hlineWidth = [];
-  // D-33 halo: a separate scattergl trace holding just the non-circle
-  // highlight points (same x/y/symbol), pushed immediately before the
-  // highlight trace below.
-  const haloX = [];
-  const haloY = [];
-  const haloSymbol = [];
-  const haloSize = [];
+  const hborder = [];
   // 04.13: the unrated (band) counterparts, always emitted so the trace count is constant.
   const ux = [];
   const uy = [];
@@ -643,10 +655,7 @@ export function buildFigure(data, view, state, env) {
   const usize = [];
   const usymbol = [];
   const ulineWidth = [];
-  const uhaloX = [];
-  const uhaloY = [];
-  const uhaloSymbol = [];
-  const uhaloSize = [];
+  const uborder = [];
   // A highlighted unrated lead (A) game in Viewers mode keeps its empty star (review F1): an
   // open family star in `highlight-unrated`, and the ACCENT highlight as a larger open star
   // beneath it instead of a filled halo. Nothing is filled, so the band shows through.
@@ -662,11 +671,28 @@ export function buildFigure(data, view, state, env) {
   // 1.5px `marker.line` border, 0 with it removed). Circles are drawn
   // analytically and never show the artifact, so they keep the accent
   // `marker.line` border directly. Every other symbol instead gets a
-  // solid ACCENT-filled "halo" trace underneath it (meta 'highlight-halo',
-  // built just below): the same point, ~3px larger, `line.width` 0,
-  // `hoverinfo: 'skip'` and `hovertemplate: null` so it never takes a
-  // hover or a click. That restores the same accent border the circles
+  // solid ACCENT-filled "halo" point: the same point, 3px larger,
+  // `line.width` 0. That restores the same accent border the circles
   // have without ever setting `marker.line` on an SDF glyph.
+  // Notes 2026-11-02: the halo point sits in the highlight trace itself,
+  // directly before its shape (scattergl keeps point order within a
+  // symbol), so overlapping shapes each keep their whole border instead
+  // of sharing one merged outline from a halo trace beneath them all. The
+  // halo point carries the game's customdata and text, so hover and click
+  // land on the game from its rim too.
+  const pushHalo = (arrays, i, x, y, symbol, size, familyColor) => {
+    arrays.x.push(x);
+    arrays.y.push(y);
+    arrays.customdata.push(i);
+    if (usePlotlyText) arrays.text.push(hoverText(data, i, hoverOpts));
+    arrays.color.push(ACCENT[theme]);
+    arrays.symbol.push(symbol);
+    arrays.size.push(size + 3);
+    arrays.lineWidth.push(0);
+    arrays.border.push(familyColor);
+  };
+  const hArrays = { x: hx, y: hy, customdata: hcustomdata, text: htext, color: hcolor, symbol: hsymbol, size: hsize, lineWidth: hlineWidth, border: hborder };
+  const uArrays = { x: ux, y: uy, customdata: ucustomdata, text: utext, color: ucolor, symbol: usymbol, size: usize, lineWidth: ulineWidth, border: uborder };
   for (const i of highlighted) {
     if (outOfSeasons(i)) continue;
     const x = xOf(i);
@@ -677,11 +703,13 @@ export function buildFigure(data, view, state, env) {
       // compare shapes; circles take the ACCENT line, other shapes the filled ACCENT halo).
       const familyColor = FAMILY_COLORS[theme][data.familyOf[i]];
       const hollow = symbol === 'star' && yMode === 'viewers' && !view.personShapes && data.boothTier[i] === 1;
+      if (!hollow && symbol !== 'circle') pushHalo(uArrays, i, x, bandY(i), symbol, size, familyColor);
       ux.push(x);
       uy.push(bandY(i));
       ucustomdata.push(i);
       if (usePlotlyText) utext.push(hoverText(data, i, hoverOpts));
       ucolor.push(familyColor);
+      uborder.push(familyColor);
       usymbol.push(hollow ? 'star-open' : symbol);
       usize.push(size);
       // An open symbol draws its line in the marker colour, at the band rings' width.
@@ -691,50 +719,22 @@ export function buildFigure(data, view, state, env) {
         uopenY.push(bandY(i));
         uopenSize.push(size + 4);
         uopenSymbol.push('star-open');
-        continue;
-      }
-      if (symbol !== 'circle') {
-        uhaloX.push(x);
-        uhaloY.push(bandY(i));
-        uhaloSymbol.push(symbol);
-        uhaloSize.push(size + 3);
       }
       continue;
     }
     const y = yOf(i);
+    const familyColor = FAMILY_COLORS[theme][data.familyOf[i]];
+    if (symbol !== 'circle') pushHalo(hArrays, i, x, y, symbol, size, familyColor);
     hx.push(x);
     hy.push(y);
     hcustomdata.push(i);
     if (usePlotlyText) htext.push(hoverText(data, i, hoverOpts));
-    hcolor.push(FAMILY_COLORS[theme][data.familyOf[i]]);
+    hcolor.push(familyColor);
+    hborder.push(familyColor);
     hsymbol.push(symbol);
     hsize.push(size);
     hlineWidth.push(symbol === 'circle' ? 1.5 : 0);
-    if (symbol !== 'circle') {
-      haloX.push(x);
-      haloY.push(y);
-      haloSymbol.push(symbol);
-      haloSize.push(size + 3);
-    }
   }
-  traces.push({
-    type: 'scattergl',
-    mode: 'markers',
-    meta: 'highlight-halo-unrated',
-    showlegend: false,
-    yaxis: 'y2',
-    x: uhaloX,
-    y: uhaloY,
-    hoverinfo: 'skip',
-    hovertemplate: null,
-    marker: {
-      symbol: uhaloSymbol,
-      size: uhaloSize,
-      color: ACCENT[theme],
-      opacity: 1,
-      line: { width: 0 },
-    },
-  });
   traces.push({
     type: 'scattergl',
     mode: 'markers',
@@ -765,7 +765,7 @@ export function buildFigure(data, view, state, env) {
     ...(usePlotlyText ? { text: utext } : {}),
     hoverinfo: usePlotlyText ? 'all' : 'none',
     hovertemplate: usePlotlyText ? '%{text}<extra></extra>' : null,
-    hoverlabel: { bordercolor: ucolor },
+    hoverlabel: { bordercolor: uborder },
     marker: {
       color: ucolor,
       size: usize,
@@ -774,25 +774,6 @@ export function buildFigure(data, view, state, env) {
       line: { width: ulineWidth, color: ACCENT[theme] },
     },
   });
-  if (haloX.length > 0) {
-    traces.push({
-      type: 'scattergl',
-      mode: 'markers',
-      meta: 'highlight-halo',
-      showlegend: false,
-      x: haloX,
-      y: haloY,
-      hoverinfo: 'skip',
-      hovertemplate: null,
-      marker: {
-        symbol: haloSymbol,
-        size: haloSize,
-        color: ACCENT[theme],
-        opacity: 1,
-        line: { width: 0 },
-      },
-    });
-  }
   traces.push({
     type: 'scattergl',
     mode: 'markers',
@@ -804,7 +785,7 @@ export function buildFigure(data, view, state, env) {
     ...(usePlotlyText ? { text: htext } : {}),
     hoverinfo: usePlotlyText ? 'all' : 'none',
     hovertemplate: usePlotlyText ? '%{text}<extra></extra>' : null,
-    hoverlabel: { bordercolor: hcolor },
+    hoverlabel: { bordercolor: hborder },
     marker: {
       color: hcolor,
       size: hsize,

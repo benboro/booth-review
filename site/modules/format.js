@@ -450,19 +450,34 @@ export function noRatingLine(data, i) {
  * @returns {string} e.g. "#5 Northfield 20 at #3 Lakeview 27".
  */
 export function formatMatchup(data, i, options = {}) {
-  const withScore = options.withScore ?? false;
+  const parts = matchupParts(data, i, options);
+  const side = ({ rank, team, score }) =>
+    `${rank != null ? `#${rank} ` : ''}${team}${score != null ? ` ${score}` : ''}`;
+  return `${side(parts.away)} ${parts.separator} ${side(parts.home)}`;
+}
+
+/**
+ * The pieces of a matchup line for callers that set the rank apart (the modal title shows it
+ * as a superscript with no "#", notes 2026-11-02). Ranks are null when unranked; scores are
+ * null unless `withScore` and both scores are known.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {{withScore?: boolean}} [options]
+ * @returns {{away: {rank: number|null, team: string, score: number|null}, separator: string, home: {rank: number|null, team: string, score: number|null}}}
+ */
+export function matchupParts(data, i, options = {}) {
   const t = data.t;
-  const awayTeam = data.lookups.teams[t.away_team[i]].name;
-  const homeTeam = data.lookups.teams[t.home_team[i]].name;
-  const awayRank = t.away_rank[i];
-  const homeRank = t.home_rank[i];
-  const awayPrefix = awayRank != null ? `#${awayRank} ` : '';
-  const homePrefix = homeRank != null ? `#${homeRank} ` : '';
-  const separator = t.neutral[i] ? 'vs.' : 'at';
-  const showScore = withScore && t.away_points[i] != null && t.home_points[i] != null;
-  const awayScore = showScore ? ` ${t.away_points[i]}` : '';
-  const homeScore = showScore ? ` ${t.home_points[i]}` : '';
-  return `${awayPrefix}${awayTeam}${awayScore} ${separator} ${homePrefix}${homeTeam}${homeScore}`;
+  const showScore = (options.withScore ?? false) && t.away_points[i] != null && t.home_points[i] != null;
+  const side = (team, rank, points) => ({
+    rank: rank ?? null,
+    team: data.lookups.teams[team].name,
+    score: showScore ? points : null,
+  });
+  return {
+    away: side(t.away_team[i], t.away_rank[i], t.away_points[i]),
+    separator: t.neutral[i] ? 'vs.' : 'at',
+    home: side(t.home_team[i], t.home_rank[i], t.home_points[i]),
+  };
 }
 
 const CREW_ROLE_ORDER = { pbp: 0, analyst: 1 };

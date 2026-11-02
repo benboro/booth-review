@@ -25,6 +25,7 @@ import {
   boothLabel,
   formatMatchup,
   formatViewersProse,
+  matchupParts,
   gameTypeInfo,
   rivalryName,
   measurementLabel,
@@ -281,6 +282,34 @@ function buildRivalryLine(name) {
 }
 
 /**
+ * Writes the modal title with each rank as a superscript and no "#" (notes 2026-11-02): the
+ * title's large serif makes a full-size "#7" read as part of the name. Text nodes only, never
+ * markup, so a team name is always plain text. The aria-label keeps the spoken "#7" form,
+ * since a bare superscript would read as "7Michigan State".
+ * @param {HTMLElement} titleEl
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ */
+export function renderMatchupTitle(titleEl, data, i) {
+  const parts = matchupParts(data, i, { withScore: true });
+  const nodes = [];
+  const side = ({ rank, team, score }) => {
+    if (rank != null) {
+      const sup = document.createElement('sup');
+      sup.className = 'title-rank';
+      sup.textContent = String(rank);
+      nodes.push(sup);
+    }
+    nodes.push(document.createTextNode(score != null ? `${team} ${score}` : team));
+  };
+  side(parts.away);
+  nodes.push(document.createTextNode(` ${parts.separator} `));
+  side(parts.home);
+  titleEl.replaceChildren(...nodes);
+  titleEl.setAttribute('aria-label', formatMatchup(data, i, { withScore: true }));
+}
+
+/**
  * Renders the full detail-panel body for telecast `i` into `bodyEl`, and
  * its title into `titleEl` (SITE-05, D-02, D-04, D-07, D-08, D-16). Pure DOM
  * update -- safe to call again for a different `i` while the panel is
@@ -301,7 +330,7 @@ function buildRivalryLine(name) {
  */
 export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = false, weekend = false }) {
   const t = data.t;
-  titleEl.textContent = formatMatchup(data, i, { withScore: true });
+  renderMatchupTitle(titleEl, data, i);
 
   const children = [];
 
