@@ -23,6 +23,7 @@ import {
 import { MAX_COMPARE } from './select.js';
 import { crewPickNames } from './format.js';
 import { buildVenueModel } from './map-venues.js';
+import { countryName, venueAbroad, venueTitle } from './venue.js';
 import {
   ALBERS_SCALE,
   ALBERS_TRANSLATE,
@@ -453,20 +454,8 @@ export function buildMapModel(data, view, state) {
 
 const MAX_TOOLTIP_GAMES = 3;
 
-function countryName(code) {
-  try {
-    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code;
-  } catch {
-    return code;
-  }
-}
-
-export function venueTitle(venue) {
-  const abroad = venue.country != null && venue.country !== 'US';
-  if (!venue.city) return venue.name;
-  const where = abroad ? countryName(venue.country) : venue.state;
-  return where ? `${venue.name}, ${venue.city}, ${where}` : `${venue.name}, ${venue.city}`;
-}
+// The venue text itself lives in venue.js, shared with This weekend and both game modals.
+export { venueTitle };
 
 /**
  * Name and tooltip for the venue filter chip and status (Phase 11 D-05): a single venue
@@ -479,8 +468,7 @@ export function venueFilterInfo(data, key) {
   const single = data.venueKeys?.indexOf(key) ?? -1;
   if (single >= 0) {
     const v = data.lookups.venues[single];
-    const abroad = v.country != null && v.country !== 'US';
-    const where = abroad ? countryName(v.country) : v.state;
+    const where = venueAbroad(v) ? countryName(v.country) : v.state;
     const title = [v.name, v.city, where].filter(Boolean).join(', ');
     return { name: v.name, title };
   }
@@ -493,7 +481,7 @@ function gameLine(data, i) {
   const teams = data.lookups.teams;
   const home = teams[t.home_team[i]].name;
   const away = teams[t.away_team[i]].name;
-  const matchup = t.neutral[i] ? `${away} vs ${home}` : `${away} @ ${home}`;
+  const matchup = t.neutral[i] ? `${away} vs. ${home}` : `${away} @ ${home}`;
   return `${t.date[i]}  ${matchup}  ${data.lookups.networks[t.network[i]].name}`;
 }
 

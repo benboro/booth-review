@@ -53,6 +53,7 @@ export function upcomingRow(model, j, { unplayed = true } = {}) {
     agotw: false,
     cbsNational: false,
     international: Boolean(u.international[j]),
+    venue: u.place?.[j] != null ? (model.venues?.[u.place[j]] ?? null) : null,
     flexed: false,
     originalSlot: null,
     originalNetwork: null,

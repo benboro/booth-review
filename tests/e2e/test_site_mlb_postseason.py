@@ -838,7 +838,7 @@ def test_a_cell_with_two_series_gets_two_heads_in_date_order(
     )
     sel = f"{VIEW} .mlb-grid button[data-cell='2019-division-AL']"
     series = page.evaluate(_SERIES_JS, sel)
-    assert [s["head"] for s in series] == ["FOXES vs HERONS", "LANTERNS vs GULLS"]
+    assert [s["head"] for s in series] == ["FOXES vs. HERONS", "LANTERNS vs. GULLS"]
     assert [s["rule"] for s in series] == ["0px", "1px"]
     # The shared analyst appears once per series: grouping never crosses a series line.
     assert series[0]["lines"] == [[names[6], names[7]]]
@@ -851,11 +851,11 @@ def test_a_cell_with_two_series_gets_two_heads_in_date_order(
     btn = page.locator(sel)
     label = btn.get_attribute("aria-label") or ""
     assert label.startswith("2019 Division Series AL, 3 games")
-    assert "FOXES vs HERONS, LANTERNS vs GULLS" in label
+    assert "FOXES vs. HERONS, LANTERNS vs. GULLS" in label
     cells = {c["key"]: c for c in page.evaluate(f"{HOOKS}.getViewModel('postseason').cells")}
     assert cells["2019-division-AL"]["series"] == [
-        {"label": "FOXES vs HERONS", "games": 1},
-        {"label": "LANTERNS vs GULLS", "games": 2},
+        {"label": "FOXES vs. HERONS", "games": 1},
+        {"label": "LANTERNS vs. GULLS", "games": 2},
     ]
     btn.click()
     assert page.evaluate(f"{HOOKS}.getState().cell") == "2019-division-AL"
@@ -875,7 +875,7 @@ def test_phone_twin_shows_the_same_series_heads_and_hairline(
     page.route("**/mlb-data.json", handler)
     open_mlb_app(page, "?sport=mlb&view=postseason")
     series = page.evaluate(_SERIES_JS, f"{VIEW} button[data-phone-cell='2019-division-AL']")
-    assert [s["head"] for s in series] == ["FOXES vs HERONS", "LANTERNS vs GULLS"]
+    assert [s["head"] for s in series] == ["FOXES vs. HERONS", "LANTERNS vs. GULLS"]
     assert [s["rule"] for s in series] == ["0px", "1px"]
 
 
@@ -883,7 +883,7 @@ def test_a_single_series_cell_has_one_head_and_no_hairline(post: Page) -> None:
     series = post.evaluate(
         _SERIES_JS, f"{VIEW} .mlb-grid button[data-cell='2014-world_series-all']"
     )
-    assert [s["head"] for s in series] == ["GULLS vs FOXES"]
+    assert [s["head"] for s in series] == ["GULLS vs. FOXES"]
     assert series[0]["rule"] == "0px"
 
 

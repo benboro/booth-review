@@ -1505,7 +1505,7 @@ function triggerInfo(name, data, state, view) {
   }
   if (name === 'school') {
     const names = state.school.map((slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name);
-    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs ${names[1]}`], 2);
+    if (state.h2h === true && names.length === 2) return info([`${names[0]} vs. ${names[1]}`], 2);
     return info(names);
   }
   if (name === 'postseason') {

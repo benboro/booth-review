@@ -134,8 +134,15 @@ records only where the site settles or applies them.
   spots use it (the crew separator, the booth line and the read-aloud replace), and a test
   fails on any other middle dot in site code or built pages.
 - Dates in tooltips and panels follow AP style (`Sept.`, lowercase `pm`, no dot between
-  parts). View code builds the page with `createElement` and `textContent`; a test fails on
+  parts), and a neutral-site or head-to-head pairing writes AP's `vs.` with the period
+  (2026-11-02). View code builds the page with `createElement` and `textContent`; a test fails on
   any `innerHTML`.
+- Where a game was played (2026-11-02): both game modals put a location line right under the
+  date for any game with a venue ("AT&T Stadium, Arlington, TX", with " (neutral site)" for a
+  neutral or NFL international game, dropped when a named bowl line shows). Fixed-height or
+  crowded cells (This weekend's timeline, Matched games) name a neutral site's city only in a
+  "Played in Arlington, TX" tooltip; the roomy ESPN+ and regional table writes it inline in
+  parentheses. A venue abroad names its country instead of a state (`site/modules/venue.js`).
 
 ## Tables
 

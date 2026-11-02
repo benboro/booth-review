@@ -362,7 +362,7 @@ def test_compare_symbols_shared_star_and_cap(guarded_page: Page, site_url: str) 
           .map((d) => d.symbol);
         const five = M.mapSubjects(data, mkView(), mkState({school: ['a', 'b', 'c', 'd', 'e']}));
         const m5 = M.buildMapModel(data, mkView(), mkState({school: ['a', 'b', 'c', 'd', 'e']}));
-        // Game 3 is Foxes vs Bears: with b then f picked, the earlier pick (b) names it.
+        // Game 3 is Foxes vs. Bears: with b then f picked, the earlier pick (b) names it.
         const two = M.buildMapModel(data, mkView(), mkState({school: ['b', 'f']}));
         const star = two.venueDots.filter((d) => d.symbol === 'star').length;
         const g3 = two.venueDots.find((d) => d.venue === 5 && d.tier === 'subject');
@@ -380,7 +380,7 @@ def test_compare_symbols_shared_star_and_cap(guarded_page: Page, site_url: str) 
     assert got["five"] == ["circle", "square", "diamond", "triangle-up", "circle"]
     assert got["capped"] is True
     assert got["capped2"] is False
-    # Venue 5 hosts Foxes vs Bears, a game owned by both picked schools: one shared star.
+    # Venue 5 hosts Foxes vs. Bears, a game owned by both picked schools: one shared star.
     assert got["star"] >= 1
     assert got["g3sym"] == "star"
 

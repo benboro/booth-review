@@ -234,7 +234,7 @@ def test_rivalry_tooltip_is_desktop_only(
     open_app(guarded_page, "")
     _open_game(guarded_page)
     rivalry = _row(guarded_page, "lakeshore")
-    assert rivalry.get_attribute("title") == "Northfield vs Lakeview"
+    assert rivalry.get_attribute("title") == "Northfield vs. Lakeview"
     assert "Northfield" not in (rivalry.get_attribute("aria-label") or "")
     assert _row(guarded_page, "harbor-bowl").get_attribute("title") is None
 
@@ -270,10 +270,10 @@ def test_truncated_rows_show_the_full_name_on_hover(
     )
     assert truncated == [True, True, False, False]
     assert _row(guarded_page, "lakeshore").get_attribute("title") == (
-        f"{_LONG_RIVALRY}: Northfield vs Lakeview"
+        f"{_LONG_RIVALRY}: Northfield vs. Lakeview"
     )
     assert _row(guarded_page, "harbor-bowl").get_attribute("title") == _LONG_BOWL
-    assert _row(guarded_page, "bridge-game").get_attribute("title") == ("Stonebridge vs Maplecrest")
+    assert _row(guarded_page, "bridge-game").get_attribute("title") == "Stonebridge vs. Maplecrest"
     assert _row(guarded_page, "summit-bowl").get_attribute("title") is None
 
 

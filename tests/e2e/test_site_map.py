@@ -293,7 +293,7 @@ def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp
     assert lines[0] == "Nassau"
     text = _tooltip_text(guarded_page) or ""
     assert "── Pat Rowan here ──" in lines
-    assert any(line.startswith("2021-12-18  Ironpeak vs Foxhollow") for line in lines)
+    assert any(line.startswith("2021-12-18  Ironpeak vs. Foxhollow") for line in lines)
     assert "Games" in text
 
 

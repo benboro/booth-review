@@ -232,14 +232,16 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     body0 = guarded_page.inner_text("#panel-body")
-    assert "Conference: SEC vs Pac-12" in body0
+    assert "Conference: SEC vs. Pac-12" in body0
     assert "Noon (before 2 PM ET)" in body0
     assert "pm ET; Noon" in body0 or "am ET; Noon" in body0
 
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
     body7 = guarded_page.inner_text("#panel-body")
     assert "Acme Harbor Bowl" in body7
-    assert "Neutral site" not in body7
+    # A named bowl line replaces the neutral-site note; the location line stays.
+    assert "Maplecrest Field, Orlando, FL" in body7
+    assert "neutral site" not in body7.lower()
     assert "Prime time" not in body7
     assert "Sat. Dec. 6, 2025, 7:00 pm ET" in body7
 
@@ -305,10 +307,13 @@ def test_panel_game_type_line_has_matching_icon_before_label(
         == "The Bridge Game"
     )
 
-    # A regular, neutral, non-rivalry game keeps "Neutral site" and has no line.
+    # A regular, neutral, non-rivalry game keeps the neutral-site note and has no line.
     guarded_page.evaluate("window.__testHooks.openPanel(3)")
     assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
-    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == "Foxhollow Park, Atlanta, GA (neutral site)"
+    )
 
 
 def test_panel_neutral_site_rivalry_keeps_neutral_site(
@@ -316,7 +321,8 @@ def test_panel_neutral_site_rivalry_keeps_neutral_site(
     open_app: Callable[[Page, str], None],
     fixture_raw: dict[str, Any],
 ) -> None:
-    """D-11: a neutral-site rivalry shows the rivalry line and "Neutral site"."""
+    """D-11: a neutral-site rivalry shows the rivalry line and keeps "(neutral site)" on
+    its location line."""
     raw = json.loads(json.dumps(fixture_raw))
     raw["telecasts"]["neutral"][0] = True
     guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
@@ -326,7 +332,10 @@ def test_panel_neutral_site_rivalry_keeps_neutral_site(
         guarded_page.locator("#panel-body .panel-rivalry strong").text_content()
         == "Lakeshore Rivalry"
     )
-    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == "Northfield Stadium, Lincoln, NE (neutral site)"
+    )
 
 
 def test_panel_hostile_rivalry_name_is_literal_text(
@@ -374,8 +383,8 @@ def test_panel_cfp_game_without_a_named_bowl_shows_generic_lines(
 ) -> None:
     """D-21: with the bowl name unknown (bowl null), a CFP quarterfinal or
     semifinal shows "[bowl] Bowl" then the trophy line; other rounds show the
-    trophy line alone. "Neutral site" follows when the game is neutral (no
-    named bowl line replaced it). Icons are aria-hidden."""
+    trophy line alone. The location line carries "(neutral site)" when the game is
+    neutral (no named bowl line replaced it). Icons are aria-hidden."""
     serve_bowl(guarded_page, index=5, bowl=None, round_=round_, neutral=neutral)
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(5)")
@@ -391,8 +400,9 @@ def test_panel_cfp_game_without_a_named_bowl_shows_generic_lines(
         assert line.evaluate("el => el.textContent") == text
         assert line.evaluate("el => el.lastChild.nodeType") == 3
         assert line.locator(".bowl-core").count() == 0
-    body = guarded_page.inner_text("#panel-body")
-    assert ("Neutral site" in body) is neutral
+    location = guarded_page.locator("#panel-body .panel-location").text_content() or ""
+    assert location.startswith("Foxhollow Park, Atlanta, GA")
+    assert location.endswith(" (neutral site)") is neutral
 
 
 def test_panel_unknown_bowl_name_keeps_neutral_site(
@@ -401,8 +411,8 @@ def test_panel_unknown_bowl_name_keeps_neutral_site(
     serve_bowl: Callable[..., None],
 ) -> None:
     """D-18/D-21: a bowl with no known name shows a plain "[bowl] Bowl" line
-    and keeps "Neutral site" when the game is neutral; a regular-season
-    neutral game has no game-type line but shows "Neutral site"."""
+    and keeps "(neutral site)" on the location line when the game is neutral; a
+    regular-season neutral game has no game-type line but shows the same note."""
     serve_bowl(guarded_page, index=7, bowl=None)
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(7)")
@@ -410,11 +420,17 @@ def test_panel_unknown_bowl_name_keeps_neutral_site(
     assert lines.count() == 1
     assert lines.first.evaluate("el => el.textContent") == "Bowl"
     assert lines.first.locator(".bowl-core").count() == 0
-    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == "Maplecrest Field, Orlando, FL (neutral site)"
+    )
 
     guarded_page.evaluate("window.__testHooks.openPanel(3)")
     assert guarded_page.locator("#panel-body .panel-game-type").count() == 0
-    assert "Neutral site" in guarded_page.inner_text("#panel-body")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == "Foxhollow Park, Atlanta, GA (neutral site)"
+    )
 
 
 def test_panel_bowl_core_and_sponsor_colors(
@@ -1279,3 +1295,101 @@ def test_panel_title_sets_each_rank_as_a_superscript_without_a_hash(
     # The raised figure does not open the title's line box: one line stays one line tall.
     lines = round(title["height"] / title["lineHeight"])
     assert title["height"] <= lines * title["lineHeight"] + 1
+
+
+# ---- Where the game was played (location line and Matched games tooltip) ----
+
+
+def test_panel_location_line_sits_under_the_date(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Every game with a venue gets "Name, City, ST" right under the date; a
+    non-neutral game has no "(neutral site)" note."""
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    second = guarded_page.locator("#panel-body > :nth-child(2)")
+    assert second.get_attribute("class") == "panel-location"
+    assert second.text_content() == "Northfield Stadium, Lincoln, NE"
+    assert "neutral site" not in guarded_page.inner_text("#panel-body").lower()
+
+
+def test_panel_null_place_has_no_location_line(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """A game with no venue shows no location line, neutral or not."""
+    raw = json.loads(json.dumps(fixture_raw))
+    raw["telecasts"]["place"][3] = None
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    assert guarded_page.locator("#panel-body .panel-location").count() == 0
+    assert "neutral site" not in guarded_page.inner_text("#panel-body").lower()
+
+
+def test_panel_location_abroad_names_the_country(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """A venue abroad names its country in place of a state."""
+    raw = json.loads(json.dumps(fixture_raw))
+    raw["telecasts"]["place"][3] = 8  # Island Stadium, Nassau, BS
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == "Island Stadium, Nassau, Bahamas (neutral site)"
+    )
+
+
+def test_panel_hostile_venue_name_is_literal_text(
+    guarded_page: Page,
+    open_app: Callable[[Page, str], None],
+    fixture_raw: dict[str, Any],
+) -> None:
+    """A hostile venue name stays literal text in the modal and the table tooltip."""
+    dialogs: list[str] = []
+
+    def _record_dialog(dialog: object) -> None:
+        dialogs.append(dialog.message)  # type: ignore[attr-defined]
+        dialog.dismiss()  # type: ignore[attr-defined]
+
+    guarded_page.on("dialog", _record_dialog)
+    payload = "<img src=x onerror=alert(1)>"
+    raw = json.loads(json.dumps(fixture_raw))
+    raw["lookups"]["venues"][3]["name"] = payload
+    raw["lookups"]["venues"][3]["city"] = payload
+    guarded_page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(guarded_page, "?school=maplecrest")
+    guarded_page.evaluate("window.__testHooks.openPanel(3)")
+    assert (
+        guarded_page.locator("#panel-body .panel-location").text_content()
+        == f"{payload}, {payload}, GA (neutral site)"
+    )
+    assert guarded_page.locator("#panel-body img").count() == 0
+    titles = guarded_page.locator("#games-table td.matchup[title]").evaluate_all(
+        "els => els.map(e => e.title)"
+    )
+    assert f"Played in {payload}, GA" in titles
+    assert guarded_page.locator("#games-table img[src=x]").count() == 0
+    assert dialogs == []
+
+
+def test_table_neutral_matchup_has_played_in_tooltip(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    """Matched games: only a neutral-site game's matchup cell gets "Played in City, ST";
+    the cell text itself is unchanged."""
+    open_app(guarded_page, "?school=maplecrest")
+    expect(guarded_page.locator("#games-table")).to_be_visible()
+    cells = guarded_page.locator("#games-table tbody td.matchup")
+    info = cells.evaluate_all("els => els.map(e => [e.textContent, e.getAttribute('title')])")
+    titled = sorted(t for _, t in info if t is not None)
+    assert titled == ["Played in Atlanta, GA", "Played in Orlando, FL"]
+    for text, title in info:
+        assert "Played in" not in text
+        if title is None:
+            assert " vs. " not in text

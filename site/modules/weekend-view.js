@@ -23,6 +23,7 @@ import {
 import { makeCaretIcon } from './icons.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel-parts.js';
+import { playedInText, venueCity } from './venue.js';
 import { attachScrollCue } from './scroll-cue.js';
 import { currentTheme, onThemeChange } from './theme.js';
 
@@ -118,11 +119,18 @@ function crewSentence(game, state, line) {
   return state === 'tba' ? 'Crew to be announced.' : 'Crew not listed.';
 }
 
+/** "Played in Arlington, TX" for a neutral-site (NFL: international) game with a known city. */
+function neutralPlayedIn(game) {
+  return game.neutral ? playedInText(game.venue) : null;
+}
+
 export function accessibleName(game, state, line) {
   const time = game.kickoffMin == null ? 'Time to be announced' : clock12(game.kickoffMin);
   const match = matchupText(game).replace(' @ ', ' at ');
   const net = game.networkName ?? 'Network to be announced';
   const parts = [`${time}, ${match}, ${net}.`];
+  const playedIn = neutralPlayedIn(game);
+  if (playedIn) parts.push(`${playedIn}.`);
   if (line.star) parts.push('Lead booth.');
   parts.push(crewSentence(game, state, line));
   return parts.join(' ');
@@ -151,9 +159,14 @@ export function buildCell(game, ctx, { tail = null } = {}) {
   btn.title = `${when}, ${matchup}, ${line.text}`;
 
   const l1 = el('span', 'wk-line wk-line1');
+  const matchEl = el('span', 'wk-match', matchup);
+  // The city goes in the tooltip only, so the fixed-height cell never grows; a child's
+  // title wins over the button's while the pointer is on the matchup.
+  const playedIn = neutralPlayedIn(game);
+  if (playedIn) matchEl.title = playedIn;
   l1.append(
     el('span', 'wk-time', game.kickoffMin == null ? 'Time TBA' : clockText(game.kickoffMin)),
-    el('span', 'wk-match', matchup),
+    matchEl,
   );
   if (tail) l1.append(el('span', 'wk-tail', tail));
   const l2 = el('span', 'wk-line wk-line2');
@@ -370,6 +383,12 @@ function activateOnKey(node, fn) {
   });
 }
 
+/** The ESPN+ table's matchup; a neutral-site game adds its city: "TCU vs. Kansas State (Arlington, TX)". */
+function compactMatchup(g) {
+  const city = g.neutral ? venueCity(g.venue) : null;
+  return city ? `${matchupText(g)} (${city})` : matchupText(g);
+}
+
 /** The CFB ESPN+ and regional booktabs table (D-10); absent when empty and for the NFL. */
 export function buildCompactTable(ctx) {
   const games = ctx.dayModel.compact;
@@ -402,7 +421,7 @@ export function buildCompactTable(ctx) {
     booth.style.fontWeight = String(line.weight);
     tr.append(
       el('td', 'wk-c-time', g.kickoffMin == null ? 'Time TBA' : clock12(g.kickoffMin)),
-      el('td', 'wk-c-game', matchupText(g)),
+      el('td', 'wk-c-game', compactMatchup(g)),
       net,
       booth,
     );

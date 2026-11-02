@@ -9,7 +9,7 @@
  */
 
 import {
-  externalLink, crewBox, linksList, liveOpener, networksParagraph,
+  externalLink, crewBox, linksList, liveOpener, locationLine, networksParagraph,
 } from '../../modules/panel-parts.js';
 import { currentTheme } from '../../modules/pill.js';
 import { apKickoff } from '../../modules/weekend.js';
@@ -61,7 +61,8 @@ function viewersNodes(row) {
 function unplayedFacts(row) {
   const bits = [];
   if (row.slot != null) bits.push(`Slot: ${slotLabel(row.slot)}.`);
-  if (row.international) bits.push('International.');
+  // The location line already says where an international game was played.
+  if (row.international && row.venue == null) bits.push('International.');
   return el('p', 'panel-facts', bits.join(' '));
 }
 
@@ -70,7 +71,12 @@ function factsParagraph(row) {
   if (row.upcoming) return unplayedFacts(row);
   const p = el('p', 'panel-facts');
   const bits = [`Slot: ${slotLabel(row.slot)}.`, row.standalone ? 'Solo slot.' : 'Shares its window.'];
-  for (const f of flagLabels(row)) if (f !== 'Solo slot' && f !== 'Flexed') bits.push(`${f}.`);
+  for (const f of flagLabels(row)) {
+    if (f === 'Solo slot' || f === 'Flexed') continue;
+    // The location line already says where an international game was played.
+    if (f === 'International' && row.venue != null) continue;
+    bits.push(`${f}.`);
+  }
   p.appendChild(document.createTextNode(bits.join(' ')));
   if (row.flexed) {
     let line = ' Flexed from';
@@ -163,7 +169,10 @@ export function createDetailPanel(host, { methodologyHref: _methodologyHref } = 
           others: [],
           theme: currentTheme(),
         });
-    const children = [dateP, network];
+    const children = [dateP];
+    const locationP = locationLine(row.venue ?? null, row.international);
+    if (locationP) children.push(locationP);
+    children.push(network);
     if (row.upcoming && row.network != null && row.networkBasis === 'slot') {
       children.push(el('p', 'panel-network-basis',
         `Network follows the slot's rights until a 506 Sports page is saved.`));

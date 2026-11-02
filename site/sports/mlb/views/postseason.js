@@ -296,7 +296,7 @@ function clubCode(model, idx) {
 /**
  * A cell's series (U10): its games split by the unordered pair of clubs (season, round and
  * league are the cell's own), each in date order, the series ordered by their first game.
- * The head names the first game's home club first, e.g. `NYY vs BOS`.
+ * The head names the first game's home club first, e.g. `NYY vs. BOS`.
  * @returns {Array<{key: string, label: string, games: number[]}>}
  */
 export function cellSeries(model, b) {
@@ -312,7 +312,7 @@ export function cellSeries(model, b) {
   for (const ser of list) {
     ser.games.sort(byGame);
     const first = ser.games[0];
-    ser.label = `${clubCode(model, home[first])} vs ${clubCode(model, away[first])}`;
+    ser.label = `${clubCode(model, home[first])} vs. ${clubCode(model, away[first])}`;
   }
   return list.sort((x, y) => byGame(x.games[0], y.games[0]) || (x.key < y.key ? -1 : x.key > y.key ? 1 : 0));
 }

@@ -98,7 +98,7 @@ export function gameTitlePhrase(game) {
  * @returns {string|null}
  */
 export function gameRowTitle(game, truncated) {
-  const teams = game.teams ? `${game.teams[0]} vs ${game.teams[1]}` : null;
+  const teams = game.teams ? `${game.teams[0]} vs. ${game.teams[1]}` : null;
   if (truncated) return teams ? `${game.label}: ${teams}` : game.label;
   return teams;
 }
@@ -268,7 +268,7 @@ export function conferenceLine(data, i) {
   if (homeIdx == null && awayIdx == null) return null;
   const away = awayIdx != null ? data.lookups.conferences[awayIdx].name : 'Not recorded';
   const home = homeIdx != null ? data.lookups.conferences[homeIdx].name : 'Not recorded';
-  return `${away} vs ${home}`;
+  return `${away} vs. ${home}`;
 }
 
 /**

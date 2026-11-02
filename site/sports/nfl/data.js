@@ -210,6 +210,7 @@ export function gameRow(model, i) {
     agotw: !!c.agotw[i],
     cbsNational: !!c.cbs_national[i],
     international: !!c.international[i],
+    venue: c.place?.[i] != null ? (model.venues[c.place[i]] ?? null) : null,
     flexed: !!c.flexed[i],
     originalSlot: c.original_slot[i] == null ? null : model.slots[c.original_slot[i]],
     originalNetwork: name(c.original_network[i]),

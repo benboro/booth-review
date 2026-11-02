@@ -35,7 +35,9 @@ import {
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
-import { crewBox, externalLink, linksList, liveOpener, networksParagraph } from './panel-parts.js';
+import {
+  crewBox, externalLink, linksList, liveOpener, locationLine, networksParagraph,
+} from './panel-parts.js';
 import { sortNetworks } from './network.js';
 import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
@@ -316,9 +318,10 @@ export function renderMatchupTitle(titleEl, data, i) {
  * already open (D-10 swap), or to refresh the currently open panel after a
  * selection changes elsewhere in the app.
  * Game type (D-20, D-21): a bowl game (or CFP quarterfinal/semifinal) shows
- * its named bowl line first, then a "[trophy] CFP round" line; a named bowl
- * replaces "Neutral site". A named rivalry (04.10 D-11) shows its own line and
- * never suppresses "Neutral site".
+ * its named bowl line first, then a "[trophy] CFP round" line. The location line
+ * ("AT&T Stadium, Arlington, TX") sits right under the date for any game with a venue; a
+ * neutral-site game adds " (neutral site)" unless a named bowl line shows. A named rivalry
+ * (04.10 D-11) shows its own line and never suppresses the neutral-site note.
  * D-39: an empty crew reads "Crew not recorded" (the missing crews themselves are
  * a data-join issue, out of scope: see the championship-crews todo); the
  * Nielsen+Adobe label shows once (the badge) and combined feeds show as one line.
@@ -341,30 +344,31 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = 
   const gameType = gameTypeInfo(data, i);
   const bowlIdx = t.bowl?.[i] ?? null;
   const bowl = bowlIdx != null ? (data.lookups.bowls?.[bowlIdx] ?? null) : null;
+  const typeLines = [];
   let namedBowlLine = false;
   if (gameType != null && (gameType.kind === 'bowl' || gameType.atBowl)) {
     if (bowl) {
-      children.push(buildBowlLine(bowl));
+      typeLines.push(buildBowlLine(bowl));
       namedBowlLine = true;
     } else {
-      children.push(buildLabelLine('bowl', 'Bowl'));
+      typeLines.push(buildLabelLine('bowl', 'Bowl'));
     }
   } else if (bowl) {
-    children.push(buildBowlLine(bowl));
+    typeLines.push(buildBowlLine(bowl));
     namedBowlLine = true;
   }
   if (gameType != null && gameType.kind === 'playoff') {
-    children.push(buildLabelLine('playoff', gameType.label));
+    typeLines.push(buildLabelLine('playoff', gameType.label));
   }
+
+  // The venue sits right under the date; a named bowl line already says the game is neutral.
+  const venue = t.place?.[i] != null ? (data.lookups.venues?.[t.place[i]] ?? null) : null;
+  const locationP = locationLine(venue, Boolean(t.neutral[i]) && !namedBowlLine);
+  if (locationP) children.push(locationP);
+  children.push(...typeLines);
 
   const rivalry = rivalryName(data, i);
   if (rivalry != null) children.push(buildRivalryLine(rivalry));
-
-  if (t.neutral[i] && !namedBowlLine) {
-    const neutralP = document.createElement('p');
-    neutralP.textContent = 'Neutral site';
-    children.push(neutralP);
-  }
 
   const conferences = conferenceLine(data, i);
   if (conferences != null) {

@@ -435,7 +435,7 @@ function buildSummary(data, state, summarySet, altGames, personIndexes, hasSelec
     (slug) => data.lookups.teams[data.teamIndexBySlug.get(slug)].name,
   );
   const schoolParts =
-    state.h2h === true && schoolNames.length === 2 ? [schoolNames.join(' vs ')] : schoolNames;
+    state.h2h === true && schoolNames.length === 2 ? [schoolNames.join(' vs. ')] : schoolNames;
   const selectionLabel = [...names, ...schoolParts, ...(game ? [game.label] : [])].join(' + ');
   return { kind: 'filtered-out', selectionLabel };
 }
