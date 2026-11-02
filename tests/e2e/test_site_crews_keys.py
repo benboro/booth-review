@@ -441,8 +441,9 @@ def test_modal_shows_the_clicked_game(app: Page) -> None:
     matchup = game.locator("td.crews-game-matchup").inner_text().strip()
     game.click()
     away, home = matchup.split(" at ")
-    expect(app.locator("#panel-title")).to_have_text(
-        re.compile(rf"^{re.escape(away)} \d+ at {re.escape(home)} \d+$")
+    # The visible title sets ranks as superscripts; its aria-label keeps the "#N" text form.
+    expect(app.locator("#panel-title")).to_have_attribute(
+        "aria-label", re.compile(rf"^{re.escape(away)} \d+ at {re.escape(home)} \d+$")
     )
 
 

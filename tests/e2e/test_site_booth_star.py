@@ -6,6 +6,7 @@ B: 9, 13. Other: 4. Conference lead: 15.
 
 from __future__ import annotations
 
+import base64
 import json
 from collections.abc import Callable
 
@@ -121,8 +122,9 @@ def test_hollow_star_is_an_empty_open_star(
     filled = by_meta["lead:disney"]
     assert hollow["n"] == 1
     assert hollow["symbol"] == "star-open"
-    assert hollow["size"] == filled["size"]
-    assert hollow["color"] == filled["color"]
+    # The filled star's trace holds its casing point first, then the star itself.
+    assert hollow["size"] == filled["size"][1]
+    assert hollow["color"] == filled["color"][1]
     assert hollow["lineWidth"] > 0
     assert not any(t["meta"].startswith("unrated-lead-halo:") for t in traces)
 
@@ -133,9 +135,9 @@ def test_stars_on_every_channel_of_the_family(
     traces = _open(guarded_page, serve_booths, open_app)
     # 8 is net-a (disney) and 5 is net-b (fox): each sits in its own family's lead trace.
     by_meta = {t["meta"]: t for t in traces}
-    assert by_meta["lead:disney"]["customdata"] == [8]
-    assert by_meta["lead:fox"]["customdata"] == [5]
-    assert by_meta["lead:fox"]["color"] != by_meta["lead:disney"]["color"]
+    assert by_meta["lead:disney"]["customdata"] == [8, 8]  # casing point, then the star
+    assert by_meta["lead:fox"]["customdata"] == [5, 5]
+    assert by_meta["lead:fox"]["color"][1] != by_meta["lead:disney"]["color"][1]
 
 
 def test_excitement_mode_draws_unrated_a_game_filled(
@@ -237,12 +239,9 @@ def test_trace_count_is_constant(
     default = _open(guarded_page, serve_booths, open_app)
     other = _open(guarded_page, serve_booths, open_app, query)
 
-    # The pre-existing compare halo trace appears only when a non-circle highlight exists;
-    # the new lead traces are always present.
-    def count(traces: list[dict]) -> int:
-        return len([t for t in traces if t["meta"] != "highlight-halo"])
-
-    assert count(other) == count(default)
+    # Compare halos are paired points inside the highlight trace (notes 2026-11-02), and the
+    # lead traces are always present, so the trace count never changes.
+    assert len(other) == len(default)
     lead_metas = lambda ts: [t["meta"] for t in ts if "lead" in t["meta"]]  # noqa: E731
     assert lead_metas(other) == lead_metas(default)
 
@@ -296,23 +295,111 @@ def test_map_tab_draws_no_star(
 def test_rated_lead_star_has_a_surface_casing_drawn_beneath_it(
     guarded_page: Page, serve_booths: Callable, open_app: Callable
 ) -> None:
+    # Notes 2026-11-02: each star's casing is its own point, directly before the star in the
+    # same trace, so overlapping stars never share one merged outline.
     traces = _open(guarded_page, serve_booths, open_app)
     by_meta = {t["meta"]: t for t in traces}
     order = [t["meta"] for t in traces]
     surface = _surface(guarded_page)
+    assert not any(m.startswith(("lead-halo:", "unrated-lead-filled-halo:")) for m in order)
     for family, game in (("disney", 8), ("fox", 5)):
-        casing, star = by_meta[f"lead-halo:{family}"], by_meta[f"lead:{family}"]
-        assert star["customdata"] == [game]
-        assert casing["n"] == star["n"] == 1
-        assert casing["customdata"] == []  # the casing never takes hover or click
-        assert casing["symbol"] == star["symbol"] == "star"
-        assert casing["lineWidth"] == star["lineWidth"] == 0
-        assert casing["color"] == surface != star["color"]
-        assert (casing["size"], star["size"]) == (18, 14)
-        assert order.index(f"lead-halo:{family}") < order.index(f"lead:{family}")
+        star = by_meta[f"lead:{family}"]
+        assert star["n"] == 2
+        assert star["customdata"] == [game, game]  # both points hover and click as the game
+        assert star["symbol"] == "star"
+        assert star["lineWidth"] == 0
+        casing_color, star_color = star["color"]
+        assert casing_color == surface != star_color
+        assert star["size"] == [18, 14]
     # The stars and their casings are drawn above every plain dot trace.
     last_dot = max(i for i, m in enumerate(order) if m.startswith(("family:", "unrated-active:")))
-    assert min(order.index(f"lead-halo:{f}") for f in ("disney", "fox")) > last_dot
+    assert min(order.index(f"lead:{f}") for f in ("disney", "fox")) > last_dot
+
+
+# Draws two copies of the figure's own `lead:fox` star pair 8px apart on a blank probe plot,
+# either as the figure draws them (one trace, each rim directly before its star) or as the old
+# layering did (every rim in a trace beneath every star), then reads the pixels on the row
+# through both centres. Returns how many rim-coloured pixels lie strictly between the centres.
+_OVERLAP_JS = """
+async ([layout]) => {
+  const gd = document.getElementById('chart');
+  const t = gd.data.find((tr) => String(tr.meta) === 'lead:fox');
+  const m = t.marker;
+  const [rim, star] = [0, 1].map((k) => ({ color: m.color[k], size: m.size[k] }));
+  const old = document.getElementById('overlap-probe');
+  if (old) old.remove();
+  const w = 80, h = 60, cx = 34, cy = 30, gap = 8;
+  const div = document.createElement('div');
+  div.id = 'overlap-probe';
+  div.style.cssText = `position:fixed;left:0;top:0;z-index:99999;width:${w}px;height:${h}px;`;
+  document.body.appendChild(div);
+  const bg = '#ffffff';
+  const base = { type: 'scattergl', mode: 'markers', hoverinfo: 'skip', showlegend: false };
+  const xs = [cx, cx + gap];
+  const ys = [cy, cy];
+  const data = layout === 'paired'
+    ? [{ ...base, x: [xs[0], xs[0], xs[1], xs[1]], y: [cy, cy, cy, cy], marker: {
+        symbol: 'star', line: { width: 0 }, opacity: 1,
+        color: [rim.color, star.color, rim.color, star.color],
+        size: [rim.size, star.size, rim.size, star.size] } }]
+    : [{ ...base, x: xs, y: ys, marker: { symbol: 'star', line: { width: 0 }, opacity: 1,
+          color: rim.color, size: rim.size } },
+       { ...base, x: xs, y: ys, marker: { symbol: 'star', line: { width: 0 }, opacity: 1,
+          color: star.color, size: star.size } }];
+  await window.Plotly.newPlot(div, data, {
+    width: w, height: h, margin: { l: 0, r: 0, t: 0, b: 0 },
+    paper_bgcolor: bg, plot_bgcolor: bg,
+    xaxis: { range: [0, w], visible: false, fixedrange: true },
+    yaxis: { range: [h, 0], visible: false, fixedrange: true },
+  }, { staticPlot: true });
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return { rim: rim.color, star: star.color, cx, cy, gap, w, h };
+}
+"""
+
+_ROW_JS = """
+([url, y, x0, x1, rim]) => new Promise((resolve) => {
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0);
+    const hex = (v, k) => parseInt(v.slice(1 + 2 * k, 3 + 2 * k), 16);
+    const ref = [0, 1, 2].map((k) => hex(rim, k));
+    let rimPixels = 0;
+    for (let x = x0 + 1; x < x1; x += 1) {
+      const d = ctx.getImageData(x, y, 1, 1).data;
+      if (Math.hypot(d[0] - ref[0], d[1] - ref[1], d[2] - ref[2]) < 60) rimPixels += 1;
+    }
+    resolve(rimPixels);
+  };
+  img.src = url;
+})
+"""
+
+
+def _rim_pixels_between(page: Page, layout: str) -> int:
+    info = page.evaluate(_OVERLAP_JS, [layout])
+    png = page.screenshot(clip={"x": 0, "y": 0, "width": info["w"], "height": info["h"]})
+    url = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    return int(
+        page.evaluate(_ROW_JS, [url, info["cy"], info["cx"], info["cx"] + info["gap"], info["rim"]])
+    )
+
+
+def test_overlapping_stars_each_keep_their_own_casing(
+    guarded_page: Page, serve_booths: Callable, open_app: Callable
+) -> None:
+    # Notes 2026-11-02: with dots enlarged, two overlapping stars showed one merged outline.
+    # Drawn as the figure draws them, the front star's rim cuts across the star behind it.
+    serve_booths(guarded_page)
+    open_app(guarded_page, "?networks=net-b&dots=fade")
+    guarded_page.wait_for_timeout(150)
+    assert _rim_pixels_between(guarded_page, "paired") > 0, "overlapping stars share a border"
+    # Control: the old layering (every rim beneath every star) leaves no rim between them, so
+    # this test would catch the merged outline coming back.
+    assert _rim_pixels_between(guarded_page, "separate") == 0
 
 
 def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
@@ -330,19 +417,18 @@ def test_one_announcer_highlight_keeps_the_unrated_lead_star_hollow(
     assert "highlight-unrated-hole" not in order
     unrated = next(t for t in traces if t["meta"] == "highlight-unrated")
     ring = next(t for t in traces if t["meta"] == "highlight-halo-unrated-open")
-    halo = next(t for t in traces if t["meta"] == "highlight-halo-unrated")
     at = unrated["customdata"].index(14)
     assert unrated["symbol"][at] == "star-open"
     assert unrated["lineWidth"][at] > 0
-    assert unrated["color"][at] == default["lead:disney"]["color"]
+    assert unrated["color"][at] == default["lead:disney"]["color"][1]  # [casing, star]
     assert ring["n"] == 1
     assert ring["symbol"] == ["star-open"]
     assert ring["color"] == accent
     assert ring["lineWidth"] > 0
     assert ring["size"][0] > unrated["size"][at]
     assert ring["customdata"] == []
-    # The filled ACCENT halo no longer sits under the hollow star.
-    assert halo["n"] == 0
+    # No filled ACCENT halo point is paired with the hollow star.
+    assert unrated["customdata"].count(14) == 1
     assert order.index("highlight-halo-unrated-open") == order.index("highlight-unrated") - 1
 
 
@@ -357,11 +443,10 @@ def test_enlarged_dots_give_lead_stars_the_dot_outline(
     traces = _open(guarded_page, serve_booths, open_app, "?networks=net-b&dots=fade")
     by_meta = {t["meta"]: t for t in traces}
     assert by_meta["family:fox"]["lineWidth"] == 1  # the dots are enlarged and outlined
-    casing, star = by_meta["lead-halo:fox"], by_meta["lead:fox"]
-    assert star["customdata"] == [5]
-    assert casing["n"] == 1
-    assert str(casing["color"]).upper() == rim
-    assert (casing["size"], star["size"]) == (18, 14)
+    star = by_meta["lead:fox"]
+    assert star["customdata"] == [5, 5]  # the rim point, then the star
+    assert str(star["color"][0]).upper() == rim
+    assert star["size"] == [18, 14]
 
 
 @pytest.mark.parametrize(("theme", "rim"), [("light", "#000000"), ("dark", "#E5EAE8")])

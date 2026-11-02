@@ -9,6 +9,7 @@ proven against the fixture build served by
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -1233,3 +1234,48 @@ def test_panel_and_tooltip_trim_the_viewer_zero_while_the_table_keeps_it(
         i,
     )
     assert line == "Viewers: 970K"
+
+
+def test_panel_title_sets_each_rank_as_a_superscript_without_a_hash(
+    guarded_page: Page, open_app: Callable[[Page, str], None]
+) -> None:
+    # Notes 2026-11-02: the modal title shows "<sup>7</sup>Michigan State", no "#"; the
+    # aria-label keeps "#7 Michigan State" so the rank is not read as part of the name.
+    open_app(guarded_page, "")
+    i = guarded_page.evaluate(
+        """() => {
+          const t = window.__testHooks.data.t;
+          return t.away_rank.findIndex((r, k) => r != null || t.home_rank[k] != null);
+        }"""
+    )
+    assert i >= 0, "the fixture has no ranked game"
+    guarded_page.evaluate(f"window.__testHooks.openPanel({i})")
+    title = guarded_page.evaluate(
+        """() => {
+          const el = document.getElementById('panel-title');
+          const sups = Array.from(el.querySelectorAll('sup.title-rank'));
+          const box = el.getBoundingClientRect();
+          return {
+            sups: sups.map((s) => s.textContent),
+            text: el.textContent,
+            label: el.getAttribute('aria-label'),
+            height: box.height,
+            lineHeight: parseFloat(getComputedStyle(el).lineHeight),
+          };
+        }"""
+    )
+    assert title["sups"], "a ranked game's title has no superscript rank"
+    assert all(s.isdigit() for s in title["sups"])
+    assert "#" not in title["text"]
+    assert title["label"].count("#") == len(title["sups"])
+    for rank in title["sups"]:
+        assert f"#{rank} " in title["label"]
+    # What the user sees is the spoken label with each "#N " set as the bare superscript N.
+    assert title["text"] == re.sub(r"#(\d+) ", r"\1", title["label"])
+    assert title["label"] == guarded_page.evaluate(
+        f"async () => (await import('./modules/format.js'))"
+        f".formatMatchup(window.__testHooks.data, {i}, {{ withScore: true }})"
+    )
+    # The raised figure does not open the title's line box: one line stays one line tall.
+    lines = round(title["height"] / title["lineHeight"])
+    assert title["height"] <= lines * title["lineHeight"] + 1

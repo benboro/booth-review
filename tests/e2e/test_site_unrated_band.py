@@ -480,10 +480,11 @@ def test_trace_count_is_constant_and_names_are_present(
         for f in _FAMILIES:
             assert f"unrated-inert:{f}" in metas
             assert f"unrated-active:{f}" in metas
-        assert "highlight-halo-unrated" in metas
+        # Notes 2026-11-02: halos are paired points inside the highlight traces, not traces.
+        assert not any(m in ("highlight-halo", "highlight-halo-unrated") for m in metas)
         assert "highlight-unrated" in metas
         assert metas[-1] == "highlight"
-        counts.add(len(metas) - (1 if "highlight-halo" in metas else 0))
+        counts.add(len(metas))
     assert len(counts) == 1, counts
 
 
@@ -503,6 +504,22 @@ def _highlight(page: Page) -> dict[int, dict[str, Any]]:
     return out
 
 
+def _halos(t: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """The ACCENT halo points of a highlight trace, by game: each sits directly before its
+    shape and shares the shape's customdata (notes 2026-11-02)."""
+    cd = t["customdata"]
+
+    def at(key: str, k: int) -> Any:
+        v = t[key]
+        return v[k] if isinstance(v, list) else v
+
+    return {
+        cd[k]: {key: at(key, k) for key in ("x", "color", "size", "symbol", "lineWidth")}
+        for k in range(len(cd) - 1)
+        if cd[k] == cd[k + 1]
+    }
+
+
 def test_compare_filled_shapes_and_filled_halo(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
@@ -518,15 +535,13 @@ def test_compare_filled_shapes_and_filled_halo(
     widths = dict(zip(t["customdata"], t["lineWidth"], strict=True))
     assert widths[15] == 1.5 and widths[16] == 0
     assert t["lineColor"] == guarded_page.evaluate(_PALETTE_JS)["accent"]
-    halo = by["highlight-halo-unrated"]
-    assert halo["yaxis"] == "y2"
-    assert sorted(halo["x"]) == sorted(
-        [hl_x for i, hl_x in zip(t["customdata"], t["x"], strict=True) if i == 16]
-    )
-    assert halo["symbol"] == ["star"]
-    assert halo["size"] == [18]
+    halos = _halos(t)
+    assert set(halos) == {16}  # the circle (15) takes the ACCENT line instead
+    halo = halos[16]
+    assert halo["x"] == t["x"][t["customdata"].index(16) + 1]
+    assert halo["symbol"] == "star"
+    assert halo["size"] == 18
     assert halo["lineWidth"] == 0
-    assert halo["hoverinfo"] == "skip"
     accent = guarded_page.evaluate(
         "async () => (await import('./modules/palette.js')).ACCENT.light"
     )
@@ -543,9 +558,10 @@ def test_compare_shared_booth_is_a_star_and_others_get_shapes(
     assert hl[17] == {"symbol": "circle", "size": 10}
     assert hl[13]["symbol"] in {"square", "diamond", "triangle-up"}
     assert hl[13]["size"] == 12
-    halo = _by_meta(guarded_page)["highlight-halo-unrated"]
-    assert 15 in halo["size"]
-    assert halo["symbol"] == [hl[13]["symbol"]]
+    halos = _halos(_by_meta(guarded_page)["highlight-unrated"])
+    assert set(halos) == {13}
+    assert halos[13]["size"] == 15
+    assert halos[13]["symbol"] == hl[13]["symbol"]
 
 
 _SPECKLE_QUERY = "?people=kris-venn,sam-delgado,dale-harlow,casey-lund&mode=compare"
@@ -686,7 +702,9 @@ def test_tap_on_band_marker_shows_panel_at_360(
     point = _dot_point(mobile_page, 13)
     mobile_page.touchscreen.tap(point["x"], point["y"])
     mobile_page.wait_for_function("document.getElementById('detail-panel').open")
-    assert mobile_page.inner_text("#panel-title") == mobile_page.evaluate(_MATCHUP_JS, 13)
+    assert mobile_page.get_attribute("#panel-title", "aria-label") == mobile_page.evaluate(
+        _MATCHUP_JS, 13
+    )
 
 
 def test_click_on_band_marker_opens_its_modal(
@@ -696,7 +714,9 @@ def test_click_on_band_marker_opens_its_modal(
     point = _hover_dot(guarded_page, 16)
     guarded_page.mouse.click(point["x"], point["y"])
     guarded_page.wait_for_function("document.getElementById('detail-panel').open")
-    assert guarded_page.inner_text("#panel-title") == guarded_page.evaluate(_MATCHUP_JS, 16)
+    assert guarded_page.get_attribute("#panel-title", "aria-label") == guarded_page.evaluate(
+        _MATCHUP_JS, 16
+    )
 
 
 def test_inert_band_marker_has_no_tooltip_and_no_ring(

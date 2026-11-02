@@ -47,7 +47,17 @@ def _contrast_ratio(fg: tuple[float, float, float], bg: tuple[float, float, floa
     return max(l1, l2) / min(l1, l2)
 
 
-_HIGHLIGHT_CUSTOMDATA_JS = "() => document.getElementById('chart').data.at(-1).customdata"
+# One entry per highlighted game: a non-circle shape's ACCENT halo is a larger point just before
+# it with the same customdata (notes 2026-11-02), so only that halo is skipped. A game drawn twice
+# at the same size would still show up twice.
+_HIGHLIGHT_CUSTOMDATA_JS = """
+() => {
+  const t = document.getElementById('chart').data.at(-1);
+  const cd = Array.from(t.customdata || []);
+  const size = (k) => (Array.isArray(t.marker.size) ? t.marker.size[k] : t.marker.size);
+  return cd.filter((v, k) => !(v === cd[k + 1] && size(k) > size(k + 1)));
+}
+"""
 
 
 def _highlight_customdata(page: Page) -> list[int]:

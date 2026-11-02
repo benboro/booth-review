@@ -61,17 +61,28 @@ def _open_popover(page: Page) -> None:
     page.wait_for_function("document.getElementById('pop-booth').matches(':popover-open')")
 
 
+# Drawn dots, one per game: the no-rating star's open rim trace is skipped, and a star's casing,
+# rim or halo (a larger point just before its mark, with the same customdata; notes 2026-11-02)
+# is not counted again. A game drawn twice at the same size would still count twice.
+_VISIBLE_DOTS_JS = (
+    "document.getElementById('chart').data.reduce((n, t) => {"
+    " if (/^unrated-lead-rim:/.test(String(t.meta))) return n;"
+    " const cd = t.customdata;"
+    " if (!cd || cd.length !== t.x.length) return n + t.x.length;"
+    " const sz = (k) => (Array.isArray(t.marker.size) ? t.marker.size[k] : t.marker.size);"
+    " return n + Array.from(cd).filter((v, k) => !(v === cd[k + 1] && sz(k) > sz(k + 1)))"
+    ".length;"
+    " }, 0)"
+)
+
+
 def _passes(page: Page) -> list[int]:
     result: list[int] = page.evaluate(_PASSES_JS)
     return result
 
 
 def _visible_dots(page: Page) -> int:
-    result: int = page.evaluate(
-        "() => document.getElementById('chart').data.reduce("
-        "(n, t) => n + (/^(unrated-)?lead-((filled-)?halo|rim):/.test(String(t.meta))"
-        " ? 0 : t.x.length), 0)"
-    )
+    result: int = page.evaluate(f"() => {_VISIBLE_DOTS_JS}")
     return result
 
 
@@ -128,11 +139,7 @@ def test_hide_mode_draws_only_the_picked_tier(
     _open(guarded_page, serve_booths, open_app, "?booth=a")
     guarded_page.click('#dots-toggle [data-dots="hide"]')
     guarded_page.wait_for_function("document.getElementById('chart').data.length > 0")
-    guarded_page.wait_for_function(
-        "document.getElementById('chart').data.reduce("
-        "(n, t) => n + (/^(unrated-)?lead-((filled-)?halo|rim):/.test(String(t.meta))"
-        " ? 0 : t.x.length), 0) === 3"
-    )
+    guarded_page.wait_for_function(f"({_VISIBLE_DOTS_JS}) === 3")
     assert _visible_dots(guarded_page) == 3
 
 

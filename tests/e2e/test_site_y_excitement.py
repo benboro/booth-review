@@ -153,8 +153,10 @@ def test_band_holds_exactly_the_null_excitement_games(
             continue
         assert all(isinstance(y, (int, float)) for y in t["y"]), t["meta"]
     for t in traces:
-        if t["meta"].startswith("lead-halo:"):
-            continue  # the surface-colored casing under a rated lead star, not a ring
+        if t["meta"].startswith("lead:"):
+            # each star's surface casing point sits in its trace, directly before the star
+            assert surface not in t["color"][1::2], t["meta"]
+            continue
         assert t["color"] != surface, f"{t['meta']} draws a ring (D-14)"
         assert t["symbol"] != "circle-open"
     # every game with a value is in a main trace, rated or not

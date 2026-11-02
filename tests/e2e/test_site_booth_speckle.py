@@ -25,16 +25,27 @@ _MARKERS_JS = """
 async (metas) => {
   const gd = document.getElementById('chart');
   const out = {};
-  for (const t of gd.data) {
-    if (!metas.includes(String(t.meta))) continue;
+  // An entry "meta@casing:N" or "meta@star:N" takes that point of game N's pair: a lead star
+  // trace holds each star's casing directly before the star itself (notes 2026-11-02).
+  for (const key of metas) {
+    const [meta, pick] = key.split('@');
+    const t = gd.data.find((tr) => String(tr.meta) === meta);
+    if (!t) continue;
     const m = JSON.parse(JSON.stringify(t.marker));
     // A per-point marker (the highlight traces) is reduced to the lead game's own point.
-    const at = Math.max(0, Array.from(t.customdata || []).indexOf(14));
-    const keys = [[m, 'symbol'], [m, 'size'], [m, 'color'], [m.line, 'width'], [m.line, 'color']];
-    for (const [obj, key] of keys) {
-      if (obj && Array.isArray(obj[key])) obj[key] = obj[key][at];
+    // "casing:N" and "star:N" pick game N's two points by its customdata, not by position;
+    // with no pick, a per-point trace is read at game 14 (the no-rating lead star).
+    const [part, id] = (pick ?? '').split(':');
+    const game = Array.from(t.customdata || []).indexOf(id ? Number(id) : 14);
+    const at = part === 'casing' ? game : part === 'star' ? game + 1 : Math.max(0, game);
+    const keys = [
+      [m, 'symbol'], [m, 'size'], [m, 'color'], [m, 'opacity'],
+      [m.line, 'width'], [m.line, 'color'],
+    ];
+    for (const [obj, k] of keys) {
+      if (obj && Array.isArray(obj[k])) obj[k] = obj[k][at];
     }
-    out[String(t.meta)] = m;
+    out[key] = m;
   }
   const p = await import('./modules/palette.js');
   const theme = (document.documentElement.dataset.theme === 'dark') ? 'dark' : 'light';
@@ -114,7 +125,7 @@ def _data_url(page: Page, width: int, height: int) -> str:
 # the dot outline a filter adds (review F2); "hollow-highlighted" is it under a one-announcer
 # highlight, its ACCENT open outline beneath the family open star (review F1).
 _STATES = {
-    "filled": ("", ["lead-halo:disney", "lead:disney"]),
+    "filled": ("", ["lead:disney@casing:8", "lead:disney@star:8"]),
     "hollow": ("", ["unrated-lead:disney"]),
     "hollow-outlined": (
         "?networks=net-a&dots=fade",
@@ -138,7 +149,7 @@ def test_lead_star_has_no_pixels_outside_the_glyph(
     serve_booths(guarded_page)
     open_app(guarded_page, query)
     guarded_page.wait_for_timeout(150)
-    # The filled state is the cased star as drawn: surface casing star beneath the lead star.
+    # The filled state is the cased star as drawn: its surface casing point, then the star.
     # The hollow (no-rating) star is a 14px open star with a line since Phase 17 (user sign-off).
     info: dict[str, Any] = guarded_page.evaluate(_MARKERS_JS, metas)
     layers = [info["markers"][m] for m in metas]

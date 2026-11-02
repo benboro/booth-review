@@ -77,6 +77,10 @@ records only where the site settles or applies them.
   narrow, so the page never scrolls; the tab focus ring sits inside the tab so the bar does
   not clip it (Phase 18).
 
+- The CFB game modal title sets each team's rank as a superscript before its name, with no
+  "#" (notes 2026-11-02); the title's aria-label keeps the "#7 Michigan State" form. Other
+  places (tables, tooltips, This weekend) still show "#7" at full size for now.
+
 ## Filters
 
 - The CFB filter bar is a ledger (Phase 26, owner's pick 2026-10-27: the ledger line combined
@@ -161,6 +165,10 @@ records only where the site settles or applies them.
 
 - When a filter is active, lead stars take the same outline as the enlarged dots, at the
   same weight: dark in light mode, light in dark mode.
+- Every star and compare shape keeps its whole border where marks overlap (notes
+  2026-11-02): its casing, rim or ACCENT halo is a point drawn directly before it in the
+  same trace, so a mark in front covers the border of the mark behind it instead of the
+  borders merging into one outline.
 - A game with no rating is an empty, open star, so the band shows through it (Phase 17).
   It stays empty when highlighted or when a filter outlines it: the highlight and the dot
   outline are larger open stars around it, never a filled halo or a background-coloured fill.

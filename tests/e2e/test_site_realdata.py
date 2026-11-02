@@ -231,7 +231,14 @@ def test_real_dot_count_and_origin(
     # A family trace with no dots of its own carries one null legend
     # placeholder (CR-03); a real dot always has a numeric x (the n/a strip
     # sentinel when its axis value is missing), so count only non-null x.
-    plotted = sum(1 for t in family_traces for x in t["x"] if x is not None)
+    # A lead: trace holds each star's casing point directly before the star (notes
+    # 2026-11-02), so only its odd points are stars.
+    plotted = sum(
+        1
+        for t in family_traces
+        for x in (t["x"][1::2] if str(t["meta"]).startswith("lead:") else t["x"])
+        if x is not None
+    )
     assert plotted == total_dots
 
 
@@ -1064,7 +1071,10 @@ _DATE_FACTS_JS = """
   for (const t of gd.data) {
     // Lead-booth games are stars on `lead:<family>` traces instead of family dots.
     if (!String(t.meta).startsWith('family:') && !String(t.meta).startsWith('lead:')) continue;
-    for (const x of t.x) {
+    // A lead: trace holds each star's casing point before the star; count the star only.
+    const step = String(t.meta).startsWith('lead:') ? 2 : 1;
+    for (let k = step - 1; k < t.x.length; k += step) {
+      const x = t.x[k];
       if (x === null || x === undefined) continue;
       plotted += 1;
       if (x < range[0] - 1e-9 || x > range[1] + 1e-9) outside += 1;
@@ -1362,8 +1372,8 @@ async () => {
     if (meta.startsWith('unrated-') || meta.startsWith('highlight-unrated')) {
       for (const v of Array.from(t.x ?? [])) if (v !== null && v !== undefined) band += 1;
     }
-    // Lead-star casings are drawn in the surface colour on purpose; they are not ringed dots.
-    if (meta.includes('lead-halo')) continue;
+    // Lead-star casings (paired points in each lead: trace) are surface-coloured on purpose.
+    if (meta.startsWith('lead:')) continue;
     if (t.marker && t.marker.color === p.SURFACE[theme]) ringed += 1;
   }
   const yr = gd._fullLayout.yaxis.range;
