@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable
 
 import pytest
-from conftest import FIXTURE_RATED, FIXTURE_SHOWN, click_mode_toggle
+from conftest import FIXTURE_RATED, FIXTURE_SHOWN, click_clear_all, click_mode_toggle
 from playwright.sync_api import Locator, Page, expect
 
 pytestmark = pytest.mark.e2e
@@ -569,7 +569,7 @@ def test_summary_clears_when_the_last_filter_is_cleared(
 ) -> None:
     open_app(guarded_page, "?networks=net-a")
     assert guarded_page.inner_text("#summary-count") != ""
-    guarded_page.click("#clear-filters")
+    click_clear_all(guarded_page)
     guarded_page.wait_for_function("location.search === ''")
     assert (
         guarded_page.inner_text("#summary-count")
