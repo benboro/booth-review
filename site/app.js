@@ -48,7 +48,7 @@ import {
 } from './modules/hover-ring.js';
 import { PHONE_QUERY } from './modules/breakpoints.js';
 import { etParts, etWallMinutes } from './modules/weekend.js';
-import { renderWeekend } from './modules/weekend-view.js';
+import { holdHeight, renderWeekend } from './modules/weekend-view.js';
 import { renderWeekendList } from './modules/weekend-list.js';
 import { renderWeekendMap } from './modules/weekend-map-view.js';
 import { cfbWeekendPasses, isUnplayedGame } from './modules/weekend-data.js';
@@ -419,7 +419,8 @@ function render() {
     hideBandInfo();
     if (weekendPanelEl) {
       weekendPanelEl.hidden = false;
-      weekendCounts = renderWeekendPanel();
+      // Held across the Map to Timeline destroy too, which empties the panel before the remount.
+      weekendCounts = holdHeight(weekendPanelEl, renderWeekendPanel);
     }
     lastPanel = 'weekend';
   } else if (state.view === 'crews') {

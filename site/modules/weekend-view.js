@@ -647,6 +647,27 @@ function clockKey(ctx, kind) {
 }
 
 /**
+ * Runs `fn` with `node` held at its current height, then restores whatever min-height it had
+ * (so holds nest). A rebuild empties the host, or moves the map node out of it, and later reads
+ * a size, which forces a layout while the page is briefly shorter; the browser clamps the scroll
+ * there and the page jumps up on a view, day or week change. The hold is gone before the paint.
+ * @template T
+ * @param {HTMLElement} node
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function holdHeight(node, fn) {
+  const prev = node.style.minHeight;
+  const h = node.offsetHeight;
+  if (h > 0) node.style.minHeight = `${h}px`;
+  try {
+    return fn();
+  } finally {
+    node.style.minHeight = prev;
+  }
+}
+
+/**
  * Mounts one weekend view in `host`, replacing any earlier mount there and keeping focus on the
  * same control or cell across the rebuild. The theme, the clock and the width rebuild it.
  * @param {HTMLElement} host
@@ -657,6 +678,11 @@ function clockKey(ctx, kind) {
  * @returns {{destroy: () => void}}
  */
 export function mountWeekend(host, model, opts, buildBody, kind) {
+  // Held across the previous mount's destroy, which empties the host.
+  return holdHeight(host, () => mountNow(host, model, opts, buildBody, kind));
+}
+
+function mountNow(host, model, opts, buildBody, kind) {
   const previous = MOUNTED.get(host);
   const carriedFocus = previous ? previous.activeId() : (ORPHAN_FOCUS.get(host) ?? null);
   ORPHAN_FOCUS.delete(host);
@@ -689,7 +715,10 @@ export function mountWeekend(host, model, opts, buildBody, kind) {
     return a && host.contains(a) ? (a.dataset?.wkId ?? null) : null;
   }
 
-  function render() {
+  // A day pick, resize, theme or clock tick rebuilds here without passing through the app.
+  const render = () => holdHeight(host, renderNow);
+
+  function renderNow() {
     focusId = forceFocus ?? activeId() ?? focusId;
     forceFocus = null;
     for (const fn of disposers) fn();
