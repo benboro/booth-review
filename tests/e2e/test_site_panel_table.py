@@ -232,7 +232,7 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     body0 = guarded_page.inner_text("#panel-body")
-    assert "Conference: SEC vs Pac-12" in body0
+    assert "Conference: SEC vs. Pac-12" in body0
     assert "Noon (before 2 PM ET)" in body0
     assert "pm ET; Noon" in body0 or "am ET; Noon" in body0
 
@@ -1392,4 +1392,4 @@ def test_table_neutral_matchup_has_played_in_tooltip(
     for text, title in info:
         assert "Played in" not in text
         if title is None:
-            assert " vs " not in text
+            assert " vs. " not in text

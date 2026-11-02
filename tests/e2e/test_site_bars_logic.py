@@ -1103,7 +1103,7 @@ async (partial) => {
 """
 
 _H2H = {"school": ["northfield", "lakeview"], "h2h": True}
-_MATCHUP = "in Northfield vs Lakeview games"
+_MATCHUP = "in Northfield vs. Lakeview games"
 
 
 def test_head_to_head_bars_count_only_the_matchup(guarded_page: Page, site_url: str) -> None:
@@ -1139,7 +1139,7 @@ def test_head_to_head_butterfly_title_names_the_matchup(guarded_page: Page, site
     title = guarded_page.evaluate(
         _TITLE_JS, {**_H2H, "people": ["dale-harlow", "casey-lund"], "view": "butterfly"}
     )["title"]
-    assert "Dale Harlow and Casey Lund in Northfield vs Lakeview games" in title
+    assert "Dale Harlow and Casey Lund in Northfield vs. Lakeview games" in title
     assert " or " not in title
 
 

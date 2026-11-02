@@ -159,7 +159,7 @@ def test_triggers_carry_full_label_in_title_and_aria_label(
     open_app(guarded_page, "?seasons=2021-2025&school=northfield,lakeview&h2h=1")
     for selector, label in (
         ("#trigger-seasons", "Seasons: 2021–2025"),  # noqa: RUF001
-        ("#trigger-school", "School: Northfield vs Lakeview"),
+        ("#trigger-school", "School: Northfield vs. Lakeview"),
         ("#trigger-role", "Role"),
     ):
         trigger = guarded_page.locator(selector)

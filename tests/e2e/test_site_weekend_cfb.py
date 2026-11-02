@@ -764,7 +764,7 @@ def test_neutral_site_city_in_tooltip_table_and_panel(wk: Callable[..., Page]) -
     assert match.get_attribute("title") == "Played in Atlanta, GA"
     assert "Played in Atlanta, GA." in (page.locator(FOX_NOON).get_attribute("aria-label") or "")
     game = page.locator(f'.wk-crow[data-wk-id="{ESPN_PLUS}"] .wk-c-game')
-    assert game.inner_text().endswith(" vs Lakeview (Dublin, Ireland)")
+    assert game.inner_text().endswith(" vs. Lakeview (Dublin, Ireland)")
     page.locator(FOX_NOON).click()
     expect(page.locator("#detail-panel")).to_be_visible()
     assert (

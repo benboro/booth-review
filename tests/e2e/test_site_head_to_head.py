@@ -1,7 +1,7 @@
 """Head-to-head browser tests (SITE-42; 04.7 D-11..D-17): the School popover
 control, its snap-back, the toolbar label, resets, the matched-games table,
 facets, the stale Butterfly panel, and the phone sheet -- all against the
-synthetic contract fixture (Northfield vs Lakeview: games 0 and 4).
+synthetic contract fixture (Northfield vs. Lakeview: games 0 and 4).
 """
 
 from __future__ import annotations
@@ -112,8 +112,8 @@ def test_toolbar_names_the_matchup(
 ) -> None:
     open_app(guarded_page, H2H)
     trigger = guarded_page.locator("#trigger-school")
-    label = "School: Northfield vs Lakeview"
-    assert trigger.locator(".filter-value").inner_text() == "Northfield vs Lakeview"
+    label = "School: Northfield vs. Lakeview"
+    assert trigger.locator(".filter-value").inner_text() == "Northfield vs. Lakeview"
     assert trigger.get_attribute("title") == label
     assert trigger.get_attribute("aria-label") == label
 
@@ -200,7 +200,7 @@ def _assert_popover_under_trigger(geometry: dict[str, float]) -> None:
 def test_toggling_head_to_head_keeps_the_toolbar_and_the_open_popover_in_place(
     guarded_page: Page, open_app: Callable[[Page, str], None], width: int
 ) -> None:
-    """SITE-20: "School · 2" -> "School: Northfield vs Lakeview" must not re-wrap the
+    """SITE-20: "School · 2" -> "School: Northfield vs. Lakeview" must not re-wrap the
     toolbar or move the chart, and the open School popover stays under its button.
     The School button's grid cell, not a free-space cap, keeps the toolbar fixed:
     the longer label truncates inside the cell (04.9 D-21)."""
@@ -219,7 +219,7 @@ def test_toggling_head_to_head_keeps_the_toolbar_and_the_open_popover_in_place(
     assert after["triggerLeft"] == before["triggerLeft"]
     _assert_popover_under_trigger(after)
     trigger = guarded_page.locator("#trigger-school")
-    assert trigger.get_attribute("title") == "School: Northfield vs Lakeview"
+    assert trigger.get_attribute("title") == "School: Northfield vs. Lakeview"
 
     guarded_page.click("#school-match [data-match='either']")
     _wait_search(guarded_page, "!location.search.includes('h2h')")
@@ -289,7 +289,7 @@ def test_switching_to_head_to_head_on_the_butterfly_shows_the_hint(
         "() => window.__testHooks.setState({ people: ['dale-harlow', 'casey-lund'] })"
     )
     guarded_page.wait_for_function("() => document.getElementById('bars-note').hidden")
-    assert "in Northfield vs Lakeview games" in guarded_page.locator("#bars-title").inner_text()
+    assert "in Northfield vs. Lakeview games" in guarded_page.locator("#bars-title").inner_text()
 
 
 def test_phone_sheet_shows_the_control_with_touch_targets(

@@ -285,8 +285,8 @@ async () => {
 
 def test_game_row_title(loaded: Page) -> None:
     assert loaded.evaluate(_ROW_TITLE_JS) == [
-        "Northfield vs Lakeview",
-        "Lakeshore Rivalry: Northfield vs Lakeview",
+        "Northfield vs. Lakeview",
+        "Lakeshore Rivalry: Northfield vs. Lakeview",
         None,
         "Harbor Bowl",
     ]

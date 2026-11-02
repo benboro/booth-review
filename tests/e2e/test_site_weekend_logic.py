@@ -350,7 +350,7 @@ def test_matchup_text(weekend_page: Page) -> None:
         _game(sport="nfl", away="Chiefs", home="Bills"),
     ]
     out = _run(weekend_page, "return arg.map(W.matchupText);", games)
-    assert out == ["#20 Florida @ #5 Georgia", "Florida vs Georgia", "Chiefs @ Bills"]
+    assert out == ["#20 Florida @ #5 Georgia", "Florida vs. Georgia", "Chiefs @ Bills"]
 
 
 # -- colours -----------------------------------------------------------------------------

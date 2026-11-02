@@ -66,7 +66,7 @@ function isMatchup(state) {
 }
 
 /**
- * The " in A vs B games" phrase for a Head-to-head matchup (04.7 D-16).
+ * The " in A vs. B games" phrase for a Head-to-head matchup (04.7 D-16).
  * @param {object} data
  * @param {object} state
  * @returns {string} '' unless Head-to-head is on with exactly two schools.
@@ -74,7 +74,7 @@ function isMatchup(state) {
 export function matchupPhrase(data, state) {
   if (!isMatchup(state)) return '';
   const [a, b] = state.school;
-  return `in ${teamName(data, a)} vs ${teamName(data, b)} games`;
+  return `in ${teamName(data, a)} vs. ${teamName(data, b)} games`;
 }
 
 /**

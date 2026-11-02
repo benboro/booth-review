@@ -252,7 +252,7 @@ def test_cell_text_ranks_neutral_and_names(wk_page: Page) -> None:
     ]
     _mount(wk_page, games)
     assert wk_page.locator(f"{_cell('a')} .wk-match").inner_text() == "#20 Florida @ #5 Georgia"
-    assert wk_page.locator(f"{_cell('n')} .wk-match").inner_text() == "Utah vs Texas"
+    assert wk_page.locator(f"{_cell('n')} .wk-match").inner_text() == "Utah vs. Texas"
     assert wk_page.locator(f"{_cell('a')} .wk-time").inner_text() == "12:00"
     assert wk_page.locator(f"{_cell('a')} .wk-booth").inner_text() == "Joe Fowler · Pat Herbstreit"
     assert wk_page.locator(f"{_cell('p')} .wk-booth").inner_text() == "Joe Fowler · Analyst TBA"
@@ -1025,11 +1025,11 @@ def test_neutral_cell_names_its_city_in_tooltip_and_label_only(wk_page: Page) ->
     _mount(wk_page, with_venue)
     assert wk_page.locator(_cell("n")).bounding_box() == before
     match = wk_page.locator(f"{_cell('n')} .wk-match")
-    assert match.inner_text() == "TCU vs Kansas State"
+    assert match.inner_text() == "TCU vs. Kansas State"
     assert match.get_attribute("title") == "Played in Arlington, TX"
     assert "Arlington" not in wk_page.locator(_cell("n")).inner_text()
     assert wk_page.locator(_cell("n")).get_attribute("aria-label") == (
-        "12:00 pm, TCU vs Kansas State, FOX. Played in Arlington, TX."
+        "12:00 pm, TCU vs. Kansas State, FOX. Played in Arlington, TX."
         " Joe Fowler and Pat Herbstreit."
     )
     assert wk_page.locator(f"{_cell('h')} .wk-match").get_attribute("title") is None
@@ -1050,7 +1050,7 @@ def test_compact_table_writes_neutral_city_inline(wk_page: Page) -> None:
     ]
     _mount(wk_page, games)
     rows = wk_page.locator("#wk-host .wk-compact-table tbody tr")
-    assert rows.nth(0).locator(".wk-c-game").inner_text() == "TCU vs Kansas State (Arlington, TX)"
+    assert rows.nth(0).locator(".wk-c-game").inner_text() == "TCU vs. Kansas State (Arlington, TX)"
     assert rows.nth(1).locator(".wk-c-game").inner_text() == "Utah @ Texas"
     assert "Played in Arlington, TX." in (rows.nth(0).get_attribute("aria-label") or "")
 

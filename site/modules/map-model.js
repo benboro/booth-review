@@ -481,7 +481,7 @@ function gameLine(data, i) {
   const teams = data.lookups.teams;
   const home = teams[t.home_team[i]].name;
   const away = teams[t.away_team[i]].name;
-  const matchup = t.neutral[i] ? `${away} vs ${home}` : `${away} @ ${home}`;
+  const matchup = t.neutral[i] ? `${away} vs. ${home}` : `${away} @ ${home}`;
   return `${t.date[i]}  ${matchup}  ${data.lookups.networks[t.network[i]].name}`;
 }
 

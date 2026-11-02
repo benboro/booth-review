@@ -568,7 +568,7 @@ def test_conference_line_is_away_first(guarded_page: Page, site_url: str) -> Non
     """D-09: the panel's conference row reads away vs. home, matching
     formatMatchup's "Away at Home" order (amended 2026-09-28)."""
     _load(guarded_page, site_url)
-    assert guarded_page.evaluate(_FORMAT_JS, ["conferenceLine", 0]) == "SEC vs Pac-12"
+    assert guarded_page.evaluate(_FORMAT_JS, ["conferenceLine", 0]) == "SEC vs. Pac-12"
 
 
 def test_toggle_family_networks_matches_legend_click_semantics(
@@ -1103,7 +1103,7 @@ def test_head_to_head_selection_label_names_the_matchup(guarded_page: Page, site
     summary = _view(guarded_page, state)["summary"]
     assert summary == {
         "kind": "filtered-out",
-        "selectionLabel": "Kris Venn + Northfield vs Lakeview",
+        "selectionLabel": "Kris Venn + Northfield vs. Lakeview",
     }
     summary = _view(guarded_page, {**state, "h2h": False})["summary"]
     assert summary["kind"] == "matches"

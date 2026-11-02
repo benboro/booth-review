@@ -383,7 +383,7 @@ function activateOnKey(node, fn) {
   });
 }
 
-/** The ESPN+ table's matchup; a neutral-site game adds its city: "TCU vs Kansas State (Arlington, TX)". */
+/** The ESPN+ table's matchup; a neutral-site game adds its city: "TCU vs. Kansas State (Arlington, TX)". */
 function compactMatchup(g) {
   const city = g.neutral ? venueCity(g.venue) : null;
   return city ? `${matchupText(g)} (${city})` : matchupText(g);

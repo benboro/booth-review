@@ -449,13 +449,13 @@ export function boothLine(game, state) {
 }
 
 /**
- * The matchup, `#20 Florida @ #5 Georgia`; `vs` for neutral sites; NFL carries no ranks.
+ * The matchup, `#20 Florida @ #5 Georgia`; `vs.` for neutral sites; NFL carries no ranks.
  * @param {WeekendGame} game
  * @returns {string}
  */
 export function matchupText(game) {
   const side = (name, rank) => (rank != null && game.sport !== 'nfl' ? `#${rank} ${name}` : name);
-  return `${side(game.away, game.awayRank)} ${game.neutral ? 'vs' : '@'} `
+  return `${side(game.away, game.awayRank)} ${game.neutral ? 'vs.' : '@'} `
     + `${side(game.home, game.homeRank)}`;
 }
 

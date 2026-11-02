@@ -307,7 +307,7 @@ def test_chip_count_is_the_number_of_picks_not_the_number_of_display_strings(
     open_app(mobile_page, H2H_QUERY)
     _open_sheet(mobile_page)
     counts = _chip_counts(mobile_page)
-    # Head-to-head shows one "A vs B" string but is two schools; no network is checked.
+    # Head-to-head shows one "A vs. B" string but is two schools; no network is checked.
     assert counts["School"] == "2"
     assert counts["Networks"] == "0"
     # A range never collapses to a count.
