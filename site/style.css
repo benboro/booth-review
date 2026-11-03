@@ -7737,7 +7737,7 @@ tr.is-matched > :first-child {
 #panel-title.rk-wrapped .rk-badge {
   position: absolute;
   top: 50%;
-  right: 0;
+  right: 6px; /* a gap from the close button; 26px badge + 6px stays inside the 36px */
   margin: 0;
   transform: translateY(-50%);
 }

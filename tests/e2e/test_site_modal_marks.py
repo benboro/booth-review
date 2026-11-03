@@ -220,8 +220,9 @@ def _assert_phone_badge_reserved(got: dict[str, Any]) -> None:
         assert got["badgeBottom"] > got["wordTop"]
         assert got["gap"] == pytest.approx(10, abs=0.5)
     else:
-        # A wrapped title, like the map card: the badge sits at the right of the reserved 36px.
-        assert got["badgeRight"] == pytest.approx(got["titleRight"], abs=0.5)
+        # A wrapped title, like the map card: the badge sits in the reserved 36px, 6px in from
+        # the right so it keeps a gap from the close button.
+        assert got["badgeRight"] == pytest.approx(got["titleRight"] - 6, abs=0.5)
         assert got["badgeLeft"] >= got["titleRight"] - 36 - 0.01
 
 
