@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
+from test_site_conf_logos import conf_files, conf_rows
 from test_site_logos import _logo_files, _manifest_rows, lint_svg
 
 from booth_review.build import logos_dark
@@ -146,6 +147,16 @@ def test_manifest_dark_sha256() -> None:
         assert row["dark_sha256"] == expected, row["file"]
 
 
+@pytest.mark.parametrize("path", conf_files(), ids=lambda p: p.name)
+def test_every_conf_variant_matches_manifest(path) -> None:  # type: ignore[no-untyped-def]
+    source = path.read_bytes()
+    first = dark_variant(source)
+    assert first == dark_variant(source)
+    assert lint_svg(first) == []
+    row = next(r for r in conf_rows() if r["file"] == path.name)
+    assert row["dark_sha256"] == hashlib.sha256(first).hexdigest()
+
+
 def test_build_writes_a_dark_variant_for_every_logo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -164,6 +175,12 @@ def test_build_writes_a_dark_variant_for_every_logo(
         expected = dark_variant(logo.read_bytes(), flip_pair=logo.name in FLIP_PAIR_FILES)
         assert built.read_bytes() == expected
         assert f"logos/dark/{logo.name}" in result.files
+    for logo in conf_files():
+        built = out / "logos" / "dark" / "conf" / logo.name
+        assert built.read_bytes() == dark_variant(logo.read_bytes())
+        assert f"logos/dark/conf/{logo.name}" in result.files
+        # A conference file never lands in the flat network dark folder.
+        assert not (out / "logos" / "dark" / logo.name).exists()
 
 
 @pytest.mark.parametrize(
