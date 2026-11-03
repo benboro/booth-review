@@ -7549,3 +7549,99 @@ tr.is-matched > :first-child {
     margin-bottom: var(--space-md);
   }
 }
+
+/* Phase 28 matchup marks: the ranked badge (a star with an R cut out, currentColor, never gold)
+   sits in reserved padding so it never shifts layout; conference logos follow the sketch 007
+   sizes. The modal and Matched games rules live with their own modules. */
+.rk-badge {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+
+.rk-badge svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+}
+
+.wk-cell.rk-has {
+  padding-right: 28px;
+}
+
+.wk-cell .rk-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  height: 18px;
+}
+
+.wk-item.rk-has {
+  position: relative;
+  padding-right: 28px;
+}
+
+.wk-item .rk-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  height: 18px;
+}
+
+.wk-c-game .rk-badge {
+  height: 18px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+
+.chart-tooltip.rk-has {
+  padding-right: 43.5px;
+}
+
+.chart-tooltip .rk-badge {
+  position: absolute;
+  top: 13.3px;
+  right: 10px;
+  height: 25.5px;
+}
+
+.cf-logo {
+  display: inline-block;
+  height: 20px;
+  width: auto;
+  max-width: 64px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.cf-sep {
+  color: var(--muted);
+}
+
+.cf-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+}
+
+.cf-slot .cf-logo {
+  height: 16px;
+  max-width: 44px;
+}
+
+.chart-tooltip .cf-card-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.chart-tooltip .cf-card-line .cf-logo {
+  height: 16px;
+  max-width: 48px;
+}

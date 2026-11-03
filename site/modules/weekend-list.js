@@ -13,6 +13,7 @@ import {
   mountWeekend,
 } from './weekend-view.js';
 import { makeCaretIcon } from './icons.js';
+import { isRankedMatchup, rankBadge } from './rank-badge.js';
 import { networkMark } from './network.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 import {
@@ -55,6 +56,10 @@ function item(game, ctx, { showTime = false } = {}) {
   l2.append(booth);
   text.append(l1, l2);
   btn.append(mark, text);
+  if (isRankedMatchup(game)) {
+    btn.classList.add('rk-has');
+    btn.append(rankBadge({ hidden: true }));
+  }
   btn.addEventListener('click', () => ctx.open(game, btn));
   applyPick(btn, game, ctx, ctx.rowFaded([game]));
   return btn;

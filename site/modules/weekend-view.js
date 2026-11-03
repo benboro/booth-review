@@ -21,6 +21,7 @@ import {
   stripCollapsedByDefault,
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
+import { isRankedMatchup, rankBadge } from './rank-badge.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel-parts.js';
 import { playedInText, venueCity } from './venue.js';
@@ -133,6 +134,7 @@ export function accessibleName(game, state, line) {
   if (playedIn) parts.push(`${playedIn}.`);
   if (line.star) parts.push('Lead booth.');
   parts.push(crewSentence(game, state, line));
+  if (isRankedMatchup(game)) parts.push('Both teams ranked.');
   return parts.join(' ');
 }
 
@@ -179,6 +181,10 @@ export function buildCell(game, ctx, { tail = null } = {}) {
   booth.style.fontWeight = String(line.weight);
   l2.append(booth);
   btn.append(l1, l2);
+  if (isRankedMatchup(game)) {
+    btn.classList.add('rk-has');
+    btn.append(rankBadge({ hidden: true }));
+  }
 
   if (game.networkId == null) {
     btn.classList.add('wk-cell--neutral');
@@ -419,9 +425,11 @@ export function buildCompactTable(ctx) {
     }
     const booth = el('td', 'wk-c-booth', line.text);
     booth.style.fontWeight = String(line.weight);
+    const gameTd = el('td', 'wk-c-game', compactMatchup(g));
+    if (isRankedMatchup(g)) gameTd.append(rankBadge({ hidden: true }));
     tr.append(
       el('td', 'wk-c-time', g.kickoffMin == null ? 'Time TBA' : clock12(g.kickoffMin)),
-      el('td', 'wk-c-game', compactMatchup(g)),
+      gameTd,
       net,
       booth,
     );
