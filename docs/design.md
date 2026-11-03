@@ -307,13 +307,16 @@ records only where the site settles or applies them.
   or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
   same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
   Matched games set it 18px inline after the matchup's last word on one line, and once the
-  matchup wraps it moves to the right of the cell, centred vertically on the matchup lines, as
-  the card, the phone rows and the modal title do (user decision 2026-11-03); the map hover card draws it 25.5px at
+  matchup wraps it centres vertically on the matchup lines, as the card, the phone rows and
+  the modal title do (user decision 2026-11-03), its left edge 6px after the longest line's
+  right edge, the same gap as on one line, not at the cell's right edge (user feedback
+  2026-11-03); the map hover card draws it 25.5px at
   the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
   NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
   to the title's last word on one line, so it never sits alone on a line, and once the title
-  wraps the badge moves to the right of the reserved space and centres vertically on the
-  title's lines, as the card does (user feedback 2026-11-03; the map card is the reference). At
+  wraps the badge centres vertically on the title's lines, as the card does (user feedback
+  2026-11-03; the map card is the reference), 10px after the longest line as on one line, and
+  never within 6px of the close button. At
   every width every CFB modal title, ranked or not, keeps
   the badge's 36px free at the end of each line (beside the close button too, since the title
   clears the button's float), and the badge overhangs into that space without taking inline
@@ -324,10 +327,11 @@ records only where the site settles or applies them.
   wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
   lengths to hold it. The two tables reserve nothing on a one-line cell (the badge is inline
   there); a wrapped ranked cell gives its lines the badge's 24px (18px badge, 6px gap) at the end
-  and centres the badge in it, so it never overlaps the text and stays inside the cell. Whether
-  a cell wraps is measured on the inline layout, on render and on every resize
-  (`syncBadgeWrap` and `watchBadgeWrap` in `site/modules/matchup-wrap.js`, shared with the modal
-  title). That 24px can cost a wrapped cell a third line only when its first line comes within
+  and starts the badge 6px after its longest line, so it never overlaps the text and stays
+  inside the cell. Whether a cell wraps is measured on the inline layout, and the longest
+  line's right edge once the wrapped layout is final (the badge is out of flow, so placing it
+  never moves a break), on render, on every resize and when web fonts land (`syncBadgeWrap`
+  and `watchBadgeWrap` in `site/modules/matchup-wrap.js`, shared with the modal title). That 24px can cost a wrapped cell a third line only when its first line comes within
   24px of the cell's width; the table's auto layout widens the column first (a few px, taken
   from the other columns), and a third line beats a badge over the text.
 - A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the next line starts
