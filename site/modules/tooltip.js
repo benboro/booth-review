@@ -378,9 +378,12 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
   placeTooltip(el, clientX, clientY);
 }
 
-/** Hides the tooltip (a no-op before the first `showTooltip` call). */
+/** Hides the tooltip (a no-op before the first `showTooltip` call). It also drops the game
+ * card's badge classes, so a hidden card never leaves its reserved padding on the element. */
 export function hideTooltip() {
-  if (tooltipEl) tooltipEl.hidden = true;
+  if (!tooltipEl) return;
+  tooltipEl.hidden = true;
+  tooltipEl.classList.remove('rk-has', 'rk-slot');
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';

@@ -904,6 +904,25 @@ def test_game_card_wraps_the_same_with_or_without_the_badge(
     assert len({r["plain"]["booth"] for r in rows}) >= 2
 
 
+def test_hiding_the_game_card_drops_its_badge_classes(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """Review LOW: hideTooltip removes rk-has and rk-slot, so a hidden card keeps no badge
+    padding for whatever reads or shows the element next."""
+    page = _desk(guarded_page, open_app)
+    assert _show_game(page, _game_card(ranked=True, rankSlot=True))["rkHas"] is True
+    got = page.evaluate(
+        """async () => {
+          const t = await import('./modules/tooltip.js');
+          t.hideTooltip();
+          const el = document.getElementById('chart-tooltip');
+          return {hidden: el.hidden, rkHas: el.classList.contains('rk-has'),
+                  rkSlot: el.classList.contains('rk-slot')};
+        }"""
+    )
+    assert got == {"hidden": True, "rkHas": False, "rkSlot": False}
+
+
 @pytest.mark.parametrize("which", ["venue", "text", "chart"])
 def test_other_tooltips_drop_the_ranked_padding(
     guarded_page: Page, open_app: OpenApp, which: str
