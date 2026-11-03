@@ -282,3 +282,41 @@ records only where the site settles or applies them.
 - NFL map mode adds a stadium-location credit to the source line (Wikipedia, CC BY-SA 4.0).
   The "stadium locations" link points at data/reference/nfl_stadium_locations.csv, whose
   source_url column cites each stadium's Wikipedia article.
+
+### Matchup marks (Phase 28)
+
+- The ranked badge marks a game where both teams carry a shipped rank (`away_rank` and
+  `home_rank` both set; the committee rankings when out, else the AP Top 25, at that week).
+  Every such game gets it, bowls and CFP games included. The rank text stays as it was; the
+  badge is added, nothing is removed.
+- Shape and colour: a classic five-point star with a Roboto 600 "R" cut out of it (a
+  pre-rendered path in `site/modules/rank-badge.js`, drawn through a mask), filled with
+  `currentColor`, so it takes the text colour of the cell, row or line it sits on. It is never
+  gold: gold is the lead-booth mark (the gold star before the crew and the `--lead-frame`), and
+  the two must read apart.
+- Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
+  28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
+  the phone list rows use the same 18px top-right placement; the ESPN+ and regional table and
+  Matched games set it 18px inline after the matchup; the map hover card draws it 25.5px at
+  the top right; the CFB modal title ends with a 26px badge glued to the title's last word, so
+  it never sits alone on a line. No cell, row, card or title changes height with a badge.
+- Accessibility: where the element's accessible name already ends with "Both teams ranked."
+  (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
+  `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label
+  "Both teams ranked". Its tooltip reads "Both teams ranked".
+- Conference logos: the CFB modal's Conference line reads "Conference: [logo] vs. [logo]" with
+  logos 20px high and at most 64px wide (`object-fit: contain`, so the wide ACC and C-USA
+  wordmarks shrink without squashing); the Conference filter list holds a 16px logo in a fixed
+  44px slot before each name, so names stay aligned whether or not a logo shows; the map hover
+  card's last line holds 16px logos (at most 48px wide) in the muted caption style. A
+  same-conference game shows one logo. A side with no logo (FBS Independents, FCS
+  Independents, the FCS conferences) shows its name as text ("[SEC logo] vs. Big Sky"), and the
+  logo's alt text is the conference name. Each logo has a dark variant under
+  `logos/dark/conf/`, swapped live with the theme.
+- Eras follow the game's season: SEC 2014-2023 and 2024 on, Conference USA 2014-2022 and 2023
+  on, Pac-12 2014-2025 (shield) and 2026 on; every other FBS conference has one logo. The
+  filter list, which shows many seasons at once, uses the Seasons filter's last season.
+- A conference that gains a second logo needs the user's ruling first: one logo for every
+  game, or each logo for a range of seasons. Never assume.
+- The modal's Conference and Network lines are flex rows centred on their text, so a logo or
+  badge sits on the text's middle; each text run keeps its own spaces.
