@@ -157,6 +157,15 @@ def test_every_conf_variant_matches_manifest(path) -> None:  # type: ignore[no-u
     assert row["dark_sha256"] == hashlib.sha256(first).hexdigest()
 
 
+@pytest.mark.parametrize("path", conf_files(), ids=lambda p: p.name)
+def test_every_conf_variant_meets_the_dark_contrast(path) -> None:  # type: ignore[no-untyped-def]
+    """Review LOW: the conference dark variants pass the same 3.0:1 gate as the network logos,
+    against every dark background a logo sits on."""
+    for paint in logos_dark._paints(dark_variant(path.read_bytes()).decode()):
+        low = min(contrast(paint, bg) for bg in DARK_BACKGROUNDS)
+        assert low >= 3.0, f"{path.name}: {paint} only {low:.2f}:1"
+
+
 def test_build_writes_a_dark_variant_for_every_logo(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
