@@ -7677,6 +7677,24 @@ tr.is-matched > :first-child {
   white-space: nowrap;
 }
 
+/* Phone (review WR-05, the user's "reserve badge space on phones"): every CFB modal title,
+   ranked or not, keeps 36px (the badge's 10px gap and 26px width) free at the end of each line,
+   and the badge takes no inline room of its own (its -36px end margin cancels its width and
+   gap), so it overhangs into that space after the last word. Line breaks are then the same with
+   and without the badge, and a ranked title never gains a line. flow-root keeps the title's box
+   clear of the floated close button, so the reserved space on the lines beside the x is free
+   too, rather than under the button. */
+@media (max-width: 480px) {
+  #panel-title {
+    display: flow-root;
+    padding-inline-end: 36px;
+  }
+
+  #panel-title .rk-badge {
+    margin-right: -36px;
+  }
+}
+
 .panel-conferences,
 .panel-networks {
   display: flex;

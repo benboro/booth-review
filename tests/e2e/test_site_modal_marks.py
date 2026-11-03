@@ -148,31 +148,141 @@ def test_modal_title_badge_does_not_change_the_title_height(
     _assert_title_height_unchanged(guarded_page, open_app, fixture_raw)
 
 
-def test_phone_modal_title_badge_never_sits_alone_on_a_line(
-    mobile_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
-) -> None:
-    """At the phone width the title may wrap; the badge stays on the line of the title's last
-    word (a no-wrap span), centred where the sketch put it (5px below the baseline)."""
-    page = mobile_page
-    _serve(page, _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12}))
+_PHONE_TITLE_JS = """() => {
+  const title = document.querySelector('#panel-title');
+  const glue = title.querySelector('.rk-glue');
+  const badge = glue.querySelector('.rk-badge');
+  const range = document.createRange();
+  range.selectNodeContents(glue.firstChild);
+  const word = range.getBoundingClientRect();
+  const b = badge.getBoundingClientRect();
+  const t = title.getBoundingClientRect();
+  const x = document.getElementById('panel-close').getBoundingClientRect();
+  const ranked = t.height;
+  // The same title without the badge: hide it in place, measure, and put it back.
+  badge.style.display = 'none';
+  const bare = title.getBoundingClientRect().height;
+  badge.style.display = '';
+  const overlapsClose = b.left < x.right && b.right > x.left
+    && b.top < x.bottom && b.bottom > x.top;
+  return { ranked, bare, word: glue.firstChild.textContent, wordTop: word.top,
+           wordBottom: word.bottom, gap: b.left - word.right, badgeTop: b.top,
+           badgeBottom: b.bottom, badgeRight: b.right, titleRight: t.right, overlapsClose };
+}"""
+
+
+def _phone_title(page: Page, open_app: OpenApp, raw: dict[str, Any]) -> dict[str, Any]:
+    page.unroute("**/site-data.json*")
+    _serve(page, raw)
     open_app(page, "")
     _open_panel(page, 0)
-    got = page.evaluate(
-        """() => {
-          const glue = document.querySelector('#panel-title .rk-glue');
-          const range = document.createRange();
-          range.selectNodeContents(glue.firstChild);
-          const word = range.getBoundingClientRect();
-          const badge = glue.querySelector('.rk-badge').getBoundingClientRect();
-          return { word: glue.firstChild.textContent, wordTop: word.top, wordBottom: word.bottom,
-                   badgeTop: badge.top, badgeBottom: badge.bottom,
-                   gap: badge.left - word.right };
-        }"""
-    )
-    assert got["word"] == "27"
+    assert page.locator("#panel-title .rk-badge").count() == 1
+    got: dict[str, Any] = page.evaluate(_PHONE_TITLE_JS)
+    return got
+
+
+def _assert_phone_badge_reserved(got: dict[str, Any]) -> None:
+    # D-05 / WR-05: the badge never adds a line, so the title is exactly as tall as the same
+    # title without it.
+    assert got["ranked"] == pytest.approx(got["bare"], abs=0.01)
+    # It still ends the last line, 10px after the last word, in the title's reserved space,
+    # clear of the close button.
     assert got["badgeTop"] < got["wordBottom"]
     assert got["badgeBottom"] > got["wordTop"]
     assert got["gap"] == pytest.approx(10, abs=0.5)
+    assert got["badgeRight"] <= got["titleRight"] + 0.5
+    assert not got["overlapsClose"]
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        None,  # the fixture's "#7 Lakeview 20 at #12 Northfield 27", which only just fits a line
+        ("Lake", "Northfield"),
+        ("Lakeview", "Northfield Tech"),
+        ("Lakeview State University", "Northfield A&M"),
+        ("Lakeview State University", "Northfield Agricultural and Mechanical"),
+    ],
+)
+def test_phone_modal_title_badge_reserves_its_space(
+    mobile_page: Page,
+    open_app: OpenApp,
+    fixture_raw: dict[str, Any],
+    names: tuple[str, str] | None,
+) -> None:
+    """WR-05 (user decision 2026-11-03, "reserve badge space on phones"): at 390px every CFB
+    modal title keeps the badge's room at the end of each line, so a ranked title is exactly
+    as tall as the same title without the badge, whatever its length."""
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    if names is not None:
+        teams = raw["lookups"]["teams"]
+        teams[raw["telecasts"]["away_team"][0]]["name"] = names[0]
+        teams[raw["telecasts"]["home_team"][0]]["name"] = names[1]
+    got = _phone_title(mobile_page, open_app, raw)
+    assert got["word"] == "27"
+    _assert_phone_badge_reserved(got)
+
+
+_SWEEP_JS = """() => {
+  // Grows the away side one character at a time (text only, set through textContent) and
+  // compares the title's height with and without the badge at each length, so some length
+  // is sure to end a line within the badge's width of the edge.
+  const title = document.querySelector('#panel-title');
+  const away = [...title.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
+  const badge = title.querySelector('.rk-badge');
+  const full = 'Lakeview State University of Technology and Mines';
+  const out = [];
+  for (let n = 1; n <= full.length; n += 1) {
+    away.textContent = `${full.slice(0, n)} 20 at `;
+    const ranked = title.getBoundingClientRect().height;
+    badge.style.display = 'none';
+    const bare = title.getBoundingClientRect().height;
+    badge.style.display = '';
+    out.push({ n, ranked, bare });
+  }
+  return out;
+}"""
+
+
+def test_phone_modal_title_badge_never_adds_a_line_at_any_length(
+    mobile_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-05: at every title length, including those whose last line only just fits, the
+    ranked title is exactly as tall as the same title without the badge."""
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    _phone_title(mobile_page, open_app, raw)
+    rows = mobile_page.evaluate(_SWEEP_JS)
+    grew = [r for r in rows if abs(r["ranked"] - r["bare"]) > 0.01]
+    assert grew == []
+    # The sweep crosses at least two line counts, so it passed through the wrap points.
+    assert len({round(r["bare"]) for r in rows}) >= 2
+
+
+def test_phone_modal_title_badge_reserves_its_space_for_hostile_long_names(
+    mobile_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-05: long markup-like team names stay literal text, and the badge still adds no line.
+    The scores are dropped, so the badge glues to a hostile name's last word."""
+    raw = _mutated(
+        fixture_raw,
+        away_rank={0: 7},
+        home_rank={0: 12},
+        away_points={0: None},
+        home_points={0: None},
+    )
+    teams = raw["lookups"]["teams"]
+    # Each markup token is narrower than a line, so only the badge could add one.
+    away = "<img src=x onerror=window.__xss=1> Lakeview State University of Technology"
+    home = "Northfield <b>Agricultural</b> and <i>Mechanical</i>"
+    teams[raw["telecasts"]["away_team"][0]]["name"] = away
+    teams[raw["telecasts"]["home_team"][0]]["name"] = home
+    got = _phone_title(mobile_page, open_app, raw)
+    assert got["word"] == "<i>Mechanical</i>"
+    _assert_phone_badge_reserved(got)
+    assert mobile_page.evaluate("window.__xss") is None
+    markup = "#panel-title img, #panel-title b, #panel-title i"
+    assert mobile_page.locator(markup).count() == 0
+    assert home in (mobile_page.text_content("#panel-title") or "")
 
 
 # ------------------------------------------------------------------ Conference line
