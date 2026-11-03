@@ -4,8 +4,8 @@ On every surface that lets a matchup wrap (the ESPN+ and regional table, Matched
 weekend phone rows, the map game card and the CFB modal title), line 2 starts with "at", "@" or
 "vs." and holds the home side. The away side never ends a line with the joiner, and the home side
 stays on one line when it fits there. In the two tables a one-line ranked matchup ends with the
-badge inline; a wrapped one moves the badge to the right of the cell, centred on the lines (user
-decision 2026-11-03). Synthetic games and an in-memory copy of the contract fixture only.
+badge inline; a wrapped one centres the badge on the lines, 6px after the longest line (user
+decisions 2026-11-03). Synthetic games and an in-memory copy of the contract fixture only.
 """
 
 from __future__ import annotations
@@ -122,8 +122,8 @@ def _assert_one_line(got: dict[str, Any]) -> None:
 
 # The ranked badge's place in a table matchup cell, against the matchup's text: each visible
 # character's rect (the badge's own title skipped), the first line's top, the last line's
-# bottom, the right edge of the last line's text, the badge's and the cell's rects, the row's
-# height and whether the cell's lines carry `rk-wrapped`.
+# bottom, the right edge of the last line's text and of the longest line's, the badge's and the
+# cell's rects, the row's height and whether the cell's lines carry `rk-wrapped`.
 _BADGE_JS = """(sel) => {
   const td = document.querySelector(sel);
   const box = td.querySelector('.mu-lines') ?? td;
@@ -150,6 +150,8 @@ _BADGE_JS = """(sel) => {
     if (c.mid > cur + lh / 2) { line += 1; cur = c.mid; }
     c.line = line;
   }
+  const ends = [];
+  for (const c of chars) ends[c.line] = Math.max(ends[c.line] ?? -Infinity, c.right);
   const first = chars.filter((c) => c.line === 0);
   const last = chars.filter((c) => c.line === line);
   const rect = (e) => { const r = e.getBoundingClientRect();
@@ -163,6 +165,7 @@ _BADGE_JS = """(sel) => {
     firstTop: Math.min(...first.map((c) => c.top)),
     lastBottom: Math.max(...last.map((c) => c.bottom)),
     lastRight: Math.max(...last.map((c) => c.right)),
+    longestRight: Math.max(...ends),
     textLeft: Math.min(...chars.map((c) => c.left)),
     badge: b,
     cell: rect(td),
@@ -181,9 +184,11 @@ def _badge(page: Page, selector: str) -> dict[str, Any]:
 
 
 def _assert_badge_centred(got: dict[str, Any]) -> None:
-    """A wrapped cell: the badge at the right, centred on the lines, clear of the text."""
+    """A wrapped cell: the badge centred on the lines, 6px after the longest line (the one-line
+    gap, user feedback 2026-11-03), clear of the text and inside the cell."""
     assert got["lines"] >= 2 and got["wrapped"], got
     b, cell = got["badge"], got["cell"]
+    assert abs(b["left"] - got["longestRight"] - 6) <= 0.5, got
     lines_mid = (got["firstTop"] + got["lastBottom"]) / 2
     assert abs((b["top"] + b["bottom"]) / 2 - lines_mid) <= 1, got
     assert b["top"] >= got["firstTop"], got
@@ -276,8 +281,9 @@ def _crow(key: str) -> str:
 
 
 def test_compact_table_centres_a_wrapped_badge_on_the_lines(compact_page: Page) -> None:
-    """User decision 2026-11-03: a wrapped ranked cell's badge moves to the right of the cell
-    and centres on the matchup lines; a one-line cell keeps it inline after the last word."""
+    """User decision 2026-11-03: a wrapped ranked cell's badge centres on the matchup lines, 6px
+    after the longest line as on one line (not at the cell's right edge, user feedback
+    2026-11-03); a one-line cell keeps it inline after the last word."""
     _mount(compact_page, _compact_badge_games(), width=COMPACT_WIDTH)
     wrapped = _badge(compact_page, _crow("w"))
     _assert_badge_centred(wrapped)
@@ -305,14 +311,25 @@ def test_compact_table_centres_a_wrapped_badge_on_the_lines(compact_page: Page) 
 
 
 def test_compact_table_badge_follows_a_resize(compact_page: Page) -> None:
-    """The cell is re-measured on resize: widening to one line puts the badge back inline, and
-    narrowing again centres it on the lines."""
+    """The cell is re-measured on resize: widening to one line puts the badge back inline,
+    narrowing again centres it on the lines, and a narrower wrapped cell moves it with its
+    longest line."""
     _mount(compact_page, _compact_badge_games(), width=COMPACT_WIDTH)
-    _assert_badge_centred(_badge(compact_page, _crow("w")))
+    first = _badge(compact_page, _crow("w"))
+    _assert_badge_centred(first)
     compact_page.set_viewport_size({"width": 1440, "height": 900})
     _assert_badge_inline(_badge(compact_page, _crow("w")))
     compact_page.set_viewport_size({"width": COMPACT_WIDTH, "height": 900})
     _assert_badge_centred(_badge(compact_page, _crow("w")))
+    # Narrow the cell itself (not the viewport): the lines rewrap shorter and the badge follows.
+    compact_page.evaluate(
+        "(sel) => { document.querySelector(sel).style.maxWidth = '200px';"
+        " document.querySelector(sel).style.width = '200px'; }",
+        _crow("w"),
+    )
+    narrow = _badge(compact_page, _crow("w"))
+    _assert_badge_centred(narrow)
+    assert narrow["longestRight"] < first["longestRight"], (first, narrow)
 
 
 # ------------------------------------------------------------------ Matched games
@@ -395,6 +412,9 @@ def test_matched_games_centres_a_wrapped_badge_on_the_lines(
     before = _badge(guarded_page, _RANKED_CELL)
     _assert_badge_inline(before)
     guarded_page.evaluate(_NARROW_JS, 260)
+    _assert_badge_centred(_badge(guarded_page, _RANKED_CELL))
+    # A narrower column rewraps the lines and the badge follows the longest one.
+    guarded_page.evaluate(_NARROW_JS, 200)
     _assert_badge_centred(_badge(guarded_page, _RANKED_CELL))
     guarded_page.evaluate(
         """() => { const t = document.querySelector('#games-table');

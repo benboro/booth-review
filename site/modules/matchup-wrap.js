@@ -87,18 +87,53 @@ export function textWraps(el) {
 }
 
 /**
+ * The right edge of the element's longest text line, from its left padding edge (the origin of
+ * an absolutely positioned child). Text runs only, the badge's own title skipped, so the badge
+ * never counts toward the line it sits beside.
+ * @param {HTMLElement} el
+ * @returns {number|null} null when the element has no laid-out text
+ */
+export function longestLineRight(el) {
+  let right = null;
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge') || !n.data.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) {
+      if (r.width === 0 || r.height === 0) continue;
+      right = right === null ? r.right : Math.max(right, r.right);
+    }
+  }
+  if (right === null) return null;
+  const box = el.getBoundingClientRect();
+  // Client rects carry any transform on an ancestor; the offset is wanted in CSS px.
+  const scale = el.offsetWidth > 0 ? box.width / el.offsetWidth : 1;
+  return (right - box.left) / scale - el.clientLeft;
+}
+
+/**
  * The ranked badge on a wrapped matchup (user feedback 2026-11-03, the map card as reference):
  * on one line it ends the line inline; once the text wraps, `rk-wrapped` moves it to the right
  * and centres it on the lines (the CFB modal title, the ESPN+ and regional table, Matched
  * games). The wrap is measured with the class off, so the answer is always the one-line
  * (inline badge) layout's: a surface whose wrapped placement takes room (the tables' end
  * padding) can never hold itself wrapped once the inline layout fits on one line again.
+ *
+ * With the class on (so the line breaks are final), `--rk-line-end` holds the right edge of the
+ * longest line: the badge starts its one-line gap after it (6px in the tables, 10px in the
+ * modal title) rather than at the right edge (user feedback 2026-11-03). The badge is out of
+ * flow, so placing it never moves a line break.
  * @param {HTMLElement} el
  */
 export function syncBadgeWrap(el) {
   const ranked = el.querySelector('.rk-badge') !== null;
   el.classList.remove('rk-wrapped');
-  el.classList.toggle('rk-wrapped', ranked && textWraps(el));
+  const wrapped = ranked && textWraps(el);
+  el.classList.toggle('rk-wrapped', wrapped);
+  const end = wrapped ? longestLineRight(el) : null;
+  if (end === null) el.style.removeProperty('--rk-line-end');
+  else el.style.setProperty('--rk-line-end', `${end}px`);
 }
 
 /** @type {ResizeObserver|null} */
@@ -106,12 +141,18 @@ let wrapObserver = null;
 
 /**
  * Keeps `syncBadgeWrap` current: now if the element is laid out, and again whenever it changes
- * size (a dialog opening, a table column narrowing, the viewport resizing). One observer serves
- * every element; an element that leaves the page is dropped on its last (zero-size) report.
+ * size (a dialog opening, a table column narrowing, the viewport resizing), and once more when
+ * the page's web fonts finish loading. One observer serves every element; an element that leaves the page is dropped on its last (zero-size) report.
  * @param {HTMLElement} el
  */
 export function watchBadgeWrap(el) {
   if (el.isConnected) syncBadgeWrap(el);
+  // A web font that lands later changes the text's widths, not always the element's size.
+  if (document.fonts && document.fonts.status !== 'loaded') {
+    document.fonts.ready.then(() => {
+      if (el.isConnected) syncBadgeWrap(el);
+    });
+  }
   if (typeof ResizeObserver !== 'function') return;
   wrapObserver ??= new ResizeObserver((entries) => {
     for (const { target } of entries) {
@@ -125,8 +166,9 @@ export function watchBadgeWrap(el) {
 /**
  * A table's matchup cell: `fillWrappingMatchup` inside one block (`span.mu-lines`) that is
  * exactly as tall as the matchup's lines, so a wrapped cell's badge centres on those lines
- * whatever the row's other cells do (user decision 2026-11-03). A one-line cell keeps the
- * badge inline after the last word and renders as before.
+ * whatever the row's other cells do (user decision 2026-11-03), 6px after its longest line
+ * (`--rk-line-end`). A one-line cell keeps the badge inline after the last word and renders as
+ * before.
  * @param {HTMLElement} target
  * @param {{away: string, joiner: string, home: string}} sides
  * @param {HTMLElement|null} [badge]

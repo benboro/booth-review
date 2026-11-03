@@ -182,13 +182,22 @@ _PHONE_TITLE_JS = """() => {
   const lh = parseFloat(getComputedStyle(title).fontSize) * 1.2;
   let lines = bottoms.length ? 1 : 0;
   for (let k = 1; k < bottoms.length; k += 1) if (bottoms[k] - bottoms[k - 1] > lh / 2) lines += 1;
+  // The right edge of the longest line: every text run but the badge's own title.
+  let textRight = -Infinity;
+  const all = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+  for (let n = all.nextNode(); n; n = all.nextNode()) {
+    if (n.parentElement.closest('.rk-badge') || !n.data.trim()) continue;
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    for (const q of r.getClientRects()) if (q.width > 0) textRight = Math.max(textRight, q.right);
+  }
   const cs = getComputedStyle(title);
   const top = t.top + parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth);
   const bottom = t.bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth);
   return { ranked, bare, word: glue.firstChild.textContent, wordTop: word.top,
            wordBottom: word.bottom, gap: b.left - word.right, badgeTop: b.top,
            badgeBottom: b.bottom, badgeLeft: b.left, badgeRight: b.right, titleRight: t.right,
-           overlapsClose, lines, linesTop: top, linesMid: (top + bottom) / 2,
+           overlapsClose, lines, textRight, linesTop: top, linesMid: (top + bottom) / 2,
            badgeMid: (b.top + b.bottom) / 2, wrappedClass: title.classList.contains('rk-wrapped') };
 }"""
 
@@ -220,10 +229,16 @@ def _assert_phone_badge_reserved(got: dict[str, Any]) -> None:
         assert got["badgeBottom"] > got["wordTop"]
         assert got["gap"] == pytest.approx(10, abs=0.5)
     else:
-        # A wrapped title, like the map card: the badge sits in the reserved 36px, 6px in from
-        # the right so it keeps a gap from the close button.
-        assert got["badgeRight"] == pytest.approx(got["titleRight"] - 6, abs=0.5)
-        assert got["badgeLeft"] >= got["titleRight"] - 36 - 0.01
+        # A wrapped title, like the map card: the badge keeps the one-line 10px gap after the
+        # longest line (user feedback 2026-11-03), unless that would bring it within 6px of the
+        # close button. A line that ends inside the 36px reserve keeps a gap of 4px at least; a
+        # token wider than the whole line (the hostile names' "onerror=...") overflows into the
+        # reserve whatever the badge does, so only the clamp holds there.
+        want = min(got["textRight"] + 10, got["titleRight"] - 32)
+        assert got["badgeLeft"] == pytest.approx(want, abs=0.5), got
+        if got["textRight"] <= got["titleRight"] - 36 + 0.5:
+            assert got["badgeLeft"] - got["textRight"] >= 4 - 0.5, got
+        assert got["badgeRight"] <= got["titleRight"] - 6 + 0.5, got
 
 
 @pytest.mark.parametrize(

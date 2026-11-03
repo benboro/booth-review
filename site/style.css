@@ -7730,14 +7730,17 @@ tr.is-matched > :first-child {
 }
 
 /* A wrapped title (user feedback 2026-11-03; panel.js sets rk-wrapped from the measured line
-   count) moves the badge into the reserved 36px at the right and centres it on the title's
-   lines, as the map card does; on one line it stays glued to the last word. The title has no
-   block padding, so 50% of its box is the middle of its lines. Out of flow either way, so the
-   line breaks and the height do not change. */
+   count) moves the badge out of the last line and centres it on the title's lines, as the map
+   card does; on one line it stays glued to the last word. The title has no block padding, so
+   50% of its box is the middle of its lines. Horizontally it keeps the one-line 10px gap after
+   the longest line (--rk-line-end, set by matchup-wrap.js syncBadgeWrap; user feedback
+   2026-11-03, as in the tables), but never closer than 6px to the close button: the longest
+   line ends inside the 36px reserve, so the gap only drops (to 4px at least) when that line
+   fills the title. Out of flow either way, so the line breaks and the height do not change. */
 #panel-title.rk-wrapped .rk-badge {
   position: absolute;
   top: 50%;
-  right: 6px; /* a gap from the close button; 26px badge + 6px stays inside the 36px */
+  left: min(calc(var(--rk-line-end, 100%) + 10px), calc(100% - 32px));
   margin: 0;
   transform: translateY(-50%);
 }
@@ -7777,9 +7780,12 @@ tr.is-matched > :first-child {
    row's other cells do. On one line the badge stays inline after the last word. A wrapped
    ranked cell (user decision 2026-11-03, the map card as reference; matchup-wrap.js sets
    rk-wrapped from the inline layout's line count, on render and on every resize) gives its
-   lines the badge's 24px (18px badge, 6px gap) at the end and centres the badge there, so it
-   never overlaps the text and stays inside the cell. Unwrapped cells reserve nothing (the
-   user's earlier choice for the tables). */
+   lines the badge's 24px (18px badge, 6px gap) at the end and centres the badge on the lines,
+   its left edge 6px after the longest line's right edge (--rk-line-end, measured by
+   syncBadgeWrap once the class is on; user feedback 2026-11-03: the same gap as one line, not
+   the cell's right edge). The longest line ends inside the content box, so the badge never
+   overlaps the text and stays inside the 24px. Unwrapped cells reserve nothing (the user's
+   earlier choice for the tables). */
 .mu-lines {
   display: block;
 }
@@ -7793,7 +7799,7 @@ tr.is-matched > :first-child {
 .games-table td.matchup .mu-lines.rk-wrapped .rk-badge {
   position: absolute;
   top: 50%;
-  right: 0;
+  left: calc(var(--rk-line-end, calc(100% - 24px)) + 6px);
   margin: 0;
   transform: translateY(-50%);
 }
