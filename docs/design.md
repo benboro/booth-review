@@ -298,14 +298,21 @@ records only where the site settles or applies them.
 - Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
   28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
   every CFB cell, ranked or not, keeps that 28px, so the same matchup and booth truncate at the
-  same place with or without the badge (NFL cells keep 8px);
-  the phone list rows use the same 18px top-right placement, and every CFB phone row, ranked
+  same place with or without the badge (NFL cells keep 8px), and
+  its badge's top is the matchup line's top, so it never rides above it;
+  the phone list rows set it 18px at the right, 6px in, centred vertically on the matchup lines
+  (line 1, or lines 1-2 when the matchup wraps, the lines the 2-line clamp shows; never the
+  booth line or the whole row, so it never sits above the first line) (user feedback
+  2026-11-03), and every CFB phone row, ranked
   or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
   same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
   Matched games set it 18px inline after the matchup; the map hover card draws it 25.5px at
   the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
-  NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued to the title's last word, so
-  it never sits alone on a line. At every width every CFB modal title, ranked or not, keeps
+  NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
+  to the title's last word on one line, so it never sits alone on a line, and once the title
+  wraps the badge moves to the right of the reserved space and centres vertically on the
+  title's lines, as the card does (user feedback 2026-11-03; the map card is the reference). At
+  every width every CFB modal title, ranked or not, keeps
   the badge's 36px free at the end of each line (beside the close button too, since the title
   clears the button's float), and the badge overhangs into that space without taking inline
   room, so a ranked title breaks its lines exactly as the same title without the badge. No
