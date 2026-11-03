@@ -47,8 +47,9 @@ function svgEl(name, attrs) {
 }
 
 /**
- * The badge. `hidden` marks the svg aria-hidden for surfaces whose enclosing accessible name
- * already says "Both teams ranked."; the span's tooltip stays either way.
+ * The badge. `hidden` marks the span and its svg aria-hidden for surfaces whose enclosing
+ * accessible name already says "Both teams ranked.", so the span's title is not surfaced as a
+ * description either; the tooltip still shows on hover either way.
  * @param {{hidden?: boolean}} [opts]
  * @returns {HTMLSpanElement}
  */
@@ -60,6 +61,7 @@ export function rankBadge({ hidden = false } = {}) {
   span.title = LABEL;
   const svg = svgEl('svg', { viewBox: '0 0 100 100' });
   if (hidden) {
+    span.setAttribute('aria-hidden', 'true');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
   } else {

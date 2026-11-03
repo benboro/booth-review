@@ -57,6 +57,8 @@ async () => {
     paths: svg.querySelectorAll('path').length,
     hidden: {
       ariaHidden: hsvg.getAttribute('aria-hidden'),
+      spanAriaHidden: hid.getAttribute('aria-hidden'),
+      fullSpanAriaHidden: full.getAttribute('aria-hidden'),
       focusable: hsvg.getAttribute('focusable'),
       role: hsvg.getAttribute('role'),
       label: hsvg.getAttribute('aria-label'),
@@ -82,7 +84,15 @@ def test_module_contract(wk_page: Page) -> None:  # noqa: F811
     assert (r["role"], r["aria"], r["titleEl"]) == ("img", LABEL, LABEL)
     assert r["maskRef"] and r["maskInDoc"]
     assert r["starPoints"] == 10 and r["paths"] == 1
-    assert r["hidden"] == {"ariaHidden": "true", "focusable": "false", "role": None, "label": None}
+    assert r["hidden"] == {
+        "ariaHidden": "true",
+        # IN-02: the span is hidden too, so its title is not read as a description.
+        "spanAriaHidden": "true",
+        "fullSpanAriaHidden": None,
+        "focusable": "false",
+        "role": None,
+        "label": None,
+    }
     assert r["ids"][0] != r["ids"][1]
     assert r["h"] == 18 and r["w"] > 0
 
