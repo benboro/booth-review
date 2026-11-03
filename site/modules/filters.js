@@ -34,6 +34,7 @@ import { FAMILY_LABELS } from './palette.js';
 import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from './select.js';
 import { NEW_YEARS_SIX, SLOT_SHORT_LABELS, ROLE_LABELS, crewPickNames, gameRowTitle } from './format.js';
 import { PHONE_QUERY } from './breakpoints.js';
+import { conferenceLogoFor, conferenceMark } from './conf-logos.js';
 
 const ROLE_HELPER_TEXT = 'Limits matches to main-broadcast play-by-play or analyst roles.';
 
@@ -96,6 +97,9 @@ let familyCheckboxes = new Map();
 
 /** conference name -> its checkbox element, populated once by `buildConferenceList`. */
 let conferenceCheckboxes = new Map();
+// Conference name -> {slot, file}: each row's 44px logo slot and the logo file it holds now
+// (null while empty), so renderConferences rebuilds a slot only when the season's era changes.
+let conferenceSlots = new Map();
 
 /** team slug -> its checkbox element, populated once by `buildSchoolList`. */
 let schoolCheckboxes = new Map();
@@ -458,13 +462,22 @@ function buildRoleHelper() {
 /** Builds the Conference popover's checklist once, from `data.fbsConferences` (D-10). */
 function buildConferenceList(data) {
   conferenceCheckboxes = new Map();
+  conferenceSlots = new Map();
   const rows = data.fbsConferences.map((name) => {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.name = 'conference';
     checkbox.value = name;
     conferenceCheckboxes.set(name, checkbox);
-    return makeCheckItem(checkbox, name);
+    const item = makeCheckItem(checkbox, name);
+    // Phase 28 (D-12, D-13): a fixed 44px slot between the checkbox and the name holds the
+    // conference's logo; it stays empty for a name without one (D-11) so names line up.
+    const slot = document.createElement('span');
+    slot.className = 'cf-slot';
+    const label = item.querySelector('label.check-row');
+    label.insertBefore(slot, label.querySelector('.option-name'));
+    conferenceSlots.set(name, { slot, file: null });
+    return item;
   });
   els.conferenceList.append(...rows);
 }
@@ -1360,8 +1373,19 @@ function renderBooth(state, view) {
   }
 }
 
-/** Syncs the Conference checklist's checked state and counts (D-10, D-11). */
-function renderConferences(state, view) {
+/**
+ * Syncs the Conference checklist's checked state, counts and logos (D-10, D-11). The logos
+ * follow the last season of the Seasons filter, or the newest season with no filter (D-09).
+ */
+function renderConferences(data, state, view) {
+  const season = state.seasons?.[1] ?? data.seasonMax;
+  for (const [name, entry] of conferenceSlots) {
+    const file = conferenceLogoFor(name, season)?.file ?? null;
+    if (file === entry.file) continue;
+    entry.file = file;
+    if (file) entry.slot.replaceChildren(conferenceMark(name, season));
+    else entry.slot.replaceChildren();
+  }
   for (const [name, cb] of conferenceCheckboxes) {
     const checked = state.conferences.includes(name);
     cb.checked = checked;
@@ -1778,7 +1802,7 @@ export function renderFilters({ data, state, view }) {
   renderNetworks(data, state, view);
   renderSlots(state, view);
   renderRole(state, view);
-  renderConferences(state, view);
+  renderConferences(data, state, view);
   renderSchool(data, state, view);
   renderPostseason(state, view);
   renderBooth(state, view);
