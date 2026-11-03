@@ -296,6 +296,8 @@ records only where the site settles or applies them.
   the two must read apart.
 - Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
   28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
+  every CFB cell, ranked or not, keeps that 28px, so the same matchup and booth truncate at the
+  same place with or without the badge (NFL cells keep 8px);
   the phone list rows use the same 18px top-right placement, and every CFB phone row, ranked
   or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
   same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and

@@ -7567,6 +7567,11 @@ tr.is-matched > :first-child {
   overflow: visible;
 }
 
+/* Every CFB cell, ranked or not, keeps the badge's 28px at its right (user decision
+   2026-11-03, "reserve badge space everywhere"): the cell is fixed height and truncates on one
+   line, so without it the same matchup or booth would cut off earlier on a ranked cell. NFL
+   cells never show the badge and keep 8px. */
+.wk-root[data-sport="cfb"] .wk-cell,
 .wk-cell.rk-has {
   padding-right: 28px;
 }

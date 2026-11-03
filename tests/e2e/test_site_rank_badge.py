@@ -154,6 +154,61 @@ def test_long_matchup_ellipsis_ends_before_badge(wk_page: Page) -> None:  # noqa
     assert mbox["x"] + mbox["width"] <= badge["x"]
 
 
+_CELL_SWEEP_JS = """([rankedSel, plainSel]) => {
+  // Gives a ranked and an unranked timeline cell of the same width the same matchup and booth
+  // text, one character longer each step, and compares where each line truncates: the text box
+  // widths and whether the ellipsis shows.
+  const cells = [document.querySelector(rankedSel), document.querySelector(plainSel)];
+  const full = '#20 Southern Mississippi Golden Eagles at #5 Louisiana-Monroe Warhawks';
+  const booth = 'Joe Fowler, Pat Herbstreit, Sam Sideline and Lee Reporter of the Lakeview Network';
+  const out = [];
+  for (let n = 1; n <= full.length; n += 1) {
+    const got = cells.map((cell) => {
+      const m = cell.querySelector('.wk-match');
+      const b = cell.querySelector('.wk-booth');
+      m.textContent = full.slice(0, n);
+      b.textContent = booth.slice(0, n + 10);
+      return { h: cell.getBoundingClientRect().height,
+               match: m.clientWidth, matchCut: m.scrollWidth > m.clientWidth,
+               booth: b.clientWidth, boothCut: b.scrollWidth > b.clientWidth };
+    });
+    out.push({ n, ranked: got[0], plain: got[1] });
+  }
+  return { width: cells.map((c) => c.getBoundingClientRect().width), out };
+}"""
+
+
+def test_cells_truncate_the_same_with_or_without_the_badge(wk_page: Page) -> None:  # noqa: F811
+    """User decision 2026-11-03 ("reserve badge space everywhere"): every CFB timeline cell keeps
+    the badge's 28px, so identical text truncates at the same place, ranked or not."""
+    _mount(
+        wk_page,
+        [
+            _known(key="r", awayRank=20, homeRank=5),
+            _known(key="o", awayRank=20, networkId="cbs", networkName="CBS", family="cbs"),
+        ],
+    )
+    pads = [
+        wk_page.locator(_cell(k)).evaluate("e => getComputedStyle(e).paddingRight")
+        for k in ("r", "o")
+    ]
+    assert pads == ["28px", "28px"]
+    got = wk_page.evaluate(_CELL_SWEEP_JS, [_cell("r"), _cell("o")])
+    assert got["width"][0] == got["width"][1]
+    differ = [r for r in got["out"] if r["ranked"] != r["plain"]]
+    assert differ == []
+    # The sweep reached lengths that cut both lines, so it crossed the truncation points.
+    assert any(r["plain"]["matchCut"] for r in got["out"])
+    assert any(r["plain"]["boothCut"] for r in got["out"])
+    assert not got["out"][0]["plain"]["matchCut"]
+
+
+def test_nfl_cells_keep_their_normal_padding(wk_page: Page) -> None:  # noqa: F811
+    _mount(wk_page, [_known(key="n", sport="nfl")], model={"sport": "nfl"})
+    pad = wk_page.locator(_cell("n")).evaluate("e => getComputedStyle(e).paddingRight")
+    assert pad == "8px"
+
+
 def test_lead_star_and_badge_boxes_are_disjoint(wk_page: Page) -> None:  # noqa: F811
     _mount(wk_page, [_known(key="r", awayRank=20, homeRank=5, lead=True, boothRank=1)])
     star = wk_page.locator(f"{_cell('r')} .wk-star").bounding_box()
