@@ -7614,7 +7614,9 @@ tr.is-matched > :first-child {
 /* Each logo is sized by area (conf-logos.js sets --cf-scale per file): its drawn height is the
    surface's nominal height (--cf-h) times the scale, and the block margins add back the
    difference, so the margin box, and with it every row, cell, card and title, stays at the
-   nominal height whatever the logo's shape. */
+   nominal height whatever the logo's shape. These defaults (20px nominal, 64px cap, contain so
+   wide wordmarks shrink without squashing) are the modal Conference line's; the filter slot
+   and the card override them below. */
 .cf-logo {
   --cf-h: 20px;
   display: inline-block;
@@ -7713,14 +7715,6 @@ tr.is-matched > :first-child {
 
 .cf-line .cf-sep {
   margin-inline: 0.3em;
-}
-
-/* Logos are 20px nominal, scaled by area; wide wordmarks shrink to the 64px cap without squashing. */
-.panel-conferences .cf-logo {
-  --cf-h: 20px;
-  width: auto;
-  max-width: 64px;
-  object-fit: contain;
 }
 
 .games-table td.matchup .rk-badge {
