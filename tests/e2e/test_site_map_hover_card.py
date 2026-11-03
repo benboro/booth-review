@@ -789,7 +789,7 @@ async (which) => {
   }
   const el = document.getElementById('chart-tooltip');
   return {rkHas: el.classList.contains('rk-has'), badges: el.querySelectorAll('.rk-badge').length,
-    padRight: getComputedStyle(el).paddingRight};
+    rkSlot: el.classList.contains('rk-slot'), padRight: getComputedStyle(el).paddingRight};
 }
 """
 
@@ -846,6 +846,64 @@ def test_game_card_badge_clears_the_text_boxes(guarded_page: Page, open_app: Ope
         assert not (overlap_x and overlap_y)
 
 
+_CARD_SWEEP_JS = """
+async (base) => {
+  // Shows the same card text ranked and unranked (both CFB cards), one character longer each
+  // step, and compares the card's height and each text line's height, so a line that wraps at
+  // a different place with the badge shows up.
+  const t = await import('./modules/tooltip.js');
+  const el = document.getElementById('chart-tooltip') ?? t.ensureTooltipEl();
+  const full = '#20 Ironpeak Polytechnic Institute of the Northern Plains @ #5 Stonebridge State';
+  const booth = 'Pat Rowan, Sam Delgado and Lee Sideline of the Lakeview Network';
+  const opts = {theme: 'light', clientX: 200, clientY: 200};
+  const measure = () => ({
+    h: el.getBoundingClientRect().height,
+    w: el.getBoundingClientRect().width,
+    matchup: el.querySelector('.tooltip-game-matchup').getBoundingClientRect().height,
+    booth: el.querySelector('.tooltip-game-booth').getBoundingClientRect().height,
+  });
+  const out = [];
+  for (let n = 1; n <= full.length; n += 1) {
+    const card = {...base, matchup: full.slice(0, n),
+      booth: {...base.booth, text: booth.slice(0, n)}};
+    t.showGameTooltip({...card, ranked: true, rankSlot: true}, opts);
+    const ranked = measure();
+    t.showGameTooltip({...card, ranked: false, rankSlot: true}, opts);
+    const plain = measure();
+    out.push({n, ranked, plain});
+  }
+  return out;
+}
+"""
+
+
+def test_every_cfb_game_card_keeps_the_badge_padding(guarded_page: Page, open_app: OpenApp) -> None:
+    """User decision 2026-11-03 ("reserve badge space everywhere"): an unranked CFB card keeps
+    the ranked card's 43.5px right padding; a card without rankSlot (NFL) keeps 16px."""
+    page = _desk(guarded_page, open_app)
+    pad = "() => getComputedStyle(document.getElementById('chart-tooltip')).paddingRight"
+    _show_game(page, _game_card(ranked=False, rankSlot=True))
+    assert page.evaluate(pad) == "43.5px"
+    _show_game(page, _game_card(ranked=True, rankSlot=True))
+    assert page.evaluate(pad) == "43.5px"
+    _show_game(page, _game_card(ranked=False, conf=None))
+    assert page.evaluate(pad) == "16px"
+
+
+def test_game_card_wraps_the_same_with_or_without_the_badge(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """At 1440px, identical card text is exactly as tall, line by line, ranked or not."""
+    page = _desk(guarded_page, open_app)
+    rows = page.evaluate(_CARD_SWEEP_JS, _game_card())
+    differ = [r for r in rows if r["ranked"] != r["plain"]]
+    assert differ == []
+    # The sweep reached the 320px cap and wrapped, so it crossed the lengths near the edge.
+    assert max(r["plain"]["w"] for r in rows) == pytest.approx(320, abs=0.01)
+    assert len({r["plain"]["matchup"] for r in rows}) >= 2
+    assert len({r["plain"]["booth"] for r in rows}) >= 2
+
+
 @pytest.mark.parametrize("which", ["venue", "text", "chart"])
 def test_other_tooltips_drop_the_ranked_padding(
     guarded_page: Page, open_app: OpenApp, which: str
@@ -854,6 +912,7 @@ def test_other_tooltips_drop_the_ranked_padding(
     assert _show_game(page, _game_card(ranked=True))["rkHas"] is True
     r = page.evaluate(_OTHER_TIP_JS, which)
     assert r["rkHas"] is False
+    assert r["rkSlot"] is False
     assert r["badges"] == 0
     assert r["padRight"] != "43.5px"
 

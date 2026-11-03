@@ -344,7 +344,7 @@ export function showTextTooltip(
     }
     return node;
   });
-  el.classList.remove('rk-has');
+  el.classList.remove('rk-has', 'rk-slot');
   el.replaceChildren(...children);
   el.style.borderColor = borderColor;
   delete el.dataset.family;
@@ -369,7 +369,7 @@ export function showTextTooltip(
  */
 export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
-  el.classList.remove('rk-has');
+  el.classList.remove('rk-has', 'rk-slot');
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   delete el.dataset.kind;
   delete el.dataset.hoverable;
@@ -488,7 +488,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   }
   children.push(text('p', 'tooltip-hint', hint));
 
-  el.classList.remove('rk-has');
+  el.classList.remove('rk-has', 'rk-slot');
   el.replaceChildren(...children);
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
   delete el.dataset.family;
@@ -529,10 +529,11 @@ function cardConferenceLine(conf) {
  * above the tapped mark so it never covers it, kept inside `within` (the map box's client
  * rect) when given, so it never covers the controls above the map.
  * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
- *   kickoff: string, venue: string, family: string, ranked?: boolean,
+ *   kickoff: string, venue: string, family: string, ranked?: boolean, rankSlot?: boolean,
  *   conf?: {away: string|null, home: string|null, season: number|null}}} card
- *   `ranked` adds the badge at the top right (Phase 28, D-01); `conf` adds the conference
- *   line under the venue.
+ *   `ranked` adds the badge at the top right (Phase 28, D-01); `rankSlot` (every CFB card)
+ *   keeps the badge's padding even without it, so the same text wraps the same ranked or not;
+ *   `conf` adds the conference line under the venue.
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
  *   onOpen?: () => void, within?: {top: number, bottom: number}}} opts
  */
@@ -578,6 +579,7 @@ export function showGameTooltip(
 
   el.replaceChildren(...children);
   el.classList.toggle('rk-has', Boolean(card.ranked));
+  el.classList.toggle('rk-slot', Boolean(card.ranked || card.rankSlot));
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.family] ?? MAP_FAMILY_COLORS[theme].other;
   delete el.dataset.family;
   delete el.dataset.hoverable;

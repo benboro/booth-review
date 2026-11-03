@@ -298,6 +298,10 @@ def test_clicking_an_upcoming_game_opens_the_not_played_yet_panel(
     assert "Granite Bay Owls" in card or "Northfield Lanterns" in card
     assert "CBS" in card
     assert "Fixture Field" in card
+    # The ranked badge is CFB only, so an NFL card keeps the tooltip's normal 16px padding.
+    tip = page.locator("#chart-tooltip")
+    assert "rk-slot" not in (tip.get_attribute("class") or "")
+    assert tip.evaluate("e => getComputedStyle(e).paddingRight") == "16px"
     at = _point(page, EARLY_A)
     page.mouse.click(at["x"], at["y"])
     dialog = page.locator("dialog[open]")

@@ -7604,6 +7604,10 @@ tr.is-matched > :first-child {
   top: -2px;
 }
 
+/* Every CFB game card, ranked or not (rk-slot), keeps the badge's padding (user decision
+   2026-11-03, "reserve badge space everywhere"), so the same text wraps at the same place with
+   or without the badge. The other tooltips drop both classes and keep their 16px. */
+.chart-tooltip.rk-slot,
 .chart-tooltip.rk-has {
   padding-right: 43.5px;
 }
