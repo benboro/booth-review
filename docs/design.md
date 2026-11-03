@@ -308,7 +308,11 @@ records only where the site settles or applies them.
   the badge's 36px free at the end of each line (beside the close button too, since the title
   clears the button's float), and the badge overhangs into that space without taking inline
   room, so a ranked title breaks its lines exactly as the same title without the badge. No
-  cell, row, card or title changes height with a badge.
+  cell, row, card or title changes height with a badge. The rule behind all of these (user
+  decision 2026-11-03): the timeline cell, the phone row, the map card and the modal title
+  reserve the badge's space on every CFB item whether or not it shows, so identical text
+  wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
+  lengths to hold it. The two tables set the badge inline after the matchup instead.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label
