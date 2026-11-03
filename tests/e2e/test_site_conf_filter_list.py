@@ -166,6 +166,28 @@ def test_checking_a_conference_still_filters(conf_page: Page) -> None:
     assert _rows(conf_page)["SEC"]["imgs"] == 1
 
 
+def test_a_slot_logo_that_fails_to_load_leaves_an_empty_slot(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """WR-03: the label already names the conference, so a 404 logo leaves the slot empty (as
+    for FBS Independents) instead of a broken image; the row keeps its height."""
+    guarded_page.route(
+        "**/logos/conf/southeastern-conference-2024-present.svg",
+        lambda route: route.fulfill(status=404, body="not found"),
+    )
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    open_app(guarded_page, "")
+    _open_conferences(guarded_page)
+    guarded_page.wait_for_function(
+        "!document.querySelector('#conference-list img.cf-logo[data-cf=\"SEC\"]')"
+    )
+    rows = _rows(guarded_page)
+    assert rows["SEC"]["slotKids"] == 0
+    assert rows["SEC"]["slotWidth"] == pytest.approx(44, abs=0.5)
+    assert rows["SEC"]["rowH"] == rows["Big Ten"]["rowH"]
+    assert rows["Big Ten"]["imgs"] == 1
+
+
 def test_hostile_conference_name_is_literal_text_with_an_empty_slot(
     guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
 ) -> None:

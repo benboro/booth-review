@@ -104,6 +104,8 @@ function watchTheme() {
  * - `decorative` is for a place whose own text already says the name (the filter list's
  *   label): the logo gets `alt=""` and aria-hidden, so the name is not read twice, and keeps
  *   its `title` for the hover tooltip.
+ * - A logo that fails to load is replaced by the name as a text node (or, when decorative,
+ *   removed), never left as a broken image.
  * @param {unknown} name - the CFBD conference name
  * @param {number|null|undefined} season - the game's season
  * @param {{decorative?: boolean}} [options]
@@ -117,6 +119,14 @@ export function conferenceMark(name, season, { decorative = false } = {}) {
   img.className = 'cf-logo';
   img.dataset.cf = label;
   img.dataset.season = String(season ?? '');
+  // A logo that fails to load (404, blocked, bad decode) falls back to the name as text, so
+  // no broken-image box shows (UI-SPEC error state). A decorative logo sits beside its own
+  // name, so it just leaves its slot empty, as a conference without a logo does.
+  img.addEventListener(
+    'error',
+    () => img.replaceWith(...(decorative ? [] : [document.createTextNode(label)])),
+    { once: true },
+  );
   img.src = currentTheme() === 'dark' ? entry.darkFile : entry.file;
   watchTheme();
   img.alt = decorative ? '' : label;

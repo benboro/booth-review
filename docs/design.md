@@ -313,7 +313,8 @@ records only where the site settles or applies them.
   logo (FBS Independents, FCS Independents, the FCS conferences) shows its name as text ("[SEC
   logo] vs. Big Sky"), and the logo's alt text is the conference name. In the filter list,
   whose label already holds the name, the logo is decorative (empty alt, aria-hidden, the
-  name kept as its hover title), so no checkbox is named twice. Each logo has a dark
+  name kept as its hover title), so no checkbox is named twice. A logo that fails to load
+  becomes its name as text (in the filter list, an empty slot). Each logo has a dark
   variant under `logos/dark/conf/`, swapped live with the theme.
 - Conference logos are sized by area, not by one height. Each file's `scale` in
   `site/modules/conf-logos.js` multiplies the surface's nominal height (20px in the modal, 16px

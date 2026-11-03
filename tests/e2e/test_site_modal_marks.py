@@ -242,6 +242,29 @@ def test_conference_without_a_logo_reads_as_text(
     assert text == "Conference: Missouri Valley vs. FBS Independents"
 
 
+def test_a_logo_that_fails_to_load_falls_back_to_its_name(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-03 (UI-SPEC error state): a 404 on the SEC logo leaves its name as text, not a
+    broken image; the Pac-12 logo still shows."""
+    guarded_page.route(
+        "**/logos/conf/southeastern-conference-before-2024.svg",
+        lambda route: route.fulfill(status=404, body="not found"),
+    )
+    _serve(guarded_page, copy.deepcopy(fixture_raw))
+    open_app(guarded_page, "")
+    _open_panel(guarded_page, 0)
+    guarded_page.wait_for_function(
+        "!document.querySelector('#panel-body .panel-conferences img.cf-logo[data-cf=\"SEC\"]')"
+    )
+    parts = _conference_parts(guarded_page)
+    assert [p["kind"] for p in parts] == ["text", "cf-sep", "logo"]
+    assert parts[0]["text"] == "SEC"
+    assert parts[2]["alt"] == "Pac-12"
+    text = re.sub(r"\s+", " ", guarded_page.locator("#panel-body .panel-conferences").inner_text())
+    assert text.startswith("Conference: SEC vs.")
+
+
 def test_a_side_without_a_conference_reads_not_recorded(
     guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
 ) -> None:
