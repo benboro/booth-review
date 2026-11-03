@@ -314,9 +314,9 @@ records only where the site settles or applies them.
   the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
   NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
   to the title's last word on one line, so it never sits alone on a line, and once the title
-  wraps the badge centres vertically on the title's lines, as the card does (user feedback
-  2026-11-03; the map card is the reference), 10px after the longest line as on one line, and
-  never within 6px of the close button. At
+  wraps the badge moves to the right of the reserved space, 6px in from the close button, and
+  centres vertically on the title's lines, as the card does (user feedback 2026-11-03; the map
+  card is the reference). The longest-line gap rule is for table cells only. At
   every width every CFB modal title, ranked or not, keeps
   the badge's 36px free at the end of each line (beside the close button too, since the title
   clears the button's float), and the badge overhangs into that space without taking inline

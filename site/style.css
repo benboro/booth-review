@@ -7730,17 +7730,15 @@ tr.is-matched > :first-child {
 }
 
 /* A wrapped title (user feedback 2026-11-03; panel.js sets rk-wrapped from the measured line
-   count) moves the badge out of the last line and centres it on the title's lines, as the map
-   card does; on one line it stays glued to the last word. The title has no block padding, so
-   50% of its box is the middle of its lines. Horizontally it keeps the one-line 10px gap after
-   the longest line (--rk-line-end, set by matchup-wrap.js syncBadgeWrap; user feedback
-   2026-11-03, as in the tables), but never closer than 6px to the close button: the longest
-   line ends inside the 36px reserve, so the gap only drops (to 4px at least) when that line
-   fills the title. Out of flow either way, so the line breaks and the height do not change. */
+   count) moves the badge into the reserved 36px at the right and centres it on the title's
+   lines, as the map card does; on one line it stays glued to the last word. The title has no
+   block padding, so 50% of its box is the middle of its lines. Out of flow either way, so the
+   line breaks and the height do not change. The longest-line gap is a table-only rule (user,
+   2026-11-03); the title keeps its right-edge placement. */
 #panel-title.rk-wrapped .rk-badge {
   position: absolute;
   top: 50%;
-  left: min(calc(var(--rk-line-end, 100%) + 10px), calc(100% - 32px));
+  right: 6px; /* a gap from the close button; 26px badge + 6px stays inside the 36px */
   margin: 0;
   transform: translateY(-50%);
 }
