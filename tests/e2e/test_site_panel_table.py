@@ -232,7 +232,13 @@ def test_panel_shows_conferences_game_type_and_gated_slot_label(
 
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     body0 = guarded_page.inner_text("#panel-body")
-    assert "Conference: SEC vs. Pac-12" in body0
+    conferences = guarded_page.locator("#panel-body .panel-conferences")
+    assert conferences.inner_text().startswith("Conference:")
+    assert conferences.locator("img.cf-logo").evaluate_all("els => els.map((e) => e.alt)") == [
+        "SEC",
+        "Pac-12",
+    ]
+    assert conferences.locator(".cf-sep").text_content() == "vs."
     assert "Noon (before 2 PM ET)" in body0
     assert "pm ET; Noon" in body0 or "am ET; Noon" in body0
 
@@ -358,7 +364,9 @@ def test_panel_hostile_rivalry_name_is_literal_text(
     open_app(guarded_page, "")
     guarded_page.evaluate("window.__testHooks.openPanel(0)")
     assert guarded_page.locator("#panel-body .panel-rivalry strong").text_content() == payload
-    assert guarded_page.locator("#panel-body img").count() == 0
+    # The Conference line's own logos (Phase 28) are the only images in the modal.
+    assert guarded_page.locator("#panel-body img:not(.cf-logo)").count() == 0
+    assert guarded_page.locator("#panel-body .panel-rivalry img").count() == 0
     assert dialogs == []
 
 
