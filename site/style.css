@@ -7594,6 +7594,10 @@ tr.is-matched > :first-child {
   height: 18px;
   vertical-align: middle;
   margin-left: 6px;
+  /* middle centres on the x-height and drew the star low beside the capitals and figures;
+     a relative nudge lifts it without touching the line box. */
+  position: relative;
+  top: -2px;
 }
 
 .chart-tooltip.rk-has {
@@ -7626,6 +7630,9 @@ tr.is-matched > :first-child {
   justify-content: center;
   flex: none;
   width: 44px;
+  /* The row's 4px gap left the slot-wide wordmarks (ACC, Big Ten, C-USA) touching the checkbox
+     and the name; 4px more each side gives them 8px, as the sign-off render showed. */
+  margin-inline: 4px;
 }
 
 .cf-slot .cf-logo {
@@ -7696,4 +7703,8 @@ tr.is-matched > :first-child {
   height: 18px;
   vertical-align: middle;
   margin-left: 6px;
+  /* middle centres on the x-height and drew the star low beside the capitals and figures;
+     a relative nudge lifts it without touching the line box. */
+  position: relative;
+  top: -2px;
 }
