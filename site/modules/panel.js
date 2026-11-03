@@ -33,12 +33,14 @@ import {
   selectedPersonIndexes,
   showsTimeSlot,
 } from './format.js';
+import { conferenceMark } from './conf-logos.js';
 import { makeGameTypeIcon } from './icons.js';
 import { currentTheme } from './pill.js';
 import {
-  crewBox, externalLink, linksList, liveOpener, locationLine, networksParagraph,
+  crewBox, externalLink, linksList, liveOpener, locationLine, markText, networksParagraph,
 } from './panel-parts.js';
 import { sortNetworks } from './network.js';
+import { bothRanked, rankBadge } from './rank-badge.js';
 import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
 import { apKickoff } from './weekend.js';
@@ -307,8 +309,59 @@ export function renderMatchupTitle(titleEl, data, i) {
   side(parts.away);
   nodes.push(document.createTextNode(` ${parts.separator} `));
   side(parts.home);
+  // Phase 28 (D-01, D-04): a both-ranked game ends the title with the ranked badge; the
+  // title's aria-label carries the sentence, so the badge itself is aria-hidden. Only the CFB
+  // modal reaches here (NFL and MLB have their own panels), and data without rank columns
+  // never shows it.
+  const ranked = bothRanked(data.t.away_rank?.[i], data.t.home_rank?.[i]);
+  if (ranked) {
+    // The title's last word and the badge share a no-wrap span, so a narrow modal never leaves
+    // the badge alone on a line of its own.
+    const last = nodes.pop();
+    const text = last.textContent;
+    const cut = text.lastIndexOf(' ') + 1;
+    if (cut > 0) nodes.push(document.createTextNode(text.slice(0, cut)));
+    const glue = document.createElement('span');
+    glue.className = 'rk-glue';
+    glue.append(document.createTextNode(text.slice(cut)), rankBadge({ hidden: true }));
+    nodes.push(glue);
+  }
   titleEl.replaceChildren(...nodes);
-  titleEl.setAttribute('aria-label', formatMatchup(data, i, { withScore: true }));
+  const label = formatMatchup(data, i, { withScore: true });
+  titleEl.setAttribute('aria-label', ranked ? `${label} Both teams ranked.` : label);
+}
+
+/**
+ * The modal's Conference line (D-12, D-13): "Conference: [logo] vs. [logo]", each logo for the
+ * game's season (D-09), a side without a logo as its name in text (D-11), a side with no
+ * conference as "Not recorded" (conferenceLine's wording), and one mark when both teams share
+ * a conference. Names enter the DOM only through conferenceMark (a Text node, or an img whose
+ * alt and title are set as properties) and text nodes, never as markup (T-28-14).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {HTMLParagraphElement}
+ */
+function buildConferencesParagraph(data, i) {
+  const t = data.t;
+  const season = t.season?.[i] ?? null;
+  const nameOf = (idx) => (idx != null ? (data.lookups.conferences[idx]?.name ?? null) : null);
+  const mark = (name) => (name != null ? conferenceMark(name, season) : document.createTextNode('Not recorded'));
+  const away = nameOf(t.away_conference[i]);
+  const home = nameOf(t.home_conference[i]);
+  const line = document.createElement('span');
+  line.className = 'cf-line';
+  if (away != null && away === home) {
+    line.append(mark(away));
+  } else {
+    const sep = document.createElement('span');
+    sep.className = 'cf-sep';
+    sep.textContent = 'vs.';
+    line.append(mark(away), sep, mark(home));
+  }
+  const p = document.createElement('p');
+  p.className = 'panel-conferences';
+  p.append(markText('Conference: '), line);
+  return p;
 }
 
 /**
@@ -370,13 +423,8 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = 
   const rivalry = rivalryName(data, i);
   if (rivalry != null) children.push(buildRivalryLine(rivalry));
 
-  const conferences = conferenceLine(data, i);
-  if (conferences != null) {
-    const conferencesP = document.createElement('p');
-    conferencesP.className = 'panel-conferences';
-    conferencesP.textContent = `Conference: ${conferences}`;
-    children.push(conferencesP);
-  }
+  // conferenceLine stays the gate: a game with neither conference recorded has no line.
+  if (conferenceLine(data, i) != null) children.push(buildConferencesParagraph(data, i));
 
   children.push(buildNetworksParagraph(data, i, currentTheme()));
 

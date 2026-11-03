@@ -7645,3 +7645,54 @@ tr.is-matched > :first-child {
   height: 16px;
   max-width: 48px;
 }
+
+/* Phase 28 modal and Matched games marks (sketch 008). The badge ends the modal title, inline on
+   its own line, and never changes the title's height; the Conference and Network lines centre
+   their marks on the text with flex (no gap), and each text run keeps its own spaces. */
+/* The badge sits 5px below the baseline (sketch 006's vertical-align: -5px), drawn there by a
+   -5px bottom margin on a baseline-aligned box, and its top is pulled in by a negative margin:
+   an inline block's margin box sets the line height, so the title stays exactly as tall while
+   the badge draws in the sketched place. */
+#panel-title .rk-badge {
+  height: 26px;
+  vertical-align: baseline;
+  margin: -6px 0 -5px 10px;
+}
+
+#panel-title .rk-glue {
+  white-space: nowrap;
+}
+
+.panel-conferences,
+.panel-networks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel-mark-text {
+  white-space: pre;
+}
+
+.cf-line {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cf-line .cf-sep {
+  margin-inline: 0.3em;
+}
+
+/* Logos are 20px high; wide wordmarks (ACC, C-USA) shrink to the 64px cap without squashing. */
+.panel-conferences .cf-logo {
+  height: 20px;
+  width: auto;
+  max-width: 64px;
+  object-fit: contain;
+}
+
+.games-table td.matchup .rk-badge {
+  height: 18px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
