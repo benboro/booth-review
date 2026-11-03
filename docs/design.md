@@ -306,7 +306,9 @@ records only where the site settles or applies them.
   2026-11-03), and every CFB phone row, ranked
   or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
   same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
-  Matched games set it 18px inline after the matchup; the map hover card draws it 25.5px at
+  Matched games set it 18px inline after the matchup's last word on one line, and once the
+  matchup wraps it moves to the right of the cell, centred vertically on the matchup lines, as
+  the card, the phone rows and the modal title do (user decision 2026-11-03); the map hover card draws it 25.5px at
   the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
   NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
   to the title's last word on one line, so it never sits alone on a line, and once the title
@@ -320,7 +322,14 @@ records only where the site settles or applies them.
   decision 2026-11-03): the timeline cell, the phone row, the map card and the modal title
   reserve the badge's space on every CFB item whether or not it shows, so identical text
   wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
-  lengths to hold it. The two tables set the badge inline after the matchup instead.
+  lengths to hold it. The two tables reserve nothing on a one-line cell (the badge is inline
+  there); a wrapped ranked cell gives its lines the badge's 24px (18px badge, 6px gap) at the end
+  and centres the badge in it, so it never overlaps the text and stays inside the cell. Whether
+  a cell wraps is measured on the inline layout, on render and on every resize
+  (`syncBadgeWrap` and `watchBadgeWrap` in `site/modules/matchup-wrap.js`, shared with the modal
+  title). That 24px can cost a wrapped cell a third line only when its first line comes within
+  24px of the cell's width; the table's auto layout widens the column first (a few px, taken
+  from the other columns), and a third line beats a badge over the text.
 - A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the next line starts
   with "at", "@" or "vs." and holds the home side and any inline badge, so a line never ends
   with a dangling joiner and the home side never splits while it fits on one line. It applies
@@ -334,8 +343,8 @@ records only where the site settles or applies them.
   the joiner part follows its last word, or starts the next line if it does not fit there. The
   NFL weekend phone rows and map card share these builders and follow the same rule; the NFL
   and MLB tables and modals are separate code and unchanged. Matched games does not wrap as
-  built (nowrap on desktop, a max-content table that scrolls on a phone), so the rule there
-  only takes effect if that changes.
+  built (nowrap on desktop, a max-content table that scrolls on a phone), so the rule there,
+  and its centred wrapped badge, only take effect if that changes.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label
