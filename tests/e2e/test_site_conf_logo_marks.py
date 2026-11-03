@@ -41,6 +41,7 @@ async ([name, season]) => {
     season: mark.dataset.season,
     width: mark.getAttribute('width'),
     height: mark.getAttribute('height'),
+    scale: mark.style.getPropertyValue('--cf-scale'),
     src: mark.getAttribute('src'),
   };
 }
@@ -149,6 +150,7 @@ def test_mark_is_an_img_with_name_and_size(app_page: Page) -> None:
         "season": "2019",
         "width": "20",
         "height": "20",
+        "scale": "1.13",
         "src": "logos/conf/southeastern-conference-before-2024.svg",
     }
 
@@ -217,3 +219,51 @@ def test_every_era_file_loads_in_both_themes(app_page: Page) -> None:
 def test_names_without_a_logo_come_back_as_text(app_page: Page, name: str) -> None:
     r = app_page.evaluate(_MARK_JS, [name, 2019])
     assert r == {"kind": "text", "data": name, "imgs": 0}
+
+
+_INK_JS = """
+async () => {
+  const m = await import('./modules/conf-logos.js');
+  const pairs = [['American Athletic', 2026], ['ACC', 2026], ['Big 12', 2026], ['Big Ten', 2026],
+    ['Conference USA', 2019], ['Conference USA', 2026], ['Mid-American', 2026],
+    ['Mountain West', 2026], ['Pac-12', 2019], ['Pac-12', 2026], ['SEC', 2019], ['SEC', 2026],
+    ['Sun Belt', 2026]];
+  const out = [];
+  for (const [name, season] of pairs) {
+    const logo = m.conferenceLogoFor(name, season);
+    const img = new Image();
+    img.src = logo.file;
+    await img.decode();
+    // Draw at 10x the modal's 20px nominal height, so the pixel count is not dominated by
+    // anti-aliased edges, and count the opaque pixels.
+    const h = Math.round(200 * logo.scale);
+    const w = Math.round(h * img.naturalWidth / img.naturalHeight);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    const a = ctx.getImageData(0, 0, w, h).data;
+    let ink = 0;
+    for (let i = 3; i < a.length; i += 4) if (a[i] >= 128) ink += 1;
+    out.push({ file: logo.file, scale: logo.scale, ink });
+  }
+  return out;
+}
+"""
+
+
+def test_area_scales_give_every_logo_about_the_same_opaque_area(app_page: Page) -> None:
+    """Each logo's scale evens its drawn opaque area: the unclamped ones land within 10% of
+    their median, a logo clamped at 0.55 stays heavier and one clamped at 1.25 lighter."""
+    rows = app_page.evaluate(_INK_JS)
+    assert len(rows) == 13
+    free = sorted(r["ink"] for r in rows if 0.55 < r["scale"] < 1.25)
+    median = free[len(free) // 2]
+    for r in rows:
+        if r["scale"] <= 0.55:
+            assert r["ink"] > median * 0.9, r
+        elif r["scale"] >= 1.25:
+            assert r["ink"] < median * 1.1, r
+        else:
+            assert abs(r["ink"] / median - 1) <= 0.1, (r, median)

@@ -305,14 +305,25 @@ records only where the site settles or applies them.
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label
   "Both teams ranked". Its tooltip reads "Both teams ranked".
 - Conference logos: the CFB modal's Conference line reads "Conference: [logo] vs. [logo]" with
-  logos 20px high and at most 64px wide (`object-fit: contain`, so the wide ACC and C-USA
-  wordmarks shrink without squashing); the Conference filter list holds a 16px logo in a fixed
-  44px slot before each name, so names stay aligned whether or not a logo shows; the map hover
-  card's last line holds 16px logos (at most 48px wide) in the muted caption style. A
-  same-conference game shows one logo. A side with no logo (FBS Independents, FCS
-  Independents, the FCS conferences) shows its name as text ("[SEC logo] vs. Big Sky"), and the
-  logo's alt text is the conference name. Each logo has a dark variant under
-  `logos/dark/conf/`, swapped live with the theme.
+  logos 20px high nominal (sized by area, below) and at most 64px wide (`object-fit: contain`,
+  so the wide ACC and C-USA wordmarks shrink without squashing); the Conference filter list
+  holds a 16px-nominal logo in a fixed 44px slot before each name, so names stay aligned
+  whether or not a logo shows; the map hover card's last line holds 16px-nominal logos (at most
+  48px wide) in the muted caption style. A same-conference game shows one logo. A side with no
+  logo (FBS Independents, FCS Independents, the FCS conferences) shows its name as text ("[SEC
+  logo] vs. Big Sky"), and the logo's alt text is the conference name. Each logo has a dark
+  variant under `logos/dark/conf/`, swapped live with the theme.
+- Conference logos are sized by area, not by one height. Each file's `scale` in
+  `site/modules/conf-logos.js` multiplies the surface's nominal height (20px in the modal, 16px
+  in the card and the filter list), so wordmarks (ACC, Big Ten, C-USA) shrink and shields (MAC,
+  Mountain West, Pac-12) grow until each covers about the same opaque area. The rule: scale =
+  sqrt(k_ref / k), where k is the file's aspect ratio times its opaque fraction (measured once,
+  offline, at 400px high) and k_ref is the geometric mean of k over every file, clamped to
+  0.55-1.25 and rounded to 0.01. The width caps still apply (64px modal, 48px card, 44px slot).
+  The block margins add back the difference to the nominal height, so the margin box never
+  changes and no row, cell, card or title grows; a grown shield draws up to 2.5px past its
+  nominal box, top and bottom. A new or changed logo file needs its scale measured the same
+  way.
 - Eras follow the game's season: SEC 2014-2023 and 2024 on, Conference USA 2014-2022 and 2023
   on, Pac-12 2014-2025 (shield) and 2026 on; every other FBS conference has one logo. The
   filter list, which shows many seasons at once, uses the Seasons filter's last season.

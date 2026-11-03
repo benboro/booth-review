@@ -110,17 +110,24 @@ def test_only_ruled_conferences_have_more_than_one_logo() -> None:
 
 _ENTRY = (
     r"\{\s*file:\s*'logos/conf/([^']+)'\s*,\s*width:\s*(\d+)\s*,\s*height:\s*(\d+)\s*,"
-    r"\s*darkFile:\s*'logos/dark/conf/([^']+)'\s*\}"
+    r"\s*scale:\s*(\d+\.\d\d)\s*,\s*darkFile:\s*'logos/dark/conf/([^']+)'\s*\}"
 )
+SCALE_MIN, SCALE_MAX = 0.55, 1.25
 
 
 def _js_consts() -> dict[str, tuple[str, int, int, str]]:
     """Map each named entry in conf-logos.js to (file, width, height, dark_file)."""
     text = CONF_JS.read_text(encoding="utf-8")
     return {
-        m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5))
+        m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(6))
         for m in re.finditer(r"const (\w+) = " + _ENTRY, text)
     }
+
+
+def _js_scales() -> dict[str, float]:
+    """Map each logo file in conf-logos.js to its area scale."""
+    text = CONF_JS.read_text(encoding="utf-8")
+    return {m.group(1): float(m.group(4)) for m in re.finditer(_ENTRY, text)}
 
 
 def _js_eras() -> dict[str, list[tuple[int, str]]]:
@@ -147,6 +154,42 @@ def test_conf_js_entries_match_files_and_sizes() -> None:
         assert height == 20, name
         vb_w, vb_h = _view_box(CONF_DIR / file)
         assert abs(width - round(height * vb_w / vb_h)) <= 1, name
+
+
+def test_every_logo_has_a_clamped_area_scale() -> None:
+    scales = _js_scales()
+    assert sorted(scales) == sorted(p.name for p in conf_files())
+    for file, scale in scales.items():
+        assert SCALE_MIN <= scale <= SCALE_MAX, file
+
+
+def test_area_scale_shrinks_wordmarks_and_grows_shields() -> None:
+    # The wide wordmarks carry the most ink per unit of height, so they draw smallest; the
+    # shields grow. The rule itself (equal opaque area) is checked in the browser by
+    # tests/e2e/test_site_conf_logo_marks.py.
+    scales = _js_scales()
+    for file in (
+        "atlantic-coast-conference.svg",
+        "big-ten-conference.svg",
+        "conference-usa-2013-2023.svg",
+        "conference-usa-2023-present.svg",
+    ):
+        assert scales[file] < 1, file
+    for file in (
+        "mid-american-conference.svg",
+        "mountain-west-conference.svg",
+        "pac-12-conference-before-2026.svg",
+        "pac-12-conference-2026-present-official-site.svg",
+    ):
+        assert scales[file] > 1, file
+
+
+def test_area_scale_reaches_the_drawn_logo() -> None:
+    js = CONF_JS.read_text(encoding="utf-8")
+    assert "img.style.setProperty('--cf-scale', String(entry.scale));" in js
+    css = (REPO_ROOT / "site" / "style.css").read_text(encoding="utf-8")
+    assert "height: calc(var(--cf-h) * var(--cf-scale, 1));" in css
+    assert "margin-block: calc(var(--cf-h) * (1 - var(--cf-scale, 1)) / 2);" in css
 
 
 def test_conf_js_eras_match_manifest() -> None:

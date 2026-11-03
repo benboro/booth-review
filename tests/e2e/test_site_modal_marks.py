@@ -179,7 +179,8 @@ def test_conference_line_shows_both_logos_in_order(
         "#panel-body .panel-conferences img.cf-logo",
         "els => els.map((e) => e.getBoundingClientRect().height)",
     )
-    assert heights == [pytest.approx(20, abs=0.01)] * 2
+    # Sized by area: 20px nominal times each file's scale (SEC 2019 1.13, Pac-12 shield 1.25).
+    assert heights == [pytest.approx(22.6, abs=0.01), pytest.approx(25, abs=0.01)]
     assert guarded_page.evaluate(
         "[...document.querySelectorAll('#panel-body img.cf-logo')]"
         ".every((img) => img.complete && img.naturalWidth > 0)"
@@ -285,8 +286,39 @@ def test_wide_conference_logo_is_capped_without_squashing(
         }"""
     )
     assert box["w"] <= 64.01
-    assert box["h"] == pytest.approx(20, abs=0.01)
+    assert box["h"] == pytest.approx(11, abs=0.01)  # 20px x the 0.55 area scale
     assert box["fit"] == "contain"
+
+
+_LINE_H_JS = """() => {
+  const line = document.querySelector('#panel-body .panel-conferences');
+  const marks = [...line.querySelectorAll('img.cf-logo')].map((i) => {
+    const cs = getComputedStyle(i);
+    return i.getBoundingClientRect().height + parseFloat(cs.marginTop)
+      + parseFloat(cs.marginBottom);
+  });
+  return { line: line.getBoundingClientRect().height, marks,
+           title: document.querySelector('#panel-title').getBoundingClientRect().height };
+}"""
+
+
+def test_area_sized_logos_never_change_the_conference_line_height(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """D-05: grown shields and shrunk wordmarks keep a 20px margin box, so the Conference line
+    is as tall with logos as with text only."""
+    _serve(guarded_page, copy.deepcopy(fixture_raw))
+    open_app(guarded_page, "")
+    _open_panel(guarded_page, 0)
+    logos = guarded_page.evaluate(_LINE_H_JS)
+    assert logos["marks"] == [pytest.approx(20, abs=0.01)] * 2
+    _serve(guarded_page, _mutated(fixture_raw, away_conference={0: 2}, home_conference={0: 1}))
+    open_app(guarded_page, "")
+    _open_panel(guarded_page, 0)
+    text = guarded_page.evaluate(_LINE_H_JS)
+    assert text["marks"] == []
+    assert logos["line"] == pytest.approx(text["line"], abs=0.01)
+    assert logos["title"] == pytest.approx(text["title"], abs=0.01)
 
 
 def test_conference_and_network_lines_centre_and_keep_their_spaces(

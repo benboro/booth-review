@@ -7611,9 +7611,15 @@ tr.is-matched > :first-child {
   height: 25.5px;
 }
 
+/* Each logo is sized by area (conf-logos.js sets --cf-scale per file): its drawn height is the
+   surface's nominal height (--cf-h) times the scale, and the block margins add back the
+   difference, so the margin box, and with it every row, cell, card and title, stays at the
+   nominal height whatever the logo's shape. */
 .cf-logo {
+  --cf-h: 20px;
   display: inline-block;
-  height: 20px;
+  height: calc(var(--cf-h) * var(--cf-scale, 1));
+  margin-block: calc(var(--cf-h) * (1 - var(--cf-scale, 1)) / 2);
   width: auto;
   max-width: 64px;
   object-fit: contain;
@@ -7636,7 +7642,7 @@ tr.is-matched > :first-child {
 }
 
 .cf-slot .cf-logo {
-  height: 16px;
+  --cf-h: 16px;
   max-width: 44px;
 }
 
@@ -7650,7 +7656,7 @@ tr.is-matched > :first-child {
 }
 
 .chart-tooltip .cf-card-line .cf-logo {
-  height: 16px;
+  --cf-h: 16px;
   max-width: 48px;
 }
 
@@ -7691,9 +7697,9 @@ tr.is-matched > :first-child {
   margin-inline: 0.3em;
 }
 
-/* Logos are 20px high; wide wordmarks (ACC, C-USA) shrink to the 64px cap without squashing. */
+/* Logos are 20px nominal, scaled by area; wide wordmarks shrink to the 64px cap without squashing. */
 .panel-conferences .cf-logo {
-  height: 20px;
+  --cf-h: 20px;
   width: auto;
   max-width: 64px;
   object-fit: contain;

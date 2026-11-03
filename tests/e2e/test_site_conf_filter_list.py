@@ -36,6 +36,9 @@ _ROWS = """() => [...document.querySelectorAll('#conference-list label.check-row
     title: img ? img.title : null,
     src: img ? img.getAttribute('src') : null,
     imgH: ib ? ib.height : null,
+    scale: img ? Number(img.style.getPropertyValue('--cf-scale')) : null,
+    marginBox: img ? ib.height + parseFloat(getComputedStyle(img).marginTop)
+      + parseFloat(getComputedStyle(img).marginBottom) : null,
     nameLeft: name.getBoundingClientRect().left,
     rowH: l.closest('.check-item').getBoundingClientRect().height,
   };
@@ -79,7 +82,7 @@ def test_each_row_has_a_44px_slot_between_checkbox_and_name(conf_page: Page) -> 
         assert row["slotWidth"] == pytest.approx(44, abs=0.5)
 
 
-def test_logo_rows_hold_one_16px_logo_and_independents_slot_is_empty(conf_page: Page) -> None:
+def test_logo_rows_hold_one_area_sized_logo_and_independents_slot_is_empty(conf_page: Page) -> None:
     rows = _rows(conf_page)
     for name, row in rows.items():
         if name == "FBS Independents":
@@ -88,7 +91,10 @@ def test_logo_rows_hold_one_16px_logo_and_independents_slot_is_empty(conf_page: 
         assert row["imgs"] == 1
         assert row["alt"] == name
         assert row["title"] == name
-        assert row["imgH"] == pytest.approx(16, abs=0.5)
+        # Sized by area: 16px nominal times the logo's scale, in a 16px margin box.
+        assert row["imgH"] == pytest.approx(16 * row["scale"], abs=0.5)
+        assert row["marginBox"] == pytest.approx(16, abs=0.01)
+    assert rows["Big Ten"]["scale"] < 1 < rows["Pac-12"]["scale"]
 
 
 def test_names_align(conf_page: Page) -> None:

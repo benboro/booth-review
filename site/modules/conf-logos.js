@@ -10,7 +10,14 @@
  * - Logos are `<img class="cf-logo">` with alt and title set to the conference name
  *   (D-13), and swap to the generated file under logos/dark/conf/ when the theme
  *   changes (D-14).
- * - Each entry is 20px high; its width is that height scaled by the file's viewBox.
+ * - Each entry's width and height attributes give a 20px-high box, its width scaled by the
+ *   file's viewBox.
+ * - `scale` sizes each logo by area: the surface's nominal height (20px modal, 16px card and
+ *   filter list) times `scale` is its drawn height, so wordmarks shrink and shields grow until
+ *   each covers about the same opaque area. scale = sqrt(k_ref / k), clamped to 0.55..1.25 and
+ *   rounded to 0.01, where k is the file's opaque fraction (measured offline at 400px high)
+ *   times its aspect ratio and k_ref is the geometric mean of k over every file. CSS keeps the
+ *   margin box at the nominal height, so no row, cell, card or title changes height (D-05).
  *
  * Lookup goes through a Map with a has() check, never a bracket lookup on a name, so
  * "__proto__" or "constructor" can never resolve, and `src` comes only from this map.
@@ -19,24 +26,24 @@
 
 import { currentTheme, onThemeChange } from './theme.js';
 
-const AAC = { file: 'logos/conf/american-athletic-conference.svg', width: 19, height: 20, darkFile: 'logos/dark/conf/american-athletic-conference.svg' };
-const ACC = { file: 'logos/conf/atlantic-coast-conference.svg', width: 68, height: 20, darkFile: 'logos/dark/conf/atlantic-coast-conference.svg' };
-const BIG_12 = { file: 'logos/conf/big-12-conference.svg', width: 33, height: 20, darkFile: 'logos/dark/conf/big-12-conference.svg' };
-const BIG_TEN = { file: 'logos/conf/big-ten-conference.svg', width: 53, height: 20, darkFile: 'logos/dark/conf/big-ten-conference.svg' };
-const CUSA_2013 = { file: 'logos/conf/conference-usa-2013-2023.svg', width: 102, height: 20, darkFile: 'logos/dark/conf/conference-usa-2013-2023.svg' };
-const CUSA_2023 = { file: 'logos/conf/conference-usa-2023-present.svg', width: 90, height: 20, darkFile: 'logos/dark/conf/conference-usa-2023-present.svg' };
-const MAC = { file: 'logos/conf/mid-american-conference.svg', width: 22, height: 20, darkFile: 'logos/dark/conf/mid-american-conference.svg' };
-const MW = { file: 'logos/conf/mountain-west-conference.svg', width: 19, height: 20, darkFile: 'logos/dark/conf/mountain-west-conference.svg' };
-const PAC_12_SHIELD = { file: 'logos/conf/pac-12-conference-before-2026.svg', width: 16, height: 20, darkFile: 'logos/dark/conf/pac-12-conference-before-2026.svg' };
-const PAC_12_2026 = { file: 'logos/conf/pac-12-conference-2026-present-official-site.svg', width: 16, height: 20, darkFile: 'logos/dark/conf/pac-12-conference-2026-present-official-site.svg' };
-const SEC_BEFORE_2024 = { file: 'logos/conf/southeastern-conference-before-2024.svg', width: 20, height: 20, darkFile: 'logos/dark/conf/southeastern-conference-before-2024.svg' };
-const SEC_2024 = { file: 'logos/conf/southeastern-conference-2024-present.svg', width: 20, height: 20, darkFile: 'logos/dark/conf/southeastern-conference-2024-present.svg' };
-const SUN_BELT = { file: 'logos/conf/sun-belt-conference.svg', width: 31, height: 20, darkFile: 'logos/dark/conf/sun-belt-conference.svg' };
+const AAC = { file: 'logos/conf/american-athletic-conference.svg', width: 19, height: 20, scale: 1.24, darkFile: 'logos/dark/conf/american-athletic-conference.svg' };
+const ACC = { file: 'logos/conf/atlantic-coast-conference.svg', width: 68, height: 20, scale: 0.82, darkFile: 'logos/dark/conf/atlantic-coast-conference.svg' };
+const BIG_12 = { file: 'logos/conf/big-12-conference.svg', width: 33, height: 20, scale: 0.95, darkFile: 'logos/dark/conf/big-12-conference.svg' };
+const BIG_TEN = { file: 'logos/conf/big-ten-conference.svg', width: 53, height: 20, scale: 0.69, darkFile: 'logos/dark/conf/big-ten-conference.svg' };
+const CUSA_2013 = { file: 'logos/conf/conference-usa-2013-2023.svg', width: 102, height: 20, scale: 0.55, darkFile: 'logos/dark/conf/conference-usa-2013-2023.svg' };
+const CUSA_2023 = { file: 'logos/conf/conference-usa-2023-present.svg', width: 90, height: 20, scale: 0.58, darkFile: 'logos/dark/conf/conference-usa-2023-present.svg' };
+const MAC = { file: 'logos/conf/mid-american-conference.svg', width: 22, height: 20, scale: 1.14, darkFile: 'logos/dark/conf/mid-american-conference.svg' };
+const MW = { file: 'logos/conf/mountain-west-conference.svg', width: 19, height: 20, scale: 1.18, darkFile: 'logos/dark/conf/mountain-west-conference.svg' };
+const PAC_12_SHIELD = { file: 'logos/conf/pac-12-conference-before-2026.svg', width: 16, height: 20, scale: 1.25, darkFile: 'logos/dark/conf/pac-12-conference-before-2026.svg' };
+const PAC_12_2026 = { file: 'logos/conf/pac-12-conference-2026-present-official-site.svg', width: 16, height: 20, scale: 1.25, darkFile: 'logos/dark/conf/pac-12-conference-2026-present-official-site.svg' };
+const SEC_BEFORE_2024 = { file: 'logos/conf/southeastern-conference-before-2024.svg', width: 20, height: 20, scale: 1.13, darkFile: 'logos/dark/conf/southeastern-conference-before-2024.svg' };
+const SEC_2024 = { file: 'logos/conf/southeastern-conference-2024-present.svg', width: 20, height: 20, scale: 1.11, darkFile: 'logos/dark/conf/southeastern-conference-2024-present.svg' };
+const SUN_BELT = { file: 'logos/conf/sun-belt-conference.svg', width: 31, height: 20, scale: 1.25, darkFile: 'logos/dark/conf/sun-belt-conference.svg' };
 
 /**
  * CFBD conference name -> [[first season, entry], ...], oldest era first.
  * Any conference that gains a second logo needs the user's ruling (one logo for all games, or a season range per logo) before it is added here. D-10.
- * @type {Map<string, Array<[number, {file: string, width: number, height: number, darkFile: string}]>>}
+ * @type {Map<string, Array<[number, {file: string, width: number, height: number, scale: number, darkFile: string}]>>}
  */
 const ERAS = new Map([
   ['American Athletic', [[2014, AAC]]],
@@ -56,7 +63,7 @@ const ERAS = new Map([
  * A missing season gives the newest logo; a season before the first era gives the first.
  * @param {unknown} name - the CFBD conference name
  * @param {number|null|undefined} season
- * @returns {{file: string, width: number, height: number, darkFile: string}|null}
+ * @returns {{file: string, width: number, height: number, scale: number, darkFile: string}|null}
  */
 export function conferenceLogoFor(name, season) {
   const key = String(name);
@@ -112,6 +119,7 @@ export function conferenceMark(name, season) {
   img.title = label;
   img.setAttribute('width', String(entry.width));
   img.setAttribute('height', String(entry.height));
+  img.style.setProperty('--cf-scale', String(entry.scale));
   img.decoding = 'async';
   return img;
 }

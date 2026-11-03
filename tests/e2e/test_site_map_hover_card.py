@@ -757,8 +757,12 @@ async ([card, opts]) => {
          src: n.getAttribute('src'), text: n.textContent})) : null,
     lineImgs: line ? [...line.querySelectorAll('img')].map((i) => {
       const b = i.getBoundingClientRect();
-      return {w: b.width, h: b.height};
+      const cs = getComputedStyle(i);
+      return {w: b.width, h: b.height, scale: Number(i.style.getPropertyValue('--cf-scale')),
+              box: b.height + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom)};
     }) : [],
+    lineH: line ? line.getBoundingClientRect().height : null,
+    cardH: el.getBoundingClientRect().height,
     matchup: el.querySelector('.tooltip-game-matchup').textContent,
     booth: el.querySelector('.tooltip-game-booth').textContent,
     width: el.getBoundingClientRect().width,
@@ -868,8 +872,12 @@ def test_game_card_conference_line_is_last_with_era_logos(
     assert line[1] == {"tag": "span", "cls": "cf-sep", "alt": None, "src": None, "text": "vs."}
     assert line[2]["alt"] == "Pac-12"
     assert line[2]["src"].endswith("pac-12-conference-before-2026.svg")
+    # Sized by area: 16px nominal times the scale (SEC 2019 1.13, Pac-12 shield 1.25), in a
+    # 16px margin box, at most 48px wide.
+    assert [img["scale"] for img in r["lineImgs"]] == [1.13, 1.25]
     for img in r["lineImgs"]:
-        assert abs(img["h"] - 16) < 0.6
+        assert abs(img["h"] - 16 * img["scale"]) < 0.6
+        assert img["box"] == pytest.approx(16, abs=0.01)
         assert img["w"] <= 48
     assert r["matchup"] == "#20 Ironpeak @ #5 Stonebridge"
     assert r["booth"] == "★Pat Rowan · Sam Delgado"
@@ -881,6 +889,24 @@ def test_game_card_phone_keeps_open_game_last(mobile_page: Page, open_app: OpenA
     assert r["kids"][-1] == "tt-open-game"
     assert r["kids"][-2] == "cf-card-line"
     assert r["kids"][-3] == "tooltip-game-venue"
+
+
+def test_game_card_area_sized_logos_never_change_the_line_height(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    """D-05: the conference line is as tall with grown shields or shrunk wordmarks as with
+    text only, so the card never changes height."""
+    page = _desk(guarded_page, open_app)
+    text = _show_game(page, _game_card(conf={"away": "Big Sky", "home": "Southland"}))
+    assert text["lineImgs"] == []
+    for conf in (
+        {"away": "Pac-12", "home": "Mountain West", "season": 2026},
+        {"away": "Conference USA", "home": "Big Ten", "season": 2019},
+    ):
+        logos = _show_game(page, _game_card(conf=conf))
+        assert len(logos["lineImgs"]) == 2
+        assert logos["lineH"] == pytest.approx(text["lineH"], abs=0.01), conf
+        assert logos["cardH"] == pytest.approx(text["cardH"], abs=0.01), conf
 
 
 def test_game_card_same_conference_and_text_fallbacks(
