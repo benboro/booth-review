@@ -319,9 +319,22 @@ def test_compact_table_badge_follows_a_resize(compact_page: Page) -> None:
     first = _badge(compact_page, _crow("w"))
     _assert_badge_centred(first)
     compact_page.set_viewport_size({"width": 1440, "height": 900})
+    _wait_wrapped(compact_page, _crow("w"), wrapped=False)
     _assert_badge_inline(_badge(compact_page, _crow("w")))
     compact_page.set_viewport_size({"width": COMPACT_WIDTH, "height": 900})
+    _wait_wrapped(compact_page, _crow("w"), wrapped=True)
     _assert_badge_centred(_badge(compact_page, _crow("w")))
+
+
+def _wait_wrapped(page: Page, selector: str, *, wrapped: bool) -> None:
+    # The ResizeObserver re-syncs after the next layout, not within set_viewport_size; poll on
+    # a timer (not animation frames) until the cell's wrapped state settles. This raced in CI.
+    page.wait_for_function(
+        "([sel, want]) => document.querySelector(sel + ' .mu-lines')"
+        ".classList.contains('rk-wrapped') === want",
+        arg=[selector, wrapped],
+        polling=100,
+    )
 
 
 # ------------------------------------------------------------------ Matched games
