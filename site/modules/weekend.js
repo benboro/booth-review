@@ -454,9 +454,22 @@ export function boothLine(game, state) {
  * @returns {string}
  */
 export function matchupText(game) {
+  const { away, joiner, home } = matchupSides(game);
+  return `${away} ${joiner} ${home}`;
+}
+
+/**
+ * The three runs of `matchupText`, for a cell that breaks before the joiner.
+ * @param {object} game
+ * @returns {{away: string, joiner: string, home: string}}
+ */
+export function matchupSides(game) {
   const side = (name, rank) => (rank != null && game.sport !== 'nfl' ? `#${rank} ${name}` : name);
-  return `${side(game.away, game.awayRank)} ${game.neutral ? 'vs.' : '@'} `
-    + `${side(game.home, game.homeRank)}`;
+  return {
+    away: side(game.away, game.awayRank),
+    joiner: game.neutral ? 'vs.' : '@',
+    home: side(game.home, game.homeRank),
+  };
 }
 
 /**

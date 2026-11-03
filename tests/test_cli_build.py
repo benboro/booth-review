@@ -415,6 +415,25 @@ def test_accept_baseline_never_writes_a_baseline_when_site_data_fails(
     assert not (paths.processed / "telecasts.parquet").exists()
 
 
+# -- Phase 28: an FBS conference with no logo warns and never fails the build ------------------
+
+
+def test_conference_without_a_logo_warns_and_the_build_exits_0(
+    build_git_vault: DataPaths, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The fixture vault's FBS games play in "Example Conference", which has no logo."""
+    capsys.readouterr()
+    assert main(["build", "--accept-baseline", "--no-commit"]) == 0
+    captured = capsys.readouterr()
+    warning = (
+        "warning: FBS conference 'Example Conference' (season(s) 2025) has no logo in "
+        "site/modules/conf-logos.js; the site shows its name as text"
+    )
+    assert captured.err.splitlines().count(warning) == 1
+    assert warning not in captured.out
+    assert (build_git_vault.processed / "site-data.json").exists()
+
+
 # -- WR-03: an unexpected build error prints only its type -------------------------------------
 
 

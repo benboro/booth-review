@@ -13,10 +13,12 @@ import {
   mountWeekend,
 } from './weekend-view.js';
 import { makeCaretIcon } from './icons.js';
+import { isRankedMatchup, rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 import {
-  boothLine, cellState, matchupText, stripCollapsedByDefault,
+  boothLine, cellState, matchupSides, stripCollapsedByDefault,
 } from './weekend.js';
 
 function item(game, ctx, { showTime = false } = {}) {
@@ -43,7 +45,9 @@ function item(game, ctx, { showTime = false } = {}) {
   }
   const text = el('span', 'wk-item-text');
   const when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
-  const l1 = el('span', 'wk-item-l1', showTime ? `${when} ${matchupText(game)}` : matchupText(game));
+  const l1 = el('span', 'wk-item-l1');
+  const sides = matchupSides(game);
+  fillWrappingMatchup(l1, showTime ? { ...sides, away: `${when} ${sides.away}` } : sides);
   const l2 = el('span', 'wk-item-l2');
   if (line.star) {
     const star = el('span', 'wk-star', '★');
@@ -53,7 +57,16 @@ function item(game, ctx, { showTime = false } = {}) {
   const booth = el('span', 'wk-booth', line.text);
   booth.style.fontWeight = String(line.weight);
   l2.append(booth);
-  text.append(l1, l2);
+  // The matchup's own wrapper is as tall as its visible lines, so the ranked badge inside it
+  // centres on line 1, or lines 1-2 when the matchup wraps (user feedback 2026-11-03). Every
+  // row gets it, ranked or not, so the layout is the same either way.
+  const mu = el('span', 'wk-item-mu');
+  mu.append(l1);
+  if (isRankedMatchup(game)) {
+    btn.classList.add('rk-has');
+    mu.append(rankBadge({ hidden: true }));
+  }
+  text.append(mu, l2);
   btn.append(mark, text);
   btn.addEventListener('click', () => ctx.open(game, btn));
   applyPick(btn, game, ctx, ctx.rowFaded([game]));

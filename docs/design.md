@@ -135,7 +135,8 @@ records only where the site settles or applies them.
   fails on any other middle dot in site code or built pages.
 - Dates in tooltips and panels follow AP style (`Sept.`, lowercase `pm`, no dot between
   parts), and a neutral-site or head-to-head pairing writes AP's `vs.` with the period
-  (2026-11-02). View code builds the page with `createElement` and `textContent`; a test fails on
+  (2026-11-02); a matchup that wraps breaks before its "at", "@" or "vs." (Matchup marks,
+  2026-11-03). View code builds the page with `createElement` and `textContent`; a test fails on
   any `innerHTML`.
 - Where a game was played (2026-11-02): both game modals put a location line right under the
   date for any game with a venue ("AT&T Stadium, Arlington, TX", with " (neutral site)" for a
@@ -282,3 +283,112 @@ records only where the site settles or applies them.
 - NFL map mode adds a stadium-location credit to the source line (Wikipedia, CC BY-SA 4.0).
   The "stadium locations" link points at data/reference/nfl_stadium_locations.csv, whose
   source_url column cites each stadium's Wikipedia article.
+
+### Matchup marks (Phase 28)
+
+- The ranked badge marks a game where both teams carry a shipped rank (`away_rank` and
+  `home_rank` both set; the committee rankings when out, else the AP Top 25, at that week).
+  Every such game gets it, bowls and CFP games included. The rank text stays as it was; the
+  badge is added, nothing is removed.
+- Shape and colour: a classic five-point star with a Roboto 600 "R" cut out of it (a
+  pre-rendered path in `site/modules/rank-badge.js`, drawn through a mask), filled with
+  `currentColor`, so it takes the text colour of the cell, row or line it sits on. It is never
+  gold: gold is the lead-booth mark (the gold star before the crew and the `--lead-frame`), and
+  the two must read apart.
+- Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
+  28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
+  every CFB cell, ranked or not, keeps that 28px, so the same matchup and booth truncate at the
+  same place with or without the badge (NFL cells keep 8px), and
+  its badge's top is the matchup line's top, so it never rides above it;
+  the phone list rows set it 18px at the right, 6px in, centred vertically on the matchup lines
+  (line 1, or lines 1-2 when the matchup wraps, the lines the 2-line clamp shows; never the
+  booth line or the whole row, so it never sits above the first line) (user feedback
+  2026-11-03), and every CFB phone row, ranked
+  or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
+  same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
+  Matched games set it 18px inline after the matchup's last word on one line, and once the
+  matchup wraps it centres vertically on the matchup lines, as the card, the phone rows and
+  the modal title do (user decision 2026-11-03), its left edge 6px after the longest line's
+  right edge, the same gap as on one line, not at the cell's right edge (user feedback
+  2026-11-03); the map hover card draws it 25.5px at
+  the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
+  NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
+  to the title's last word on one line, so it never sits alone on a line, and once the title
+  wraps the badge moves to the right of the reserved space, 6px in from the close button, and
+  centres vertically on the title's lines, as the card does (user feedback 2026-11-03; the map
+  card is the reference). The longest-line gap rule is for table cells only. At
+  every width every CFB modal title, ranked or not, keeps
+  the badge's 36px free at the end of each line (beside the close button too, since the title
+  clears the button's float), and the badge overhangs into that space without taking inline
+  room, so a ranked title breaks its lines exactly as the same title without the badge. No
+  cell, row, card or title changes height with a badge. The rule behind all of these (user
+  decision 2026-11-03): the timeline cell, the phone row, the map card and the modal title
+  reserve the badge's space on every CFB item whether or not it shows, so identical text
+  wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
+  lengths to hold it. The two tables reserve nothing on a one-line cell (the badge is inline
+  there); a wrapped ranked cell gives its lines the badge's 24px (18px badge, 6px gap) at the end
+  and starts the badge 6px after its longest line, so it never overlaps the text and stays
+  inside the cell. Whether a cell wraps is measured on the inline layout, and the longest
+  line's right edge once the wrapped layout is final (the badge is out of flow, so placing it
+  never moves a break), on render, on every resize and when web fonts land (`syncBadgeWrap`
+  and `watchBadgeWrap` in `site/modules/matchup-wrap.js`, shared with the modal title). That 24px can cost a wrapped cell a third line only when its first line comes within
+  24px of the cell's width; the table's auto layout widens the column first (a few px, taken
+  from the other columns), and a third line beats a badge over the text.
+- A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the next line starts
+  with "at", "@" or "vs." and holds the home side and any inline badge, so a line never ends
+  with a dangling joiner and the home side never splits while it fits on one line. It applies
+  on every surface where a CFB matchup can wrap: the ESPN+ and regional table, Matched games,
+  the This weekend phone rows, the map game card and the CFB modal title. Timeline cells are one
+  truncated line and are unaffected. `site/modules/matchup-wrap.js` builds it once: plain away
+  text, a space, then the joiner, home side and inline badge in one inline-block
+  (`span.mu-part`); a rank stays on the line of the word after it (`span.mu-glue`). The copy,
+  textContent and accessible names do not change, and a matchup on one line looks exactly as
+  before. A side longer than a whole line still wraps inside itself; when the away side does,
+  the joiner part follows its last word, or starts the next line if it does not fit there. The
+  NFL weekend phone rows and map card share these builders and follow the same rule; the NFL
+  and MLB tables and modals are separate code and unchanged. Matched games does not wrap as
+  built (nowrap on desktop, a max-content table that scrolls on a phone), so the rule there,
+  and its centred wrapped badge, only take effect if that changes.
+- Accessibility: where the element's accessible name already ends with "Both teams ranked."
+  (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
+  `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label
+  "Both teams ranked". Its tooltip reads "Both teams ranked".
+- Conference logos: the CFB modal's Conference line reads "Conference: [logo] vs. [logo]" with
+  logos 20px high nominal (sized by area, below) and at most 64px wide (`object-fit: contain`,
+  so the wide ACC and C-USA wordmarks shrink without squashing); the Conference filter list
+  holds a 16px-nominal logo in a fixed 44px slot before each name, so names stay aligned
+  whether or not a logo shows; the map hover card's last line holds 16px-nominal logos (at most
+  48px wide) in the muted caption style. A same-conference game shows one logo. A side with no
+  logo (FBS Independents, FCS Independents, the FCS conferences) shows its name as text ("[SEC
+  logo] vs. Big Sky"), and the logo's alt text is the conference name. In the filter list,
+  whose label already holds the name, the logo is decorative (empty alt, aria-hidden, the
+  name kept as its hover title), so no checkbox is named twice. A logo that fails to load
+  becomes its name as text (in the filter list, an empty slot). Each logo has a dark
+  variant under `logos/dark/conf/`, swapped live with the theme.
+- Conference logos are sized by area, not by one height. Each file's `scale` in
+  `site/modules/conf-logos.js` multiplies the surface's nominal height (20px in the modal, 16px
+  in the card and the filter list), so wordmarks (ACC, Big Ten, C-USA) shrink and shields (MAC,
+  Mountain West, Pac-12) grow until each covers about the same opaque area. The rule: scale =
+  sqrt(k_ref / k), where k is the file's aspect ratio times its opaque fraction (measured once,
+  offline, at 400px high) and k_ref is the geometric mean of k over every file, clamped to
+  0.55-1.25 and rounded to 0.01. The width caps still apply (64px modal, 48px card, 44px slot).
+  The block margins add back the difference to the nominal height, so the margin box never
+  changes and no row, cell, card or title grows; a grown shield draws up to 2.5px past its
+  nominal box, top and bottom. A new or changed logo file needs its scale measured the same
+  way.
+- Eras follow the game's season: SEC 2014-2023 and 2024 on, Conference USA 2014-2022 and 2023
+  on, Pac-12 2014-2025 (shield) and 2026 on; every other FBS conference has one logo. The
+  filter list, which shows many seasons at once, uses the Seasons filter's last season.
+- A conference that gains a second logo needs the user's ruling first: one logo for every
+  game, or each logo for a range of seasons. Never assume.
+- An FBS conference with no logo (FBS Independents aside) never fails the build (user decision
+  2026-11-03): `booth-review build` prints a warning naming it and its seasons, and the site
+  shows the name as text. The build's list of names with a logo
+  (`src/booth_review/build/conf_logos.py`) mirrors the ERAS keys, and a test fails when they
+  differ, so a new logo is added in both places.
+- The CFB modal's Conference line is a flex row centred on its text, so a logo sits on the
+  text's middle; each text run keeps its own spaces.
+- The Network line is the same centred flex row in every sport's modal: CFB, NFL and MLB (whose
+  line reads "Outlet:") all build it with `networksParagraph`, so the network logo sits on the
+  middle of the "Network: " text in each, and each text run keeps its own spaces (user decision
+  2026-11-03: a deliberate change for all three sports, not a CFB-only one).

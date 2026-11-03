@@ -259,6 +259,7 @@ def test_cell_text_ranks_neutral_and_names(wk_page: Page) -> None:
     label = wk_page.locator(_cell("a")).get_attribute("aria-label")
     assert label == (
         "12:00 pm, #20 Florida at #5 Georgia, FOX. Lead booth. Joe Fowler and Pat Herbstreit."
+        " Both teams ranked."
     )
 
 

@@ -293,7 +293,9 @@ file or in the build output that produces it.
 
 Per-game conference names are the one CFBD field this contract now displays
 (`home_conference`/`away_conference` via `lookups.conferences`): the detail
-panel shows them (e.g. "Pac-12 vs Big Ten") and they drive the Conference
+panel shows them as conference logos for the game's season, with the name as
+alt text, and as the name in text where there is no logo (e.g. "[Pac-12 logo]
+vs. Big Sky", Phase 28; no schema change), and they drive the Conference
 filter (D-09, SITE-21), under CFBD's 2026-09-25 approval to use its fields
 in the interactive chart. `home_classification`/`away_classification`, the
 raw CFBD `playoff` object, the per-game raw `venue` string, and win probability still never ship —

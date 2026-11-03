@@ -76,7 +76,9 @@ _SITE_DATA_SHA256 = "534196a957ee24f64259a6cb693eccf35bd29c0dd4f0e2c8015e4edd8e3
 # Re-pinned at Phase 26 Plan 10 (sign-off): the freshness line binds "Week" to its number and the
 # last two words with no-break spaces.
 # Re-pinned at the Phase 27 review (2026-11-01, WR-05): the "Of which Awful Announcing" column.
-_COVERAGE_SHA256 = "3bccea98ca1ced27ad13a8eddb8bfda3635fe05ebda934221c037acbf0a32f86"
+# Re-pinned at Phase 28 Plan 06: the footer trademark line names conference logos too
+# (probe: the previous pages.py reproduces the old digest, so only that sentence moved it).
+_COVERAGE_SHA256 = "1d3cfc66d673c021045d2d225b89daa91999bb4698e5de461f761eb2a9244ffa"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 13 Plan 05: Plotly partial bundle src and SRI.
@@ -109,7 +111,9 @@ _COVERAGE_SHA256 = "3bccea98ca1ced27ad13a8eddb8bfda3635fe05ebda934221c037acbf0a3
 # Re-pinned at Phase 26 Plan 10 (sign-off): the footer freshness line takes no-break spaces.
 # Re-pinned at the Phase 27 review (2026-11-01, WR-05): contract 2.8.0 moves the index only
 # through its site-data cache-bust version (cec8bf26b5 -> 534196a957, the one changed line).
-_INDEX_PRE_PHASE_SHA256 = "9cc2157925ab2ecec8a987eb41af060c6f18418eac40df682660891de61a3ea0"
+# Re-pinned at Phase 28 Plan 06: the footer trademark line names conference logos too
+# (probe: the previous pages.py reproduces the old digest, so only that sentence moved it).
+_INDEX_PRE_PHASE_SHA256 = "d4bb70ab5f3508dd8c6bd9772db86ad36992097e97f28572b8164188121fc066"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

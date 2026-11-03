@@ -2134,9 +2134,10 @@ input[type="checkbox"] {
   flex: 1;
 }
 
-/* Room for the Only button beside the name and count (plan 04.2-10). */
+/* Room for the Only button beside the name and count (plan 04.2-10), and for the 44px
+   logo slot (Phase 28) so "FBS Independents" stays on one line. */
 #pop-conference {
-  width: 330px;
+  width: 380px;
 }
 
 /* D-28: the Networks popover fits its visible rows. The count column is fixed so a count
@@ -7548,4 +7549,255 @@ tr.is-matched > :first-child {
   .wk-map-key {
     margin-bottom: var(--space-md);
   }
+}
+
+/* Phase 28 matchup marks: the ranked badge (a star with an R cut out, currentColor, never gold)
+   sits in reserved padding so it never shifts layout; conference logos follow the sketch 007
+   sizes. The modal and Matched games rules live with their own modules. */
+.rk-badge {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+
+.rk-badge svg {
+  display: block;
+  height: 100%;
+  width: auto;
+  overflow: visible;
+}
+
+/* Every CFB cell, ranked or not, keeps the badge's 28px at its right (user decision
+   2026-11-03, "reserve badge space everywhere"): the cell is fixed height and truncates on one
+   line, so without it the same matchup or booth would cut off earlier on a ranked cell. NFL
+   cells never show the badge and keep 8px. */
+.wk-root[data-sport="cfb"] .wk-cell,
+.wk-cell.rk-has {
+  padding-right: 28px;
+}
+
+.wk-cell .rk-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  height: 18px;
+}
+
+/* Every CFB phone row, ranked or not, keeps the badge's 28px at its right (user decision
+   2026-11-03, "reserve badge space everywhere"), so the same matchup and booth text wrap and
+   clamp at the same place with or without the badge. NFL rows never show it and keep 16px. */
+.wk-root[data-sport="cfb"] .wk-item,
+.wk-item.rk-has {
+  position: relative;
+  padding-right: 28px;
+}
+
+/* The phone row's badge centres on the matchup lines (user feedback 2026-11-03), line 1 or
+   lines 1-2 when the matchup wraps, never the booth line or the whole row: the matchup's own
+   wrapper (.wk-item-mu) is its positioning context, and that wrapper is exactly as tall as the
+   lines the 2-line clamp shows. Its right edge is the row's content edge, so right: -22px puts
+   the badge 6px in from the row's edge, inside the reserved 28px. */
+.wk-item-mu {
+  position: relative;
+  min-width: 0;
+}
+
+.wk-item-mu .rk-badge {
+  position: absolute;
+  top: 50%;
+  right: -22px;
+  height: 18px;
+  transform: translateY(-50%);
+}
+
+/* A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the joiner, the
+   home side and an inline badge form one inline-block after the plain away text, so the space
+   before the joiner is the only break between the sides, and a home part longer than its line
+   still wraps inside itself. A rank stays on the line of the word after it. Built by
+   matchup-wrap.js for the two tables, the phone rows, the map card and the modal title. */
+.mu-part {
+  display: inline-block;
+}
+
+.mu-glue {
+  white-space: nowrap;
+}
+
+.wk-c-game .rk-badge {
+  height: 18px;
+  vertical-align: middle;
+  margin-left: 6px;
+  /* middle centres on the x-height and drew the star low beside the capitals and figures;
+     a relative nudge lifts it without touching the line box. */
+  position: relative;
+  top: -2px;
+}
+
+/* Every CFB game card, ranked or not (rk-slot), keeps the badge's padding (user decision
+   2026-11-03, "reserve badge space everywhere"), so the same text wraps at the same place with
+   or without the badge. The other tooltips drop both classes and keep their 16px. */
+.chart-tooltip.rk-slot,
+.chart-tooltip.rk-has {
+  padding-right: 43.5px;
+}
+
+.chart-tooltip .rk-badge {
+  position: absolute;
+  top: 13.3px;
+  right: 10px;
+  height: 25.5px;
+}
+
+/* Each logo is sized by area (conf-logos.js sets --cf-scale per file): its drawn height is the
+   surface's nominal height (--cf-h) times the scale, and the block margins add back the
+   difference, so the margin box, and with it every row, cell, card and title, stays at the
+   nominal height whatever the logo's shape. These defaults (20px nominal, 64px cap, contain so
+   wide wordmarks shrink without squashing) are the modal Conference line's; the filter slot
+   and the card override them below. */
+.cf-logo {
+  --cf-h: 20px;
+  display: inline-block;
+  height: calc(var(--cf-h) * var(--cf-scale, 1));
+  margin-block: calc(var(--cf-h) * (1 - var(--cf-scale, 1)) / 2);
+  width: auto;
+  max-width: 64px;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.cf-sep {
+  color: var(--muted);
+}
+
+.cf-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  /* The row's 4px gap left the slot-wide wordmarks (ACC, Big Ten, C-USA) touching the checkbox
+     and the name; 4px more each side gives them 8px, as the sign-off render showed. */
+  margin-inline: 4px;
+}
+
+.cf-slot .cf-logo {
+  --cf-h: 16px;
+  max-width: 44px;
+}
+
+.chart-tooltip .cf-card-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.chart-tooltip .cf-card-line .cf-logo {
+  --cf-h: 16px;
+  max-width: 48px;
+}
+
+/* Phase 28 modal and Matched games marks (sketch 008). The badge ends the modal title, inline on
+   its own line, and never changes the title's height; the Conference and Network lines centre
+   their marks on the text with flex (no gap), and each text run keeps its own spaces. */
+/* The badge sits 5px below the baseline (sketch 006's vertical-align: -5px), drawn there by a
+   -5px bottom margin on a baseline-aligned box, and its top is pulled in by a negative margin:
+   an inline block's margin box sets the line height, so the title stays exactly as tall while
+   the badge draws in the sketched place. */
+#panel-title .rk-badge {
+  height: 26px;
+  vertical-align: baseline;
+  margin: -6px -36px -5px 10px;
+}
+
+#panel-title .rk-glue {
+  white-space: nowrap;
+}
+
+/* Every width (review WR-05, extended by the user's 2026-11-03 "reserve badge space
+   everywhere"): every CFB modal title, ranked or not, keeps 36px (the badge's 10px gap and
+   26px width) free at the end of each line, and the badge takes no inline room of its own (its
+   -36px end margin above cancels its width and gap), so it overhangs into that space after the
+   last word. Line breaks are then the same with and without the badge, and a ranked title
+   never gains a line. flow-root keeps the title's box clear of the floated close button, so
+   the reserved space on the lines beside the x is free too, rather than under the button. */
+#panel-title {
+  position: relative;
+  display: flow-root;
+  padding-inline-end: 36px;
+}
+
+/* A wrapped title (user feedback 2026-11-03; panel.js sets rk-wrapped from the measured line
+   count) moves the badge into the reserved 36px at the right and centres it on the title's
+   lines, as the map card does; on one line it stays glued to the last word. The title has no
+   block padding, so 50% of its box is the middle of its lines. Out of flow either way, so the
+   line breaks and the height do not change. The longest-line gap is a table-only rule (user,
+   2026-11-03); the title keeps its right-edge placement. */
+#panel-title.rk-wrapped .rk-badge {
+  position: absolute;
+  top: 50%;
+  right: 6px; /* a gap from the close button; 26px badge + 6px stays inside the 36px */
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.panel-conferences,
+.panel-networks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.panel-mark-text {
+  white-space: pre;
+}
+
+.cf-line {
+  display: inline-flex;
+  align-items: center;
+}
+
+.cf-line .cf-sep {
+  margin-inline: 0.3em;
+}
+
+.games-table td.matchup .rk-badge {
+  height: 18px;
+  vertical-align: middle;
+  margin-left: 6px;
+  /* middle centres on the x-height and drew the star low beside the capitals and figures;
+     a relative nudge lifts it without touching the line box. */
+  position: relative;
+  top: -2px;
+}
+
+/* The two tables' matchup cells hold their lines in one block (matchup-wrap.js
+   fillTableMatchup), exactly as tall as the lines, so it is the badge's reference whatever the
+   row's other cells do. On one line the badge stays inline after the last word. A wrapped
+   ranked cell (user decision 2026-11-03, the map card as reference; matchup-wrap.js sets
+   rk-wrapped from the inline layout's line count, on render and on every resize) gives its
+   lines the badge's 24px (18px badge, 6px gap) at the end and centres the badge on the lines,
+   its left edge 6px after the longest line's right edge (--rk-line-end, measured by
+   syncBadgeWrap once the class is on; user feedback 2026-11-03: the same gap as one line, not
+   the cell's right edge). The longest line ends inside the content box, so the badge never
+   overlaps the text and stays inside the 24px. Unwrapped cells reserve nothing (the user's
+   earlier choice for the tables). */
+.mu-lines {
+  display: block;
+}
+
+.mu-lines.rk-wrapped {
+  position: relative;
+  padding-inline-end: 24px;
+}
+
+.wk-c-game .mu-lines.rk-wrapped .rk-badge,
+.games-table td.matchup .mu-lines.rk-wrapped .rk-badge {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--rk-line-end, calc(100% - 24px)) + 6px);
+  margin: 0;
+  transform: translateY(-50%);
 }

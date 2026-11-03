@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 import polars as pl
 import pytest
+from test_site_conf_logos import FBS_CONFERENCES, _js_eras
 
 from booth_review.build import site_data as site_data_module
 from booth_review.build.booths import BOOTH_TIERS_SCHEMA
@@ -953,6 +954,115 @@ def test_conferences_lookup_sorted_and_is_fbs_from_classification(build_referenc
     assert by_name["Alpha Conference"] is True
     assert by_name["Zulu Conference"] is True
     assert by_name["Echo Conference"] is False
+
+
+def test_every_fbs_conference_the_build_emits_has_a_logo_era(build_reference: Path) -> None:
+    """Phase 28 review LOW: the build passes CFBD's conference names through unchanged and has
+    no list of its own, so this feeds it every FBS name CFBD uses for 2014-2026
+    (`FBS_CONFERENCES` in test_site_conf_logos.py, checked against a real build on
+    2026-11-03) on synthetic games, and checks that every conference the build then flags
+    FBS, other than FBS Independents (no logo, D-11), is a key of `ERAS` in conf-logos.js. A
+    name the build rewrote, or a conference missing from ERAS, would show as text only."""
+    names = [*sorted(FBS_CONFERENCES), "FBS Independents"]
+    games = []
+    telecasts = []
+    for k, name in enumerate(names):
+        game_id = 100 + k
+        day = date(2024, 9, 14 + k)
+        games.append(
+            _game_row(
+                game_id=game_id,
+                date_et=day,
+                home_id=1000 + k,
+                home_team=f"Home {k}",
+                home_conference=name,
+                away_id=2000 + k,
+                away_team=f"Away {k}",
+                away_classification="fcs",
+                away_conference="Fixture FCS Conference",
+            )
+        )
+        telecasts.append(
+            _telecast_row(
+                telecast_id=f"{game_id}-net-a",
+                game_id=game_id,
+                date_et=day,
+                headline_claim_id=f"claim-{game_id}",
+                rr_telecast_ids=[f"cfb-example-{game_id}"],
+                rr_record_urls=[f"https://example.com/r{game_id}"],
+            )
+        )
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    conferences = _site(tables, build_reference)["lookups"]["conferences"]
+    fbs = {c["name"] for c in conferences if c["is_fbs"]}
+    assert fbs == set(names)
+    missing = sorted(fbs - {"FBS Independents"} - set(_js_eras()))
+    assert missing == []
+
+
+def test_fbs_conference_without_a_logo_is_reported_and_the_build_still_succeeds(
+    build_reference: Path,
+) -> None:
+    """Phase 28 (user decision 2026-11-03): an FBS conference with no logo entry is handed back
+    with its seasons for a build warning; known names, FBS Independents and conferences only
+    FCS teams play in are not, and the build still returns valid site data."""
+    sides = [
+        ("New League", "fbs", "SEC", "fbs", 2024),
+        ("New League", "fbs", "Big Sky", "fcs", 2025),
+        ("FBS Independents", "fbs", "Unlisted FCS League", "fcs", 2024),
+        ("Sun Belt", "fbs", "Second League", "fbs", 2023),
+    ]
+    games = []
+    telecasts = []
+    for k, (home_conf, home_class, away_conf, away_class, season) in enumerate(sides):
+        game_id = 300 + k
+        day = date(season, 9, 14 + k)
+        games.append(
+            _game_row(
+                game_id=game_id,
+                season=season,
+                date_et=day,
+                home_id=3000 + k,
+                home_team=f"Home {k}",
+                home_classification=home_class,
+                home_conference=home_conf,
+                away_id=4000 + k,
+                away_team=f"Away {k}",
+                away_classification=away_class,
+                away_conference=away_conf,
+            )
+        )
+        telecasts.append(
+            _telecast_row(
+                telecast_id=f"{game_id}-net-a",
+                game_id=game_id,
+                season=season,
+                date_et=day,
+                headline_claim_id=f"claim-{game_id}",
+                rr_telecast_ids=[f"cfb-example-{game_id}"],
+                rr_record_urls=[f"https://example.com/r{game_id}"],
+            )
+        )
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    gaps: list[tuple[str, tuple[int, ...]]] = []
+    site = build_site_data(
+        tables, build_coverage(tables), build_reference, _GENERATED_AT, logo_gaps=gaps
+    )
+    assert gaps == [("New League", (2024, 2025)), ("Second League", (2023,))]
+    names = {c.name for c in site.lookups.conferences}
+    assert {"New League", "Second League", "Big Sky", "Unlisted FCS League"} <= names
 
 
 def test_same_team_different_conference_across_seasons_gets_different_index(

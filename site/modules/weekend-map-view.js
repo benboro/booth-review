@@ -249,9 +249,13 @@ function createMount(host) {
     showGameTooltip(
       {
         matchup: hit.lines.matchup,
+        matchupSides: hit.lines.matchupSides,
         booth: hit.lines.booth,
         kickoff: hit.lines.kickoff,
         venue: hit.lines.venue,
+        ranked: hit.lines.ranked,
+        rankSlot: hit.lines.rankSlot,
+        conf: hit.lines.conf,
         family: hit.d.family,
       },
       {

@@ -102,7 +102,7 @@ def test_footer_html_has_credit_line_once_and_nav_and_credit_links() -> None:
     ):
         assert f'href="{href}"' in footer
 
-    assert plain.count("Network logos are trademarks of their owners, shown only to identify") == 1
+    assert plain.count("Network and conference logos are trademarks of their owners") == 1
     assert plain.count("they are not covered by this site's MIT license.") == 1
     assert plain.count("used under the SIL Open Font License 1.1.") == 1
     assert footer.count('class="trademark-line"') == 1
@@ -462,7 +462,9 @@ def test_render_methodology_resolves_md_links_against_docs(
 # fill counts toward the coverage match rate, as an ESPN Press Room fill does, and the build
 # check also counts 506's own matches (probe: the previous methodology.md reproduces the old
 # digest, so only those sentences moved it).
-_METHODOLOGY_FLAG_OFF_SHA256 = "c13c80e945695560936afa459beefd371930bbaa541129252ced848421c80ecc"
+# Re-pinned at Phase 28 Plan 06: the footer trademark line names conference logos too
+# (probe: the previous pages.py reproduces the old digest, so only that sentence moved it).
+_METHODOLOGY_FLAG_OFF_SHA256 = "ac7f2b2d3977a0d1eb5dbf486e56b4a1219aef7d2f65fc345d4078184ce9a6be"
 
 _NFL_ANCHORS = (
     "nfl-special-games",

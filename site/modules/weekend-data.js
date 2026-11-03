@@ -150,6 +150,11 @@ function mainName(obj, i, role) {
   return null;
 }
 
+/** A conference's display name from its lookup index; null for no index or an unknown one. */
+function conferenceName(obj, idx) {
+  return idx == null ? null : (obj.lookups.conferences?.[idx]?.name ?? null);
+}
+
 function weekendGame(data, obj, block, i, week, weekend) {
   const t = obj.t;
   const netIdx = t.network[i];
@@ -184,6 +189,9 @@ function weekendGame(data, obj, block, i, week, weekend) {
     past,
     scored,
     placeIdx,
+    season: t.season[i],
+    awayConference: conferenceName(obj, t.away_conference?.[i]),
+    homeConference: conferenceName(obj, t.home_conference?.[i]),
     venue: placeIdx == null ? null : (obj.lookups.venues?.[placeIdx] ?? null),
   };
 }

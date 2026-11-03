@@ -56,7 +56,8 @@ def _display(page: Page, selector: str) -> str:
 
 
 _TRADEMARK_LINE = (
-    "Network logos are trademarks of their owners, shown only to identify each network. "
+    "Network and conference logos are trademarks of their owners, "
+    "shown only to identify each network or conference. "
     "Their use does not imply endorsement, and they are not covered by this site's MIT license."
 )
 

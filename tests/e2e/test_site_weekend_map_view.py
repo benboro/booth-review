@@ -291,7 +291,8 @@ def test_desktop_hover_card_and_click(map_page: Page) -> None:
     card = map_page.evaluate(
         """() => {
           const t = document.getElementById('chart-tooltip');
-          return { text: t.innerText, button: !!t.querySelector('.tt-open-game') };
+          return { text: t.innerText, button: !!t.querySelector('.tt-open-game'),
+                   slot: t.classList.contains('rk-slot'), pad: getComputedStyle(t).paddingRight };
         }"""
     )
     assert "Away a @ Home a" in card["text"]
@@ -299,6 +300,9 @@ def test_desktop_hover_card_and_click(map_page: Page) -> None:
     assert "12:00 pm ET, FOX" in card["text"]
     assert "Sanford Stadium" in card["text"]
     assert card["button"] is False
+    # An unranked CFB card still keeps the badge's padding (reserve badge space everywhere).
+    assert card["slot"] is True
+    assert card["pad"] == "43.5px"
     map_page.mouse.click(at["x"], at["y"])
     opened = map_page.evaluate("() => window.__wm.opened")
     assert opened == [["a", "wview:map"]]

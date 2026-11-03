@@ -308,7 +308,8 @@ def test_footer_carries_the_logo_trademark_line(guarded_page: Page, open_app: Op
     open_app(guarded_page, "")
     line = re.sub(r"\s+", " ", guarded_page.locator("footer p.trademark-line").inner_text()).strip()
     assert line == (
-        "Network logos are trademarks of their owners, shown only to identify each network. "
+        "Network and conference logos are trademarks of their owners, "
+        "shown only to identify each network or conference. "
         "Their use does not imply endorsement, and they are not covered by this site's MIT license."
     )
 

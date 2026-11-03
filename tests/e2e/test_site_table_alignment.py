@@ -242,12 +242,20 @@ def test_mlb_count_line_matches_the_cfb_count(
     assert got["line"] == got["cfb"]
 
 
+# Counts the text's lines only: the ranked badge (Phase 28) is a taller inline box drawn 2px
+# above the text's centre, so its own rect top is not a second line.
 _MATCHUP_LINES_JS = """(scope) => [...document.querySelectorAll(scope + ' td.matchup')]
   .map((td) => {
   const target = td.querySelector('button') ?? td;
-  const r = document.createRange();
-  r.selectNodeContents(target);
-  return [target.textContent, new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size];
+  const tops = new Set();
+  const walk = document.createTreeWalker(target, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge')) continue;
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    for (const x of r.getClientRects()) tops.add(Math.round(x.top));
+  }
+  return [target.textContent, tops.size];
 })"""
 
 

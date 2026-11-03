@@ -31,7 +31,10 @@ import {
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
 import { networkMark, networkMarks, sortNetworks } from './network.js';
+import { conferenceMark } from './conf-logos.js';
 import { crewBox } from './panel-parts.js';
+import { rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { apKickoff } from './weekend.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
@@ -342,6 +345,7 @@ export function showTextTooltip(
     }
     return node;
   });
+  el.classList.remove('rk-has', 'rk-slot');
   el.replaceChildren(...children);
   el.style.borderColor = borderColor;
   delete el.dataset.family;
@@ -366,6 +370,7 @@ export function showTextTooltip(
  */
 export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
+  el.classList.remove('rk-has', 'rk-slot');
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   delete el.dataset.kind;
   delete el.dataset.hoverable;
@@ -374,9 +379,12 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
   placeTooltip(el, clientX, clientY);
 }
 
-/** Hides the tooltip (a no-op before the first `showTooltip` call). */
+/** Hides the tooltip (a no-op before the first `showTooltip` call). It also drops the game
+ * card's badge classes, so a hidden card never leaves its reserved padding on the element. */
 export function hideTooltip() {
-  if (tooltipEl) tooltipEl.hidden = true;
+  if (!tooltipEl) return;
+  tooltipEl.hidden = true;
+  tooltipEl.classList.remove('rk-has', 'rk-slot');
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -484,6 +492,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   }
   children.push(text('p', 'tooltip-hint', hint));
 
+  el.classList.remove('rk-has', 'rk-slot');
   el.replaceChildren(...children);
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
   delete el.dataset.family;
@@ -494,12 +503,43 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
 }
 
 /**
+ * The hover card's conference line (Phase 28, D-11 to D-13): each side's logo for the game's
+ * season, or its name as muted text, with "vs." between two sides and one mark for a
+ * same-conference game. A side with no conference reads "Not recorded" when the other is set;
+ * null when neither is. Names enter only through conferenceMark and text nodes.
+ * @param {{away: string|null, home: string|null, season: number|null}|undefined} conf
+ * @returns {HTMLDivElement|null}
+ */
+function cardConferenceLine(conf) {
+  if (!conf || (conf.away == null && conf.home == null)) return null;
+  const mark = (name) => (name == null
+    ? document.createTextNode('Not recorded')
+    : conferenceMark(name, conf.season));
+  const line = document.createElement('div');
+  line.className = 'cf-card-line';
+  line.append(mark(conf.away));
+  if (conf.away !== conf.home) {
+    const sep = document.createElement('span');
+    sep.className = 'cf-sep';
+    sep.textContent = 'vs.';
+    line.append(sep, mark(conf.home));
+  }
+  return line;
+}
+
+/**
  * Shows the weekend map's game card (Phase 24 D-04): matchup, booth, kickoff and network, venue.
  * On a phone it also carries the one 44px "Open game" button and takes pointer events; it opens
  * above the tapped mark so it never covers it, kept inside `within` (the map box's client
  * rect) when given, so it never covers the controls above the map.
  * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
- *   kickoff: string, venue: string, family: string}} card
+ *   kickoff: string, venue: string, family: string, ranked?: boolean, rankSlot?: boolean,
+ *   conf?: {away: string|null, home: string|null, season: number|null},
+ *   matchupSides?: {away: string, joiner: string, home: string}}} card
+ *   `ranked` adds the badge at the top right (Phase 28, D-01); `rankSlot` (every CFB card)
+ *   keeps the badge's padding even without it, so the same text wraps the same ranked or not;
+ *   `conf` adds the conference line under the venue; `matchupSides` lets the matchup line
+ *   break before its joiner.
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
  *   onOpen?: () => void, within?: {top: number, bottom: number}}} opts
  */
@@ -525,12 +565,20 @@ export function showGameTooltip(
   boothText.style.fontWeight = String(card.booth.weight ?? 600);
   boothLine.append(boothText);
 
+  const matchup = text('strong', 'tooltip-title tooltip-game-matchup', card.matchup);
+  // A wrapping matchup breaks before its joiner (2026-11-03); same text, same textContent.
+  if (card.matchupSides) fillWrappingMatchup(matchup, card.matchupSides);
   const children = [
-    text('strong', 'tooltip-title tooltip-game-matchup', card.matchup),
+    matchup,
     boothLine,
     text('div', 'tooltip-game-kickoff', card.kickoff),
     text('div', 'tooltip-game-venue', card.venue),
   ];
+  // The badge is placed absolutely at the top right; in the DOM it follows the matchup so
+  // the card reads "matchup, Both teams ranked". The conference line stays last (D-13).
+  if (card.ranked) children.splice(1, 0, rankBadge());
+  const confLine = cardConferenceLine(card.conf);
+  if (confLine) children.push(confLine);
   if (phone) {
     const open = text('button', 'tt-open-game', 'Open game');
     open.type = 'button';
@@ -539,6 +587,8 @@ export function showGameTooltip(
   }
 
   el.replaceChildren(...children);
+  el.classList.toggle('rk-has', Boolean(card.ranked));
+  el.classList.toggle('rk-slot', Boolean(card.ranked || card.rankSlot));
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.family] ?? MAP_FAMILY_COLORS[theme].other;
   delete el.dataset.family;
   delete el.dataset.hoverable;
