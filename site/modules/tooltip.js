@@ -506,7 +506,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
  * @param {{away: string|null, home: string|null, season: number|null}|undefined} conf
  * @returns {HTMLDivElement|null}
  */
-function conferenceLine(conf) {
+function cardConferenceLine(conf) {
   if (!conf || (conf.away == null && conf.home == null)) return null;
   const mark = (name) => (name == null
     ? document.createTextNode('Not recorded')
@@ -567,7 +567,7 @@ export function showGameTooltip(
   // The badge is placed absolutely at the top right; in the DOM it follows the matchup so
   // the card reads "matchup, Both teams ranked". The conference line stays last (D-13).
   if (card.ranked) children.splice(1, 0, rankBadge());
-  const confLine = conferenceLine(card.conf);
+  const confLine = cardConferenceLine(card.conf);
   if (confLine) children.push(confLine);
   if (phone) {
     const open = text('button', 'tt-open-game', 'Open game');
