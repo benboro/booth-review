@@ -252,6 +252,8 @@ function createMount(host) {
         booth: hit.lines.booth,
         kickoff: hit.lines.kickoff,
         venue: hit.lines.venue,
+        ranked: hit.lines.ranked,
+        conf: hit.lines.conf,
         family: hit.d.family,
       },
       {

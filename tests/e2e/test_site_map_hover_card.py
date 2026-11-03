@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from conftest import weekend_map_raw
 from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
@@ -722,3 +723,299 @@ def test_hit_trace_draws_nothing_visible(guarded_page: Page, open_app: OpenApp) 
     )
     transparent = [f for f in got["twins"] if all(c == "clear" for c in f)]
     assert transparent, got
+
+
+# ---------------------------------------------------------------- Phase 28 game card marks
+
+_GAME_CARD_JS = """
+async ([card, opts]) => {
+  const t = await import('./modules/tooltip.js');
+  t.showGameTooltip(card, opts);
+  const el = document.getElementById('chart-tooltip');
+  const textBox = (node) => {
+    if (!node) return null;
+    const r = document.createRange();
+    r.selectNodeContents(node);
+    const b = r.getBoundingClientRect();
+    return {left: b.left, right: b.right, top: b.top, bottom: b.bottom};
+  };
+  const box = (node) => {
+    if (!node) return null;
+    const b = node.getBoundingClientRect();
+    return {left: b.left, right: b.right, top: b.top, bottom: b.bottom};
+  };
+  const line = el.querySelector('.cf-card-line');
+  return {
+    rkHas: el.classList.contains('rk-has'),
+    badges: el.querySelectorAll('.rk-badge').length,
+    role: el.querySelector('.rk-badge svg')?.getAttribute('role') ?? null,
+    label: el.querySelector('.rk-badge svg')?.getAttribute('aria-label') ?? null,
+    kids: [...el.children].map((c) => c.className),
+    line: line ? [...line.childNodes].map((n) => (n.nodeType === 3
+      ? {text: n.textContent}
+      : {tag: n.tagName.toLowerCase(), cls: n.className, alt: n.getAttribute('alt'),
+         src: n.getAttribute('src'), text: n.textContent})) : null,
+    lineImgs: line ? [...line.querySelectorAll('img')].map((i) => {
+      const b = i.getBoundingClientRect();
+      return {w: b.width, h: b.height};
+    }) : [],
+    matchup: el.querySelector('.tooltip-game-matchup').textContent,
+    booth: el.querySelector('.tooltip-game-booth').textContent,
+    width: el.getBoundingClientRect().width,
+    badge: box(el.querySelector('.rk-badge')),
+    matchupText: textBox(el.querySelector('.tooltip-game-matchup')),
+    boothText: textBox(el.querySelector('.tooltip-game-booth')),
+    bold: el.querySelectorAll('b').length,
+  };
+}
+"""
+
+_OTHER_TIP_JS = """
+async (which) => {
+  const t = await import('./modules/tooltip.js');
+  const opts = {theme: 'light', clientX: 100, clientY: 100};
+  if (which === 'venue') {
+    t.showVenueTooltip({title: 'V', leader: 'fox', slices: [{family: 'fox', games: 1}],
+      rows: [{family: 'fox', label: 'FOX', games: 1, viewers: 1000000}],
+      hasMissingViewers: false, subjectLines: []}, {...opts, hint: 'h'});
+  } else if (which === 'text') {
+    t.showTextTooltip([{text: 'Title', kind: 'title'}], {...opts, borderColor: '#000'});
+  } else {
+    t.showTooltip(window.__testHooks.data, 0, {...opts, axis: 'spread', selected: new Set()});
+  }
+  const el = document.getElementById('chart-tooltip');
+  return {rkHas: el.classList.contains('rk-has'), badges: el.querySelectorAll('.rk-badge').length,
+    padRight: getComputedStyle(el).paddingRight};
+}
+"""
+
+
+def _game_card(**over: Any) -> dict[str, Any]:
+    card: dict[str, Any] = {
+        "matchup": "#20 Ironpeak @ #5 Stonebridge",
+        "booth": {"star": True, "text": "Pat Rowan · Sam Delgado", "weight": 600},
+        "kickoff": "7:30 pm ET, Alpha Sports",
+        "venue": "Stonebridge Stadium, Pasadena, CA",
+        "family": "disney",
+        "ranked": False,
+        "conf": {"away": "SEC", "home": "Pac-12", "season": 2019},
+    }
+    card.update(over)
+    return card
+
+
+def _show_game(page: Page, card: dict[str, Any], **opts: Any) -> dict[str, Any]:
+    full: dict[str, Any] = {"theme": "light", "clientX": 200, "clientY": 200}
+    full.update(opts)
+    result: dict[str, Any] = page.evaluate(_GAME_CARD_JS, [card, full])
+    return result
+
+
+def _desk(page: Page, open_app: OpenApp) -> Page:
+    page.set_viewport_size({"width": 1440, "height": 900})
+    open_app(page, "")
+    return page
+
+
+def test_game_card_badge_only_for_a_ranked_card(guarded_page: Page, open_app: OpenApp) -> None:
+    page = _desk(guarded_page, open_app)
+    r = _show_game(page, _game_card(ranked=True))
+    assert r["rkHas"] is True
+    assert r["badges"] == 1
+    assert r["role"] == "img"
+    assert r["label"] == "Both teams ranked"
+    plain = _show_game(page, _game_card(ranked=False))
+    assert plain["rkHas"] is False
+    assert plain["badges"] == 0
+
+
+def test_game_card_badge_clears_the_text_boxes(guarded_page: Page, open_app: OpenApp) -> None:
+    page = _desk(guarded_page, open_app)
+    long = "#20 Ironpeak Polytechnic Institute @ #5 Stonebridge State University"
+    r = _show_game(page, _game_card(ranked=True, matchup=long))
+    assert r["width"] <= 320
+    b = r["badge"]
+    assert abs((b["bottom"] - b["top"]) - 25.5) < 0.6
+    for text in (r["matchupText"], r["boothText"]):
+        overlap_x = text["left"] < b["right"] and b["left"] < text["right"]
+        overlap_y = text["top"] < b["bottom"] and b["top"] < text["bottom"]
+        assert not (overlap_x and overlap_y)
+
+
+@pytest.mark.parametrize("which", ["venue", "text", "chart"])
+def test_other_tooltips_drop_the_ranked_padding(
+    guarded_page: Page, open_app: OpenApp, which: str
+) -> None:
+    page = _desk(guarded_page, open_app)
+    assert _show_game(page, _game_card(ranked=True))["rkHas"] is True
+    r = page.evaluate(_OTHER_TIP_JS, which)
+    assert r["rkHas"] is False
+    assert r["badges"] == 0
+    assert r["padRight"] != "43.5px"
+
+
+def test_game_card_conference_line_is_last_with_era_logos(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    page = _desk(guarded_page, open_app)
+    r = _show_game(page, _game_card())
+    assert r["kids"][-1] == "cf-card-line"
+    assert r["kids"][-2] == "tooltip-game-venue"
+    line = r["line"]
+    assert [n.get("tag") for n in line] == ["img", "span", "img"]
+    assert line[0]["alt"] == "SEC"
+    assert line[0]["src"].endswith("southeastern-conference-before-2024.svg")
+    assert line[1] == {"tag": "span", "cls": "cf-sep", "alt": None, "src": None, "text": "vs."}
+    assert line[2]["alt"] == "Pac-12"
+    assert line[2]["src"].endswith("pac-12-conference-before-2026.svg")
+    for img in r["lineImgs"]:
+        assert abs(img["h"] - 16) < 0.6
+        assert img["w"] <= 48
+    assert r["matchup"] == "#20 Ironpeak @ #5 Stonebridge"
+    assert r["booth"] == "★Pat Rowan · Sam Delgado"
+
+
+def test_game_card_phone_keeps_open_game_last(mobile_page: Page, open_app: OpenApp) -> None:
+    open_app(mobile_page, "")
+    r = _show_game(mobile_page, _game_card(ranked=True), phone=True)
+    assert r["kids"][-1] == "tt-open-game"
+    assert r["kids"][-2] == "cf-card-line"
+    assert r["kids"][-3] == "tooltip-game-venue"
+
+
+def test_game_card_same_conference_and_text_fallbacks(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    page = _desk(guarded_page, open_app)
+    same = _show_game(page, _game_card(conf={"away": "SEC", "home": "SEC", "season": 2026}))
+    assert [n.get("tag") for n in same["line"]] == ["img"]
+    assert same["line"][0]["src"].endswith("southeastern-conference-2024-present.svg")
+    mixed = _show_game(page, _game_card(conf={"away": "Big Sky", "home": "SEC", "season": 2026}))
+    assert mixed["line"][0] == {"text": "Big Sky"}
+    assert mixed["line"][1]["text"] == "vs."
+    assert mixed["line"][2]["alt"] == "SEC"
+    none = _show_game(page, _game_card(conf={"away": None, "home": None, "season": 2026}))
+    assert none["line"] is None
+    assert "cf-card-line" not in none["kids"]
+    absent = _show_game(page, _game_card(conf=None))
+    assert absent["line"] is None
+    one = _show_game(page, _game_card(conf={"away": None, "home": "SEC", "season": 2026}))
+    assert one["line"][0] == {"text": "Not recorded"}
+    assert one["line"][2]["alt"] == "SEC"
+
+
+def test_game_card_long_text_fallback_stays_within_320(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    page = _desk(guarded_page, open_app)
+    conf = {"away": "Southwestern Athletic Conference East", "home": "ACC", "season": 2026}
+    r = _show_game(page, _game_card(ranked=True, conf=conf))
+    assert r["width"] <= 320
+    two = _show_game(page, _game_card(conf={"away": "Conference USA", "home": "ACC"}))
+    assert two["width"] <= 320
+
+
+def test_game_card_hostile_conference_name_is_literal_text(
+    guarded_page: Page, open_app: OpenApp
+) -> None:
+    page = _desk(guarded_page, open_app)
+    hostile = "<img src=x onerror=alert(1)><b>x</b>"
+    r = _show_game(page, _game_card(conf={"away": hostile, "home": "SEC", "season": 2026}))
+    assert r["line"][0] == {"text": hostile}
+    assert r["bold"] == 0
+    assert (
+        page.evaluate("() => document.querySelectorAll('#chart-tooltip img[src=\"x\"]').length")
+        == 0
+    )
+
+
+# ---------------------------------------------------------------- Phase 28 live weekend map
+
+_PRIME = "cfb:scheduled:5"
+
+_WK_READY = """() => {
+  const gd = document.querySelector('.wk-map-box');
+  return !!(gd && gd._fullLayout && gd.data && gd.data.some((t) => t.name === 'venue-hits'));
+}"""
+
+_WK_POINT = """(key) => {
+  const gd = document.querySelector('.wk-map-box');
+  gd.scrollIntoView({ block: 'center' });
+  const t = gd.data.find((d) => d.name === 'venue-hits');
+  const i = t.customdata.indexOf(key);
+  const r = gd.getBoundingClientRect();
+  const xa = gd._fullLayout.xaxis;
+  const ya = gd._fullLayout.yaxis;
+  return { x: r.left + xa._offset + xa.c2p(t.x[i]), y: r.top + ya._offset + ya.c2p(t.y[i]) };
+}"""
+
+_WK_HOVERTEXT = """(key) => {
+  const gd = document.querySelector('.wk-map-box');
+  for (const t of gd.data) {
+    const i = (t.customdata || []).indexOf(key);
+    if (i >= 0 && t.hovertext) return t.hovertext[i];
+  }
+  return null;
+}"""
+
+
+def _open_weekend_map(page: Page, open_app: OpenApp, raw: dict[str, Any]) -> None:
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.clock.set_fixed_time("2026-10-03T09:00:00-04:00")
+    page.route("**/site-data.json*", lambda route: route.fulfill(json=raw))
+    open_app(page, "?view=weekend&wview=map")
+    page.wait_for_function(_WK_READY, timeout=15000)
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    page.wait_for_timeout(400)
+
+
+def _ranked_raw(fixture_raw: dict[str, Any], *, ranks: bool, confs: bool) -> dict[str, Any]:
+    raw = weekend_map_raw(fixture_raw)
+    names = [c["name"] for c in raw["lookups"]["conferences"]]
+    sched = raw["telecasts_scheduled"]
+    if ranks:
+        sched["away_rank"][5] = 20
+        sched["home_rank"][5] = 5
+    if confs:
+        sched["away_conference"][5] = names.index("SEC")
+        sched["home_conference"][5] = names.index("Pac-12")
+    return raw
+
+
+def test_live_weekend_map_card_shows_badge_and_conference_line(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    page = guarded_page
+    _open_weekend_map(page, open_app, _ranked_raw(fixture_raw, ranks=True, confs=True))
+    at = page.evaluate(_WK_POINT, _PRIME)
+    page.mouse.move(at["x"] + 40, at["y"] + 40)
+    page.mouse.move(at["x"], at["y"], steps=6)
+    page.wait_for_selector("#chart-tooltip[data-kind='game']:not([hidden])", timeout=5000)
+    page.wait_for_timeout(250)
+    tip = page.locator("#chart-tooltip")
+    assert "rk-has" in (tip.get_attribute("class") or "")
+    assert tip.locator(".rk-badge svg[role='img']").count() == 1
+    line = tip.locator(".cf-card-line")
+    assert line.count() == 1
+    alts = line.locator("img.cf-logo").evaluate_all("(ns) => ns.map((n) => n.alt)")
+    assert alts == ["SEC", "Pac-12"]
+    srcs = line.locator("img.cf-logo").evaluate_all("(ns) => ns.map((n) => n.getAttribute('src'))")
+    assert srcs[0].endswith("southeastern-conference-2024-present.svg")
+    assert srcs[1].endswith("pac-12-conference-2026-present-official-site.svg")
+    hovertext = page.evaluate(_WK_HOVERTEXT, _PRIME)
+    assert hovertext is not None
+    assert "ranked" not in hovertext
+    assert "SEC" not in hovertext
+    assert "Pac-12" not in hovertext
+
+
+def test_live_weekend_map_hovertext_ignores_conferences(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    page = guarded_page
+    _open_weekend_map(page, open_app, _ranked_raw(fixture_raw, ranks=True, confs=False))
+    before = page.evaluate(_WK_HOVERTEXT, _PRIME)
+    _open_weekend_map(page, open_app, _ranked_raw(fixture_raw, ranks=True, confs=True))
+    after = page.evaluate(_WK_HOVERTEXT, _PRIME)
+    assert before is not None
+    assert before == after

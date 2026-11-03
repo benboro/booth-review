@@ -8,6 +8,7 @@ import { pxPerUnit } from './map-chart.js';
 import { venueTitle } from './map-model.js';
 import { sortNetworks } from './network.js';
 import { FAMILY_ORDER, WEEKEND_MAP_DOT, familyKey } from './palette.js';
+import { isRankedMatchup } from './rank-badge.js';
 import { boothLine, cellState, clock12, matchupText } from './weekend.js';
 
 // ---------------------------------------------------------------- window shape (D-03)
@@ -221,7 +222,7 @@ function hasPoint(venue) {
   return venue != null && Number.isFinite(venue.lat) && Number.isFinite(venue.lon);
 }
 
-/** The hover lines of a game (raw text; the figure escapes it). */
+/** The hover lines of a game (raw text; the figure escapes it), plus the card's badge and conference fields. */
 function hoverLines(game, nowWall, venueLine) {
   const state = cellState(game, nowWall);
   const booth = boothLine(game, state);
@@ -232,7 +233,17 @@ function hoverLines(game, nowWall, venueLine) {
     kickoff: `${time}, ${game.networkName ?? 'Network TBA'}`,
     venue: venueLine,
   };
-  return { ...lines, text: [lines.matchup, `${booth.star ? '\u2605 ' : ''}${booth.text}`, lines.kickoff, venueLine].join('\n') };
+  return {
+    ...lines,
+    // The HTML card's badge and conference line (Phase 28); never part of the Plotly text.
+    ranked: isRankedMatchup(game),
+    conf: {
+      away: game.awayConference ?? null,
+      home: game.homeConference ?? null,
+      season: game.season ?? null,
+    },
+    text: [lines.matchup, `${booth.star ? '\u2605 ' : ''}${booth.text}`, lines.kickoff, venueLine].join('\n'),
+  };
 }
 
 function notOnMapOrder(games) {
