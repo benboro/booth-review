@@ -335,5 +335,9 @@ records only where the site settles or applies them.
   filter list, which shows many seasons at once, uses the Seasons filter's last season.
 - A conference that gains a second logo needs the user's ruling first: one logo for every
   game, or each logo for a range of seasons. Never assume.
-- The modal's Conference and Network lines are flex rows centred on their text, so a logo or
-  badge sits on the text's middle; each text run keeps its own spaces.
+- The CFB modal's Conference line is a flex row centred on its text, so a logo sits on the
+  text's middle; each text run keeps its own spaces.
+- The Network line is the same centred flex row in every sport's modal: CFB, NFL and MLB (whose
+  line reads "Outlet:") all build it with `networksParagraph`, so the network logo sits on the
+  middle of the "Network: " text in each, and each text run keeps its own spaces (user decision
+  2026-11-03: a deliberate change for all three sports, not a CFB-only one).

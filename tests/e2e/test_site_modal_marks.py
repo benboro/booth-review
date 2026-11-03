@@ -631,6 +631,71 @@ def test_nfl_modal_and_table_show_no_marks(
     assert page.locator("img.cf-logo").count() == 0
 
 
+_NETWORK_LINE_JS = """(dialogSel) => {
+  // The Network (MLB: Outlet) line's label run and its first mark: the flex row's layout, the
+  // run's text, the vertical offset between the mark's centre and the text's, and the visible
+  // space from the label's last glyph to the mark.
+  const line = document.querySelector(`${dialogSel} .panel-networks`);
+  const run = line.querySelector('.panel-mark-text');
+  const mark = run.nextElementSibling;
+  const range = document.createRange();
+  range.setStart(run.firstChild, 0);
+  range.setEnd(run.firstChild, run.textContent.trimEnd().length);
+  const ink = range.getBoundingClientRect();
+  const m = (mark.querySelector('img') ?? mark).getBoundingClientRect();
+  const cs = getComputedStyle(line);
+  return {
+    display: cs.display, align: cs.alignItems, run: run.textContent,
+    hasImg: Boolean(mark.querySelector('img')),
+    offset: (m.top + m.height / 2) - (ink.top + ink.height / 2),
+    gap: m.left - ink.right,
+  };
+}"""
+
+
+def _assert_network_line_centred(got: dict[str, Any], label: str) -> None:
+    assert got["display"] == "flex"
+    assert got["align"] == "center"
+    assert got["run"] == label
+    assert got["hasImg"], got  # a logo, so the centring is measured on the image itself
+    assert abs(got["offset"]) <= 1.5, got
+    assert got["gap"] >= 3, got
+
+
+def test_nfl_modal_network_line_centres_its_logo_and_keeps_its_space(
+    nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """User decision 2026-11-03: the centred flex Network line is shared by all three sports,
+    so the NFL modal's logo sits on the middle of 'Network: ', which keeps its space."""
+    page = nfl_guarded_page
+    open_nfl_app(page)
+    page.evaluate("window.__nflTestHooks.openGame(0)")
+    page.wait_for_function("document.getElementById('nfl-detail-panel').open")
+    page.wait_for_function(
+        "[...document.querySelectorAll('#nfl-detail-panel .panel-networks img')]"
+        ".every((i) => i.complete)"
+    )
+    got = page.evaluate(_NETWORK_LINE_JS, "#nfl-detail-panel")
+    _assert_network_line_centred(got, "Network: ")
+
+
+def test_mlb_modal_outlet_line_centres_its_logo_and_keeps_its_space(
+    mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
+) -> None:
+    """User decision 2026-11-03: the MLB modal's Outlet line (the same Network line, relabelled)
+    centres its logo on 'Outlet: ', which keeps its space."""
+    page = mlb_guarded_page
+    open_mlb_app(page)
+    page.evaluate("window.__mlbTestHooks.openGame(0)")
+    page.wait_for_selector("#mlb-detail-panel[open]")
+    page.wait_for_function(
+        "[...document.querySelectorAll('#mlb-detail-panel .panel-networks img')]"
+        ".every((i) => i.complete)"
+    )
+    got = page.evaluate(_NETWORK_LINE_JS, "#mlb-detail-panel")
+    _assert_network_line_centred(got, "Outlet: ")
+
+
 def test_mlb_modal_and_table_show_no_marks(
     mlb_guarded_page: Page, open_mlb_app: Callable[..., None]
 ) -> None:
