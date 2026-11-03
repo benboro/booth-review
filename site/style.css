@@ -7578,6 +7578,10 @@ tr.is-matched > :first-child {
   height: 18px;
 }
 
+/* Every CFB phone row, ranked or not, keeps the badge's 28px at its right (user decision
+   2026-11-03, "reserve badge space everywhere"), so the same matchup and booth text wrap and
+   clamp at the same place with or without the badge. NFL rows never show it and keep 16px. */
+.wk-root[data-sport="cfb"] .wk-item,
 .wk-item.rk-has {
   position: relative;
   padding-right: 28px;

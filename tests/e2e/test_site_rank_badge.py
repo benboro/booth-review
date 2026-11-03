@@ -188,6 +188,61 @@ def test_phone_row_badge_aria_and_equal_height(phone_page: Page) -> None:  # noq
     assert rb["height"] == pb["height"]
 
 
+_ROW_SWEEP_JS = """([rankedSel, plainSel]) => {
+  // Gives a ranked and an unranked phone row the same matchup (line 1) and booth (line 2)
+  // text, one character longer each step, and compares each row's height and each line's
+  // unclamped height, so a line that wraps or clamps at a different place shows up.
+  const rows = [document.querySelector(rankedSel), document.querySelector(plainSel)];
+  const full = '#20 Southern Mississippi Golden Eagles at #5 Louisiana-Monroe Warhawks';
+  const booth = 'Joe Fowler, Pat Herbstreit and Sam Sideline of the Lakeview Network';
+  const out = [];
+  for (let n = 1; n <= full.length; n += 1) {
+    const got = rows.map((row) => {
+      row.querySelector('.wk-item-l1').textContent = full.slice(0, n);
+      row.querySelector('.wk-booth').textContent = booth.slice(0, n);
+      return {
+        h: row.getBoundingClientRect().height,
+        l1: row.querySelector('.wk-item-l1').scrollHeight,
+        l2: row.querySelector('.wk-item-l2').scrollHeight,
+      };
+    });
+    out.push({ n, ranked: got[0], plain: got[1] });
+  }
+  return out;
+}"""
+
+
+def test_phone_rows_wrap_the_same_with_or_without_the_badge(phone_page: Page) -> None:  # noqa: F811
+    """User decision 2026-11-03 ("reserve badge space everywhere"): every CFB phone row keeps
+    the badge's 28px, so identical text wraps and clamps identically, ranked or not, at 390px."""
+    _mount_phone(
+        phone_page,
+        [
+            _known(key="r", awayRank=20, homeRank=5, home="R"),
+            _known(key="o", awayRank=20, homeRank=None, home="R"),
+        ],
+    )
+    sel = '#wk-host .wk-item[data-wk-id="g:%s"]'
+    pads = [
+        phone_page.locator(sel % k).evaluate("e => getComputedStyle(e).paddingRight")
+        for k in ("r", "o")
+    ]
+    assert pads == ["28px", "28px"]
+    rows = phone_page.evaluate(_ROW_SWEEP_JS, [sel % "r", sel % "o"])
+    differ = [r for r in rows if r["ranked"] != r["plain"]]
+    assert differ == []
+    # The sweep crossed a wrap point, so it tested the lengths that end a line near the edge.
+    assert len({r["plain"]["l1"] for r in rows}) >= 2
+
+
+def test_nfl_phone_rows_keep_their_normal_padding(phone_page: Page) -> None:  # noqa: F811
+    _mount_phone(phone_page, [_known(key="n", sport="nfl")], model={"sport": "nfl"})
+    pad = phone_page.locator('#wk-host .wk-item[data-wk-id="g:n"]').evaluate(
+        "e => getComputedStyle(e).paddingRight"
+    )
+    assert pad == "16px"
+
+
 def test_compact_table_badge_aria_and_equal_row_height(wk_page: Page) -> None:  # noqa: F811
     _mount(
         wk_page,

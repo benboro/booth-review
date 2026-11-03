@@ -296,7 +296,9 @@ records only where the site settles or applies them.
   the two must read apart.
 - Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
   28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
-  the phone list rows use the same 18px top-right placement; the ESPN+ and regional table and
+  the phone list rows use the same 18px top-right placement, and every CFB phone row, ranked
+  or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
+  same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
   Matched games set it 18px inline after the matchup; the map hover card draws it 25.5px at
   the top right; the CFB modal title ends with a 26px badge glued to the title's last word, so
   it never sits alone on a line. On phones (480px and under) every CFB modal title, ranked or
