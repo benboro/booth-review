@@ -10,12 +10,13 @@ Synthetic contract fixture only (Big Ten, FBS Independents, Mountain West, Pac-1
 from __future__ import annotations
 
 import copy
+import re
 from collections.abc import Callable
 from typing import Any
 
 import pytest
 from dark_checks import set_theme
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 pytestmark = pytest.mark.e2e
 
@@ -32,7 +33,8 @@ _ROWS = """() => [...document.querySelectorAll('#conference-list label.check-row
     slotWidth: slot ? slot.getBoundingClientRect().width : null,
     slotKids: slot ? slot.childNodes.length : null,
     imgs: slot ? slot.querySelectorAll('img').length : 0,
-    alt: img ? img.alt : null,
+    alt: img ? img.getAttribute('alt') : null,
+    ariaHidden: img ? img.getAttribute('aria-hidden') : null,
     title: img ? img.title : null,
     src: img ? img.getAttribute('src') : null,
     imgH: ib ? ib.height : null,
@@ -89,12 +91,23 @@ def test_logo_rows_hold_one_area_sized_logo_and_independents_slot_is_empty(conf_
             assert row["slotKids"] == 0
             continue
         assert row["imgs"] == 1
-        assert row["alt"] == name
+        # The label's text already names the conference, so the logo is decorative (alt
+        # empty, aria-hidden) and keeps its title for the hover tooltip.
+        assert row["alt"] == ""
+        assert row["ariaHidden"] == "true"
         assert row["title"] == name
         # Sized by area: 16px nominal times the logo's scale, in a 16px margin box.
         assert row["imgH"] == pytest.approx(16 * row["scale"], abs=0.5)
         assert row["marginBox"] == pytest.approx(16, abs=0.01)
     assert rows["Big Ten"]["scale"] < 1 < rows["Pac-12"]["scale"]
+
+
+def test_checkbox_names_each_conference_once(conf_page: Page) -> None:
+    for name in ("Big Ten", "SEC", "Pac-12", "FBS Independents"):
+        checkbox = conf_page.locator(f"#conference-list input[value='{name}']")
+        # The name starts the label's accessible name and is not repeated by the logo's alt.
+        once = rf"^{re.escape(name)}(?!\s*{re.escape(name)})"
+        expect(checkbox).to_have_accessible_name(re.compile(once))
 
 
 def test_names_align(conf_page: Page) -> None:

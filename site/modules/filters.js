@@ -1383,7 +1383,9 @@ function renderConferences(data, state, view) {
     const file = conferenceLogoFor(name, season)?.file ?? null;
     if (file === entry.file) continue;
     entry.file = file;
-    if (file) entry.slot.replaceChildren(conferenceMark(name, season));
+    // The label's own text names the conference, so the slot logo is decorative (no doubled
+    // accessible name); its title still names it on hover.
+    if (file) entry.slot.replaceChildren(conferenceMark(name, season, { decorative: true }));
     else entry.slot.replaceChildren();
   }
   for (const [name, cb] of conferenceCheckboxes) {

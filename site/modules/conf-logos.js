@@ -101,11 +101,15 @@ function watchTheme() {
 /**
  * The conference's logo as an `<img class="cf-logo">`, or its name as a text node when it
  * has no logo (D-11, D-13).
+ * - `decorative` is for a place whose own text already says the name (the filter list's
+ *   label): the logo gets `alt=""` and aria-hidden, so the name is not read twice, and keeps
+ *   its `title` for the hover tooltip.
  * @param {unknown} name - the CFBD conference name
  * @param {number|null|undefined} season - the game's season
+ * @param {{decorative?: boolean}} [options]
  * @returns {HTMLImageElement|Text}
  */
-export function conferenceMark(name, season) {
+export function conferenceMark(name, season, { decorative = false } = {}) {
   const entry = conferenceLogoFor(name, season);
   if (!entry) return document.createTextNode(String(name));
   const label = String(name);
@@ -115,7 +119,8 @@ export function conferenceMark(name, season) {
   img.dataset.season = String(season ?? '');
   img.src = currentTheme() === 'dark' ? entry.darkFile : entry.file;
   watchTheme();
-  img.alt = label;
+  img.alt = decorative ? '' : label;
+  if (decorative) img.setAttribute('aria-hidden', 'true');
   img.title = label;
   img.setAttribute('width', String(entry.width));
   img.setAttribute('height', String(entry.height));

@@ -311,7 +311,9 @@ records only where the site settles or applies them.
   whether or not a logo shows; the map hover card's last line holds 16px-nominal logos (at most
   48px wide) in the muted caption style. A same-conference game shows one logo. A side with no
   logo (FBS Independents, FCS Independents, the FCS conferences) shows its name as text ("[SEC
-  logo] vs. Big Sky"), and the logo's alt text is the conference name. Each logo has a dark
+  logo] vs. Big Sky"), and the logo's alt text is the conference name. In the filter list,
+  whose label already holds the name, the logo is decorative (empty alt, aria-hidden, the
+  name kept as its hover title), so no checkbox is named twice. Each logo has a dark
   variant under `logos/dark/conf/`, swapped live with the theme.
 - Conference logos are sized by area, not by one height. Each file's `scale` in
   `site/modules/conf-logos.js` multiplies the surface's nominal height (20px in the modal, 16px
