@@ -7592,11 +7592,22 @@ tr.is-matched > :first-child {
   padding-right: 28px;
 }
 
-.wk-item .rk-badge {
+/* The phone row's badge centres on the matchup lines (user feedback 2026-11-03), line 1 or
+   lines 1-2 when the matchup wraps, never the booth line or the whole row: the matchup's own
+   wrapper (.wk-item-mu) is its positioning context, and that wrapper is exactly as tall as the
+   lines the 2-line clamp shows. Its right edge is the row's content edge, so right: -22px puts
+   the badge 6px in from the row's edge, inside the reserved 28px. */
+.wk-item-mu {
+  position: relative;
+  min-width: 0;
+}
+
+.wk-item-mu .rk-badge {
   position: absolute;
-  top: 4px;
-  right: 6px;
+  top: 50%;
+  right: -22px;
   height: 18px;
+  transform: translateY(-50%);
 }
 
 /* A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the joiner, the

@@ -328,3 +328,91 @@ def test_nfl_weekend_never_shows_the_badge(wk_page: Page) -> None:  # noqa: F811
     assert wk_page.locator("#wk-host .rk-badge").count() == 0
     label = wk_page.locator(_cell("n")).get_attribute("aria-label") or ""
     assert "Both teams ranked" not in label
+
+
+_PHONE_CENTRE_JS = """(sel) => {
+  // The ranked badge against the matchup lines it centres on: the matchup line's box is
+  // exactly the lines the 2-line clamp shows, and its top is the first line's top.
+  const row = document.querySelector(sel);
+  const l1 = row.querySelector('.wk-item-l1');
+  const badge = row.querySelector('.rk-badge');
+  const lines = l1.getBoundingClientRect();
+  const b = badge.getBoundingClientRect();
+  const r = row.getBoundingClientRect();
+  const h = r.height;
+  badge.style.display = 'none';
+  const bare = row.getBoundingClientRect().height;
+  badge.style.display = '';
+  const lh = parseFloat(getComputedStyle(l1).lineHeight);
+  return {
+    linesTop: lines.top, linesMid: (lines.top + lines.bottom) / 2,
+    lineCount: Math.round(lines.height / lh), clipped: l1.scrollHeight > l1.clientHeight + 1,
+    badgeTop: b.top, badgeMid: (b.top + b.bottom) / 2, badgeLeft: b.left, badgeRight: b.right,
+    badgeH: b.height, rowRight: r.right, h, bare,
+  };
+}"""
+
+
+@pytest.mark.parametrize(
+    ("away", "home", "lines", "clipped"),
+    [
+        ("Away", "Home", 1, False),
+        ("Southern Mississippi", "Louisiana-Monroe", 2, False),
+        # Long enough for three lines, so the 2-line clamp cuts it: the badge centres on the
+        # two lines that show.
+        (
+            "Southern Mississippi Golden Eagles of Hattiesburg",
+            "Louisiana-Monroe Warhawks of Monroe",
+            2,
+            True,
+        ),
+    ],
+)
+def test_phone_row_badge_centres_on_the_matchup_lines(
+    phone_page: Page,  # noqa: F811
+    away: str,
+    home: str,
+    lines: int,
+    clipped: bool,
+) -> None:
+    """User feedback 2026-11-03: at 390px the phone row's badge centres vertically on the
+    matchup's visible lines (line 1, or lines 1-2 when it wraps), never on the booth line or
+    the whole row, and never rides above the first line. It stays in the reserved 28px, and no
+    row changes height."""
+    _mount_phone(
+        phone_page,
+        [
+            _known(key="r", away=away, home=home, awayRank=20, homeRank=5),
+            _known(key="o", away=away, home=home, awayRank=20, homeRank=None),
+        ],
+    )
+    sel = '#wk-host .wk-item[data-wk-id="g:%s"]'
+    got = phone_page.evaluate(_PHONE_CENTRE_JS, sel % "r")
+    assert (got["lineCount"], got["clipped"]) == (lines, clipped), got
+    assert got["badgeH"] == pytest.approx(18, abs=0.01)
+    assert abs(got["badgeMid"] - got["linesMid"]) <= 1, got
+    assert got["badgeTop"] >= got["linesTop"] - 0.01, got
+    assert got["badgeRight"] == pytest.approx(got["rowRight"] - 6, abs=0.5)
+    assert got["badgeLeft"] >= got["rowRight"] - 28 - 0.01
+    assert got["h"] == pytest.approx(got["bare"], abs=0.01)
+    plain = phone_page.locator(sel % "o").bounding_box()
+    assert plain is not None
+    assert got["h"] == pytest.approx(plain["height"], abs=0.01)
+
+
+def test_cell_badge_never_rides_above_the_matchup_line(wk_page: Page) -> None:  # noqa: F811
+    """User feedback 2026-11-03: the timeline cell's matchup is one line, so its badge (top
+    4px) must start no higher than that line's box and centre on it."""
+    _mount(wk_page, [_known(key="r", awayRank=20, homeRank=5)])
+    got = wk_page.evaluate(
+        """(sel) => {
+          const cell = document.querySelector(sel);
+          const line = cell.querySelector('.wk-line1').getBoundingClientRect();
+          const b = cell.querySelector('.rk-badge').getBoundingClientRect();
+          return { lineTop: line.top, lineMid: (line.top + line.bottom) / 2,
+                   badgeTop: b.top, badgeMid: (b.top + b.bottom) / 2 };
+        }""",
+        _cell("r"),
+    )
+    assert got["badgeTop"] >= got["lineTop"] - 0.01, got
+    assert abs(got["badgeMid"] - got["lineMid"]) <= 1, got

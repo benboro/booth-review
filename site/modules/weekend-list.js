@@ -57,12 +57,17 @@ function item(game, ctx, { showTime = false } = {}) {
   const booth = el('span', 'wk-booth', line.text);
   booth.style.fontWeight = String(line.weight);
   l2.append(booth);
-  text.append(l1, l2);
-  btn.append(mark, text);
+  // The matchup's own wrapper is as tall as its visible lines, so the ranked badge inside it
+  // centres on line 1, or lines 1-2 when the matchup wraps (user feedback 2026-11-03). Every
+  // row gets it, ranked or not, so the layout is the same either way.
+  const mu = el('span', 'wk-item-mu');
+  mu.append(l1);
   if (isRankedMatchup(game)) {
     btn.classList.add('rk-has');
-    btn.append(rankBadge({ hidden: true }));
+    mu.append(rankBadge({ hidden: true }));
   }
+  text.append(mu, l2);
+  btn.append(mark, text);
   btn.addEventListener('click', () => ctx.open(game, btn));
   applyPick(btn, game, ctx, ctx.rowFaded([game]));
   return btn;
