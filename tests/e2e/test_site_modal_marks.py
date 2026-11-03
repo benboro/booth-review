@@ -66,7 +66,7 @@ def test_modal_title_badge_for_a_both_ranked_game(
     guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
 ) -> None:
     """D-01, D-02, D-04: the badge ends the title, is aria-hidden, the ranks stay superscript,
-    and the title's aria-label gains ' Both teams ranked.'"""
+    and the title's aria-label gains '. Both teams ranked.'"""
     _serve(guarded_page, _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12}))
     open_app(guarded_page, "")
     _open_panel(guarded_page, 0)
@@ -84,9 +84,28 @@ def test_modal_title_badge_for_a_both_ranked_game(
     assert title.locator(".rk-badge svg").get_attribute("aria-hidden") == "true"
     assert title.locator("sup.title-rank").count() == 2
     label = title.get_attribute("aria-label") or ""
-    assert label.endswith(" Both teams ranked.")
-    assert label.startswith("#7 ")
-    assert "#12 " in label
+    assert label == "#7 Lakeview 20 at #12 Northfield 27. Both teams ranked."
+
+
+def test_modal_title_label_adds_no_second_full_stop(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """WR-02: an unscored matchup whose last team name ends in a full stop gains the sentence
+    after one space, never '..'."""
+    raw = _mutated(
+        fixture_raw,
+        away_rank={0: 7},
+        home_rank={0: 12},
+        away_points={0: None},
+        home_points={0: None},
+    )
+    home = raw["telecasts"]["home_team"][0]
+    raw["lookups"]["teams"][home]["name"] = "Northfield St."
+    _serve(guarded_page, raw)
+    open_app(guarded_page, "")
+    _open_panel(guarded_page, 0)
+    label = guarded_page.get_attribute("#panel-title", "aria-label")
+    assert label == "#7 Lakeview at #12 Northfield St. Both teams ranked."
 
 
 def test_modal_title_has_no_badge_when_one_team_is_ranked(

@@ -328,7 +328,10 @@ export function renderMatchupTitle(titleEl, data, i) {
   }
   titleEl.replaceChildren(...nodes);
   const label = formatMatchup(data, i, { withScore: true });
-  titleEl.setAttribute('aria-label', ranked ? `${label} Both teams ranked.` : label);
+  // A matchup usually ends without a full stop, so the sentence gets one first: screen readers
+  // pause only at punctuation, and "34 Both" would otherwise run into the score.
+  const stop = /[.!?]$/.test(label) ? '' : '.';
+  titleEl.setAttribute('aria-label', ranked ? `${label}${stop} Both teams ranked.` : label);
 }
 
 /**
