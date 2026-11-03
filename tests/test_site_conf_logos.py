@@ -213,3 +213,10 @@ def test_conf_js_uses_map_and_never_builds_html() -> None:
     assert "D-10" in js
     for banned in ("innerHTML", "insertAdjacentHTML", "outerHTML"):
         assert banned not in js
+
+
+def test_build_logo_names_match_the_eras_keys() -> None:
+    """The build's copy of the ERAS keys (for its no-logo warning) matches conf-logos.js."""
+    from booth_review.build.conf_logos import CONFERENCE_LOGO_NAMES
+
+    assert set(_js_eras()) == CONFERENCE_LOGO_NAMES

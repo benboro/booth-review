@@ -361,6 +361,11 @@ records only where the site settles or applies them.
   filter list, which shows many seasons at once, uses the Seasons filter's last season.
 - A conference that gains a second logo needs the user's ruling first: one logo for every
   game, or each logo for a range of seasons. Never assume.
+- An FBS conference with no logo (FBS Independents aside) never fails the build (user decision
+  2026-11-03): `booth-review build` prints a warning naming it and its seasons, and the site
+  shows the name as text. The build's list of names with a logo
+  (`src/booth_review/build/conf_logos.py`) mirrors the ERAS keys, and a test fails when they
+  differ, so a new logo is added in both places.
 - The CFB modal's Conference line is a flex row centred on its text, so a logo sits on the
   text's middle; each text run keeps its own spaces.
 - The Network line is the same centred flex row in every sport's modal: CFB, NFL and MLB (whose

@@ -79,6 +79,9 @@ class BuildOutcome:
     second_source_accept_warnings: tuple[tuple[int, str], ...] = ()
     # match_rate drops explained by unpatched no-506-crew gaps: never a reason to block.
     explained: tuple[ExplainedDrop, ...] = ()
+    # Shipped FBS conferences with no site logo, with their seasons (Phase 28): a warning only;
+    # the site shows the name as text.
+    conference_logo_gaps: tuple[tuple[str, tuple[int, ...]], ...] = ()
 
 
 # A preliminary headline figure older than this many days is listed in
@@ -310,6 +313,7 @@ def run_build(
         # run aborts before any processed table, audit file, or new
         # baseline is written.
         site_counts: dict[str, int] = {}
+        logo_gaps: list[tuple[str, tuple[int, ...]]] = []
         try:
             site = (
                 build_site_data(
@@ -319,6 +323,7 @@ def run_build(
                     generated_at,
                     counts=site_counts,
                     bowl_crosswalk=bowl_crosswalk,
+                    logo_gaps=logo_gaps,
                 )
                 if write_data
                 else None
@@ -376,4 +381,5 @@ def run_build(
         second_source_gates=tables.second_source_gates,
         second_source_accept_warnings=tables.second_source_accept_warnings,
         explained=result.explained,
+        conference_logo_gaps=tuple(logo_gaps),
     )

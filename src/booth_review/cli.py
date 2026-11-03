@@ -2454,6 +2454,13 @@ def _build(args: argparse.Namespace) -> int:
             "(see interim/review_crew_overrides.csv)",
             file=sys.stderr,
         )
+    for name, seasons in outcome.conference_logo_gaps:
+        # Phase 28: never a reason to stop the build; the site writes the name as text.
+        print(
+            f"warning: FBS conference {name!r} (season(s) {', '.join(map(str, seasons))}) "
+            "has no logo in site/modules/conf-logos.js; the site shows its name as text",
+            file=sys.stderr,
+        )
     if outcome.accepted:
         print("accepted new baseline")
     for reason in outcome.reasons:

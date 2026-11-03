@@ -29,6 +29,7 @@ import polars as pl
 from pydantic import ValidationError
 
 from booth_review.build.bowls import load_bowls
+from booth_review.build.conf_logos import missing_conference_logos
 from booth_review.build.named_games import (
     build_franchises,
     check_game_slugs,
@@ -240,6 +241,7 @@ def build_site_data(
     *,
     counts: dict[str, int] | None = None,
     bowl_crosswalk: Literal["strict", "lenient"] = "strict",
+    logo_gaps: list[tuple[str, tuple[int, ...]]] | None = None,
 ) -> SiteData:
     """Assemble every plotted telecast (D-10) into the D-13 columnar
     SiteData, validated by the D-14 contract (`validate_site_data`) before
@@ -251,6 +253,10 @@ def build_site_data(
 
     When `counts` is given, the rivalry resolution's counts (D-13) are added
     to it for the build summary: numbers only, never a name.
+
+    When `logo_gaps` is given, each shipped FBS conference (FBS Independents aside) with no
+    logo entry in the site's conf-logos.js is appended to it with its seasons, for a build
+    warning (Phase 28); the site shows such a name as text, so it never fails the build.
 
     `bowl_crosswalk="lenient"` (the scheduled job) lets a plotted postseason
     game with no bowls.csv row, or an at-bowl row with no franchise, build
@@ -493,6 +499,7 @@ def build_site_data(
     publishers: set[str] = set()
     flag_ids: set[str] = set()
     conference_is_fbs: dict[str, bool] = {}
+    fbs_conference_seasons: dict[str, set[int]] = {}
 
     for row in shipped_rows:
         team_names.add(str(row["home_team"]))
@@ -533,6 +540,8 @@ def build_site_data(
                 continue
             is_fbs = row[f"{side}_classification"] == "fbs"
             conference_is_fbs[conf] = conference_is_fbs.get(conf, False) or is_fbs
+            if is_fbs:
+                fbs_conference_seasons.setdefault(conf, set()).add(int(row["season"]))
 
     scheduled_crews = schedule.crews
     for row in scheduled_rows:
@@ -550,6 +559,8 @@ def build_site_data(
                 continue
             is_fbs = row[f"{side}_classification"] == "fbs"
             conference_is_fbs[conf] = conference_is_fbs.get(conf, False) or is_fbs
+            if is_fbs:
+                fbs_conference_seasons.setdefault(conf, set()).add(int(row["season"]))
 
     for crow in coverage.rows:
         network_id = crow["network_id"]
@@ -605,6 +616,8 @@ def build_site_data(
         for r in used_rivalries
     ]
     conference_index = {name: i for i, name in enumerate(sorted(conference_is_fbs))}
+    if logo_gaps is not None:
+        logo_gaps.extend(missing_conference_logos(fbs_conference_seasons))
 
     # A `cfbd` crosswalk row renames a CFBD spelling for display only (the okina in
     # Hawai'i); the index order above stays the CFBD names' sorted order.

@@ -1006,6 +1006,65 @@ def test_every_fbs_conference_the_build_emits_has_a_logo_era(build_reference: Pa
     assert missing == []
 
 
+def test_fbs_conference_without_a_logo_is_reported_and_the_build_still_succeeds(
+    build_reference: Path,
+) -> None:
+    """Phase 28 (user decision 2026-11-03): an FBS conference with no logo entry is handed back
+    with its seasons for a build warning; known names, FBS Independents and conferences only
+    FCS teams play in are not, and the build still returns valid site data."""
+    sides = [
+        ("New League", "fbs", "SEC", "fbs", 2024),
+        ("New League", "fbs", "Big Sky", "fcs", 2025),
+        ("FBS Independents", "fbs", "Unlisted FCS League", "fcs", 2024),
+        ("Sun Belt", "fbs", "Second League", "fbs", 2023),
+    ]
+    games = []
+    telecasts = []
+    for k, (home_conf, home_class, away_conf, away_class, season) in enumerate(sides):
+        game_id = 300 + k
+        day = date(season, 9, 14 + k)
+        games.append(
+            _game_row(
+                game_id=game_id,
+                season=season,
+                date_et=day,
+                home_id=3000 + k,
+                home_team=f"Home {k}",
+                home_classification=home_class,
+                home_conference=home_conf,
+                away_id=4000 + k,
+                away_team=f"Away {k}",
+                away_classification=away_class,
+                away_conference=away_conf,
+            )
+        )
+        telecasts.append(
+            _telecast_row(
+                telecast_id=f"{game_id}-net-a",
+                game_id=game_id,
+                season=season,
+                date_et=day,
+                headline_claim_id=f"claim-{game_id}",
+                rr_telecast_ids=[f"cfb-example-{game_id}"],
+                rr_record_urls=[f"https://example.com/r{game_id}"],
+            )
+        )
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    gaps: list[tuple[str, tuple[int, ...]]] = []
+    site = build_site_data(
+        tables, build_coverage(tables), build_reference, _GENERATED_AT, logo_gaps=gaps
+    )
+    assert gaps == [("New League", (2024, 2025)), ("Second League", (2023,))]
+    names = {c.name for c in site.lookups.conferences}
+    assert {"New League", "Second League", "Big Sky", "Unlisted FCS League"} <= names
+
+
 def test_same_team_different_conference_across_seasons_gets_different_index(
     build_reference: Path,
 ) -> None:
