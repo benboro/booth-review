@@ -60,3 +60,81 @@ export function fillWrappingMatchup(target, { away, joiner, home }, badge = null
   if (badge) homeNodes.push(badge);
   target.replaceChildren(...joinerBreakNodes(gluedText(away), homeNodes));
 }
+
+/**
+ * Whether the element's text runs over more than one line. Measures the plain text runs only
+ * (not the badge's own title, and not the raised superscript ranks of the modal title), so a
+ * line is a change in the text's bottom edge of more than half a line.
+ * @param {HTMLElement} el
+ * @returns {boolean}
+ */
+export function textWraps(el) {
+  const bottoms = [];
+  let tall = 0;
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge, sup') || !n.data.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) {
+      if (r.height === 0) continue;
+      bottoms.push(r.bottom);
+      tall = Math.max(tall, r.height);
+    }
+  }
+  if (bottoms.length === 0) return false;
+  return Math.max(...bottoms) - Math.min(...bottoms) > tall / 2;
+}
+
+/**
+ * The ranked badge on a wrapped matchup (user feedback 2026-11-03, the map card as reference):
+ * on one line it ends the line inline; once the text wraps, `rk-wrapped` moves it to the right
+ * and centres it on the lines (the CFB modal title, the ESPN+ and regional table, Matched
+ * games). The wrap is measured with the class off, so the answer is always the one-line
+ * (inline badge) layout's: a surface whose wrapped placement takes room (the tables' end
+ * padding) can never hold itself wrapped once the inline layout fits on one line again.
+ * @param {HTMLElement} el
+ */
+export function syncBadgeWrap(el) {
+  const ranked = el.querySelector('.rk-badge') !== null;
+  el.classList.remove('rk-wrapped');
+  el.classList.toggle('rk-wrapped', ranked && textWraps(el));
+}
+
+/** @type {ResizeObserver|null} */
+let wrapObserver = null;
+
+/**
+ * Keeps `syncBadgeWrap` current: now if the element is laid out, and again whenever it changes
+ * size (a dialog opening, a table column narrowing, the viewport resizing). One observer serves
+ * every element; an element that leaves the page is dropped on its last (zero-size) report.
+ * @param {HTMLElement} el
+ */
+export function watchBadgeWrap(el) {
+  if (el.isConnected) syncBadgeWrap(el);
+  if (typeof ResizeObserver !== 'function') return;
+  wrapObserver ??= new ResizeObserver((entries) => {
+    for (const { target } of entries) {
+      if (target.isConnected) syncBadgeWrap(/** @type {HTMLElement} */ (target));
+      else wrapObserver.unobserve(target);
+    }
+  });
+  wrapObserver.observe(el);
+}
+
+/**
+ * A table's matchup cell: `fillWrappingMatchup` inside one block (`span.mu-lines`) that is
+ * exactly as tall as the matchup's lines, so a wrapped cell's badge centres on those lines
+ * whatever the row's other cells do (user decision 2026-11-03). A one-line cell keeps the
+ * badge inline after the last word and renders as before.
+ * @param {HTMLElement} target
+ * @param {{away: string, joiner: string, home: string}} sides
+ * @param {HTMLElement|null} [badge]
+ */
+export function fillTableMatchup(target, sides, badge = null) {
+  const lines = document.createElement('span');
+  lines.className = 'mu-lines';
+  fillWrappingMatchup(lines, sides, badge);
+  target.replaceChildren(lines);
+  if (badge) watchBadgeWrap(lines);
+}

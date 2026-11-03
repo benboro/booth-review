@@ -29,7 +29,7 @@ import { networkMark } from './network.js';
 import { attachScrollCue } from './scroll-cue.js';
 import { crewList, makeRolePill, nameWithRoles } from './pill.js';
 import { bothRanked, rankBadge } from './rank-badge.js';
-import { fillWrappingMatchup } from './matchup-wrap.js';
+import { fillTableMatchup } from './matchup-wrap.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
 import { playedInText } from './venue.js';
@@ -173,7 +173,7 @@ function buildRow(data, state, onDetails, i) {
   // "Details for ..." label does not carry the sentence, so the badge keeps role img and its
   // own "Both teams ranked" label. A wrapping cell breaks before the joiner (2026-11-03).
   const badge = bothRanked(t.away_rank?.[i], t.home_rank?.[i]) ? rankBadge() : null;
-  fillWrappingMatchup(matchupTd, matchupSideTexts(data, i, { withScore: true }), badge);
+  fillTableMatchup(matchupTd, matchupSideTexts(data, i, { withScore: true }), badge);
   // Too many columns for inline text: a neutral-site game names its city in a tooltip.
   if (t.neutral[i]) {
     const playedIn = playedInText(data.lookups.venues?.[t.place?.[i]]);

@@ -7771,3 +7771,29 @@ tr.is-matched > :first-child {
   position: relative;
   top: -2px;
 }
+
+/* The two tables' matchup cells hold their lines in one block (matchup-wrap.js
+   fillTableMatchup), exactly as tall as the lines, so it is the badge's reference whatever the
+   row's other cells do. On one line the badge stays inline after the last word. A wrapped
+   ranked cell (user decision 2026-11-03, the map card as reference; matchup-wrap.js sets
+   rk-wrapped from the inline layout's line count, on render and on every resize) gives its
+   lines the badge's 24px (18px badge, 6px gap) at the end and centres the badge there, so it
+   never overlaps the text and stays inside the cell. Unwrapped cells reserve nothing (the
+   user's earlier choice for the tables). */
+.mu-lines {
+  display: block;
+}
+
+.mu-lines.rk-wrapped {
+  position: relative;
+  padding-inline-end: 24px;
+}
+
+.wk-c-game .mu-lines.rk-wrapped .rk-badge,
+.games-table td.matchup .mu-lines.rk-wrapped .rk-badge {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  margin: 0;
+  transform: translateY(-50%);
+}

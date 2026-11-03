@@ -2,9 +2,10 @@
 
 On every surface that lets a matchup wrap (the ESPN+ and regional table, Matched games, the This
 weekend phone rows, the map game card and the CFB modal title), line 2 starts with "at", "@" or
-"vs." and holds the home side, and an inline badge (the two tables) sits on the last line. The
-away side never ends a line with the joiner, and the home side stays on one line when it fits
-there. Synthetic games and an in-memory copy of the contract fixture only.
+"vs." and holds the home side. The away side never ends a line with the joiner, and the home side
+stays on one line when it fits there. In the two tables a one-line ranked matchup ends with the
+badge inline; a wrapped one moves the badge to the right of the cell, centred on the lines (user
+decision 2026-11-03). Synthetic games and an in-memory copy of the contract fixture only.
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ HOSTILE = '<img src=x onerror="window.__xssMu=1">'
 # and where an inline badge sits. `text` is the element's text without the badge's own title.
 _LINES_JS = """(sel) => {
   const el = document.querySelector(sel);
-  const part = el.querySelector(':scope > .mu-part');
+  const part = el.querySelector(':scope > .mu-part, :scope > .mu-lines > .mu-part');
   const lh = parseFloat(getComputedStyle(el).lineHeight)
     || parseFloat(getComputedStyle(el).fontSize) * 1.2;
   const chars = [];
@@ -119,6 +120,87 @@ def _assert_one_line(got: dict[str, Any]) -> None:
     assert got["lines"] == 1, got
 
 
+# The ranked badge's place in a table matchup cell, against the matchup's text: each visible
+# character's rect (the badge's own title skipped), the first line's top, the last line's
+# bottom, the right edge of the last line's text, the badge's and the cell's rects, the row's
+# height and whether the cell's lines carry `rk-wrapped`.
+_BADGE_JS = """(sel) => {
+  const td = document.querySelector(sel);
+  const box = td.querySelector('.mu-lines') ?? td;
+  const lh = parseFloat(getComputedStyle(box).lineHeight)
+    || parseFloat(getComputedStyle(box).fontSize) * 1.2;
+  const chars = [];
+  const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge')) continue;
+    for (let k = 0; k < n.length; k += 1) {
+      if (/\\s/.test(n.data[k])) continue;
+      const r = document.createRange();
+      r.setStart(n, k);
+      r.setEnd(n, k + 1);
+      const b = r.getBoundingClientRect();
+      if (b.width === 0 && b.height === 0) continue;
+      chars.push({ top: b.top, bottom: b.bottom, left: b.left, right: b.right,
+        mid: (b.top + b.bottom) / 2 });
+    }
+  }
+  let line = 0;
+  let cur = chars[0].mid;
+  for (const c of chars) {
+    if (c.mid > cur + lh / 2) { line += 1; cur = c.mid; }
+    c.line = line;
+  }
+  const first = chars.filter((c) => c.line === 0);
+  const last = chars.filter((c) => c.line === line);
+  const rect = (e) => { const r = e.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right }; };
+  const b = rect(td.querySelector('.rk-badge'));
+  const overlap = chars.filter((c) => c.left < b.right && c.right > b.left
+    && c.top < b.bottom && c.bottom > b.top).length;
+  return {
+    lines: line + 1,
+    wrapped: box.classList.contains('rk-wrapped'),
+    firstTop: Math.min(...first.map((c) => c.top)),
+    lastBottom: Math.max(...last.map((c) => c.bottom)),
+    lastRight: Math.max(...last.map((c) => c.right)),
+    textLeft: Math.min(...chars.map((c) => c.left)),
+    badge: b,
+    cell: rect(td),
+    rowHeight: td.parentElement.getBoundingClientRect().height,
+    overlap,
+  };
+}"""
+
+
+def _badge(page: Page, selector: str) -> dict[str, Any]:
+    # The badge's placement follows a ResizeObserver, which reports after layout, before paint:
+    # two frames let every report land.
+    page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    got: dict[str, Any] = page.evaluate(_BADGE_JS, selector)
+    return got
+
+
+def _assert_badge_centred(got: dict[str, Any]) -> None:
+    """A wrapped cell: the badge at the right, centred on the lines, clear of the text."""
+    assert got["lines"] >= 2 and got["wrapped"], got
+    b, cell = got["badge"], got["cell"]
+    lines_mid = (got["firstTop"] + got["lastBottom"]) / 2
+    assert abs((b["top"] + b["bottom"]) / 2 - lines_mid) <= 1, got
+    assert b["top"] >= got["firstTop"], got
+    assert got["overlap"] == 0, got
+    assert cell["left"] <= b["left"] and b["right"] <= cell["right"], got
+    assert cell["top"] <= b["top"] and b["bottom"] <= cell["bottom"], got
+
+
+def _assert_badge_inline(got: dict[str, Any]) -> None:
+    """A one-line cell: the badge inline, 6px after the last word, inside the cell."""
+    assert got["lines"] == 1 and not got["wrapped"], got
+    b, cell = got["badge"], got["cell"]
+    assert abs(b["left"] - got["lastRight"] - 6) <= 1, got
+    assert got["overlap"] == 0, got
+    assert cell["left"] <= b["left"] and b["right"] <= cell["right"], got
+
+
 # ------------------------------------------------------------------ ESPN+ and regional table
 
 COMPACT_WIDTH = 768
@@ -162,10 +244,75 @@ def test_compact_table_breaks_before_the_joiner(
     joiner = "vs." if neutral else "@"
     suffix = " (Arlington, TX)" if neutral else ""
     got = _lines(compact_page, '#wk-host .wk-crow[data-wk-id="g:r"] td.wk-c-game')
+    # A wrapped cell's badge sits at the right, centred on the lines, so it is not inline.
     _assert_breaks_before_joiner(
-        got, joiner=joiner, text=f"#20 {away} {joiner} #5 {home}{suffix}", inline_badge=True
+        got, joiner=joiner, text=f"#20 {away} {joiner} #5 {home}{suffix}", inline_badge=False
     )
     _assert_one_line(_lines(compact_page, '#wk-host .wk-crow[data-wk-id="g:s"] td.wk-c-game'))
+
+
+def _compact_badge_games() -> list[dict[str, Any]]:
+    return [
+        _known(key="a"),
+        # Wraps at 768: the away side fills line 1 and the home side takes line 2.
+        _plus(
+            key="w",
+            away="Southern Mississippi Golden Eagles",
+            home="Louisiana-Monroe",
+            awayRank=20,
+            homeRank=5,
+            pbp="Ann Caller Longname",
+            analyst="Bob Color Longername",
+            crewKnown=True,
+        ),
+        # One line, ranked and its unranked twin (same text, no badge).
+        _plus(key="o", away="Away", home="Home", awayRank=20, homeRank=5),
+        _plus(key="u", away="#20 Away", home="#5 Home"),
+    ]
+
+
+def _crow(key: str) -> str:
+    return f'#wk-host .wk-crow[data-wk-id="g:{key}"] td.wk-c-game'
+
+
+def test_compact_table_centres_a_wrapped_badge_on_the_lines(compact_page: Page) -> None:
+    """User decision 2026-11-03: a wrapped ranked cell's badge moves to the right of the cell
+    and centres on the matchup lines; a one-line cell keeps it inline after the last word."""
+    _mount(compact_page, _compact_badge_games(), width=COMPACT_WIDTH)
+    wrapped = _badge(compact_page, _crow("w"))
+    _assert_badge_centred(wrapped)
+    # The badge's room (24px at the end of the lines) does not push the cell to a third line.
+    assert wrapped["lines"] == 2, wrapped
+    one = _badge(compact_page, _crow("o"))
+    _assert_badge_inline(one)
+    # One line is unchanged: the same row height and text start as the unranked twin's row.
+    twin = compact_page.evaluate(
+        """(sel) => { const td = document.querySelector(sel);
+          const r = document.createRange(); r.selectNodeContents(td);
+          const t = r.getClientRects()[0], c = td.getBoundingClientRect();
+          return { rowHeight: td.parentElement.getBoundingClientRect().height,
+            dx: t.left - c.left }; }""",
+        _crow("u"),
+    )
+    assert one["rowHeight"] == twin["rowHeight"], (one, twin)
+    assert abs((one["textLeft"] - one["cell"]["left"]) - twin["dx"]) <= 0.5, (one, twin)
+    # Unwrapped cells reserve nothing: no end padding on the ranked one-line cell's lines.
+    pad = compact_page.evaluate(
+        "(sel) => getComputedStyle(document.querySelector(sel + ' .mu-lines')).paddingRight",
+        _crow("o"),
+    )
+    assert pad == "0px"
+
+
+def test_compact_table_badge_follows_a_resize(compact_page: Page) -> None:
+    """The cell is re-measured on resize: widening to one line puts the badge back inline, and
+    narrowing again centres it on the lines."""
+    _mount(compact_page, _compact_badge_games(), width=COMPACT_WIDTH)
+    _assert_badge_centred(_badge(compact_page, _crow("w")))
+    compact_page.set_viewport_size({"width": 1440, "height": 900})
+    _assert_badge_inline(_badge(compact_page, _crow("w")))
+    compact_page.set_viewport_size({"width": COMPACT_WIDTH, "height": 900})
+    _assert_badge_centred(_badge(compact_page, _crow("w")))
 
 
 # ------------------------------------------------------------------ Matched games
@@ -218,9 +365,10 @@ def test_matched_games_breaks_before_the_joiner_at_390(
     # As shipped, the phone table scrolls at max-content, so the cell stays on one line.
     _assert_one_line(_lines(guarded_page, _RANKED_CELL))
     guarded_page.evaluate(_NARROW_JS, column)
+    _badge(guarded_page, _RANKED_CELL)  # lets the narrowed cell's badge move first
     got = _lines(guarded_page, _RANKED_CELL)
     _assert_breaks_before_joiner(
-        got, joiner="at", text=f"#5 {away} 20 at #3 {home} 27", inline_badge=True
+        got, joiner="at", text=f"#5 {away} 20 at #3 {home} 27", inline_badge=False
     )
 
 
@@ -232,6 +380,30 @@ def test_matched_games_one_line_is_unchanged_at_1440(
     open_app(guarded_page, _QUERY)
     guarded_page.wait_for_selector(_RANKED_CELL)
     _assert_one_line(_lines(guarded_page, _RANKED_CELL))
+
+
+def test_matched_games_centres_a_wrapped_badge_on_the_lines(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """The rule holds in Matched games if its layout ever lets the matchup wrap: one line keeps
+    the badge inline, a narrowed column centres it on the lines, and widening again puts it back
+    exactly where it was. At 390, since the desktop cell is nowrap."""
+    guarded_page.set_viewport_size({"width": 390, "height": 844})
+    _serve_names(guarded_page, fixture_raw, Lakeview="Lakeview State")
+    open_app(guarded_page, _QUERY)
+    guarded_page.wait_for_selector(_RANKED_CELL)
+    before = _badge(guarded_page, _RANKED_CELL)
+    _assert_badge_inline(before)
+    guarded_page.evaluate(_NARROW_JS, 260)
+    _assert_badge_centred(_badge(guarded_page, _RANKED_CELL))
+    guarded_page.evaluate(
+        """() => { const t = document.querySelector('#games-table');
+          t.style.tableLayout = ''; t.style.width = '';
+          t.querySelectorAll('thead th').forEach((th) => { th.style.width = ''; }); }"""
+    )
+    after = _badge(guarded_page, _RANKED_CELL)
+    _assert_badge_inline(after)
+    assert after == before
 
 
 # ------------------------------------------------------------------ phone rows

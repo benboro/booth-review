@@ -22,7 +22,7 @@ import {
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
-import { fillWrappingMatchup } from './matchup-wrap.js';
+import { fillTableMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel-parts.js';
 import { playedInText, venueCity } from './venue.js';
@@ -428,7 +428,7 @@ export function buildCompactTable(ctx) {
     const booth = el('td', 'wk-c-booth', line.text);
     booth.style.fontWeight = String(line.weight);
     const gameTd = el('td', 'wk-c-game');
-    fillWrappingMatchup(gameTd, compactMatchup(g), isRankedMatchup(g) ? rankBadge({ hidden: true }) : null);
+    fillTableMatchup(gameTd, compactMatchup(g), isRankedMatchup(g) ? rankBadge({ hidden: true }) : null);
     tr.append(
       el('td', 'wk-c-time', g.kickoffMin == null ? 'Time TBA' : clock12(g.kickoffMin)),
       gameTd,
