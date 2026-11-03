@@ -36,7 +36,8 @@ are not covered by this repository's MIT license.
   none); the Pac-12 2026 mark's `viewBox` was tightened to its content; the Pac-12 shield
   used before 2026 was derived from the Pac-12 Network 2012 file by removing its NETWORK
   lettering and tightening the box. That file has no source page, so its `source_url`
-  says so.
+  says so. The MAC file was cropped at the user's request: its lettering below the
+  shield was removed and the box tightened to the shield.
 - Dark-theme variants are built into `logos/dark/conf/<name>.svg` the same way as the
   network variants, and `dark_sha256` records each one's hash.
 - A game shows the logo its conference used in that game's season: SEC changes logo in
