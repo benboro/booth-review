@@ -42,6 +42,11 @@ _ROWS = """() => [...document.querySelectorAll('#conference-list label.check-row
     marginBox: img ? ib.height + parseFloat(getComputedStyle(img).marginTop)
       + parseFloat(getComputedStyle(img).marginBottom) : null,
     nameLeft: name.getBoundingClientRect().left,
+    nameLines: (() => {
+      const range = document.createRange();
+      range.selectNodeContents(name);
+      return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+    })(),
     rowH: l.closest('.check-item').getBoundingClientRect().height,
   };
 })"""
@@ -121,6 +126,24 @@ def test_row_heights_match(conf_page: Page) -> None:
     heights = {row["rowH"] for row in rows.values()}
     assert max(heights) - min(heights) == 0
     assert rows["SEC"]["rowH"] == rows["FBS Independents"]["rowH"]
+
+
+def test_phone_rows_keep_one_height_and_independents_one_line(
+    mobile_page: Page, open_app: OpenApp
+) -> None:
+    """WR-04: at 390px the Conference list sits in the phone Filters panel, without the
+    desktop popover's 380px width; every row must still be one height, with "FBS
+    Independents" on a single line beside its empty 44px slot."""
+    open_app(mobile_page, "")
+    mobile_page.click("#filters-button")
+    mobile_page.locator("#conference-list").scroll_into_view_if_needed()
+    assert mobile_page.locator("#conference-list").is_visible()
+    rows = _rows(mobile_page)
+    heights = {row["rowH"] for row in rows.values()}
+    assert max(heights) - min(heights) == 0, heights
+    assert rows["FBS Independents"]["nameLines"] == 1
+    for row in rows.values():
+        assert row["slotWidth"] == pytest.approx(44, abs=0.5)
 
 
 def test_logos_follow_the_last_season_of_the_seasons_filter(conf_page: Page) -> None:
