@@ -302,10 +302,11 @@ records only where the site settles or applies them.
   Matched games set it 18px inline after the matchup; the map hover card draws it 25.5px at
   the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
   NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued to the title's last word, so
-  it never sits alone on a line. On phones (480px and under) every CFB modal title, ranked or
-  not, keeps the badge's 36px free at the end of each line, and the badge overhangs into that
-  space without taking inline room, so a ranked title breaks its lines exactly as the same
-  title without the badge. No cell, row, card or title changes height with a badge.
+  it never sits alone on a line. At every width every CFB modal title, ranked or not, keeps
+  the badge's 36px free at the end of each line (beside the close button too, since the title
+  clears the button's float), and the badge overhangs into that space without taking inline
+  room, so a ranked title breaks its lines exactly as the same title without the badge. No
+  cell, row, card or title changes height with a badge.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label

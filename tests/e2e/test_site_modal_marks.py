@@ -223,14 +223,19 @@ def test_phone_modal_title_badge_reserves_its_space(
     _assert_phone_badge_reserved(got)
 
 
-_SWEEP_JS = """() => {
+_SWEEP_NAME = "Lakeview State University of Technology and Mines"
+# Long enough to wrap the widest (1440px) modal title more than once.
+_SWEEP_NAME_WIDE = (
+    "Lakeview State University of Technology, Agriculture and Mines at the Northern Plains"
+)
+
+_SWEEP_JS = """(full) => {
   // Grows the away side one character at a time (text only, set through textContent) and
   // compares the title's height with and without the badge at each length, so some length
   // is sure to end a line within the badge's width of the edge.
   const title = document.querySelector('#panel-title');
   const away = [...title.childNodes].find((n) => n.nodeType === Node.TEXT_NODE);
   const badge = title.querySelector('.rk-badge');
-  const full = 'Lakeview State University of Technology and Mines';
   const out = [];
   for (let n = 1; n <= full.length; n += 1) {
     away.textContent = `${full.slice(0, n)} 20 at `;
@@ -251,11 +256,40 @@ def test_phone_modal_title_badge_never_adds_a_line_at_any_length(
     ranked title is exactly as tall as the same title without the badge."""
     raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
     _phone_title(mobile_page, open_app, raw)
-    rows = mobile_page.evaluate(_SWEEP_JS)
+    rows = mobile_page.evaluate(_SWEEP_JS, _SWEEP_NAME)
     grew = [r for r in rows if abs(r["ranked"] - r["bare"]) > 0.01]
     assert grew == []
     # The sweep crosses at least two line counts, so it passed through the wrap points.
     assert len({round(r["bare"]) for r in rows}) >= 2
+
+
+@pytest.mark.parametrize("width", [481, 768, 1440])
+def test_modal_title_badge_reserves_its_space_at_every_width(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any], width: int
+) -> None:
+    """User decision 2026-11-03 ("reserve badge space everywhere"): above the phone width too,
+    every CFB modal title keeps the badge's 36px, so at every title length the ranked title is
+    exactly as tall as the same title without the badge, and the badge ends the last line 10px
+    after the last word, clear of the close button."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    got = _phone_title(guarded_page, open_app, raw)
+    assert got["word"] == "27"
+    _assert_phone_badge_reserved(got)
+    pad = guarded_page.evaluate(
+        "getComputedStyle(document.querySelector('#panel-title')).paddingInlineEnd"
+    )
+    assert pad == "36px"
+    rows = guarded_page.evaluate(_SWEEP_JS, _SWEEP_NAME_WIDE)
+    grew = [r for r in rows if abs(r["ranked"] - r["bare"]) > 0.01]
+    assert grew == []
+    assert len({round(r["bare"]) for r in rows}) >= 2
+    # Long names at this width: the badge still fits the reserved space after the last word.
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    teams = raw["lookups"]["teams"]
+    teams[raw["telecasts"]["away_team"][0]]["name"] = _SWEEP_NAME_WIDE
+    teams[raw["telecasts"]["home_team"][0]]["name"] = "Northfield Agricultural and Mechanical"
+    _assert_phone_badge_reserved(_phone_title(guarded_page, open_app, raw))
 
 
 def test_phone_modal_title_badge_reserves_its_space_for_hostile_long_names(
