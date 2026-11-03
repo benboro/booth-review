@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import re
 from collections import defaultdict
 from itertools import pairwise
 from pathlib import Path
 
-from test_site_logos import lint_svg
+from test_site_logos import _view_box, lint_svg
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONF_DIR = REPO_ROOT / "site" / "logos" / "conf"
@@ -105,3 +106,67 @@ def test_only_ruled_conferences_have_more_than_one_logo() -> None:
     # D-10: any other conference needs the user's ruling before it gains a second era.
     multi = {c for c, rows in _eras_by_conference().items() if len(rows) > 1}
     assert multi == MULTI_ERA
+
+
+_ENTRY = (
+    r"\{\s*file:\s*'logos/conf/([^']+)'\s*,\s*width:\s*(\d+)\s*,\s*height:\s*(\d+)\s*,"
+    r"\s*darkFile:\s*'logos/dark/conf/([^']+)'\s*\}"
+)
+
+
+def _js_consts() -> dict[str, tuple[str, int, int, str]]:
+    """Map each named entry in conf-logos.js to (file, width, height, dark_file)."""
+    text = CONF_JS.read_text(encoding="utf-8")
+    return {
+        m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5))
+        for m in re.finditer(r"const (\w+) = " + _ENTRY, text)
+    }
+
+
+def _js_eras() -> dict[str, list[tuple[int, str]]]:
+    """Map each conference in ERAS to its [(first season, const name), ...]."""
+    text = CONF_JS.read_text(encoding="utf-8")
+    body = text.split("const ERAS = new Map([", 1)[1].split("]);", 1)[0]
+    eras: dict[str, list[tuple[int, str]]] = {}
+    for m in re.finditer(
+        r"\[\s*'([^']+)'\s*,\s*\[((?:\s*\[\s*\d+\s*,\s*\w+\s*\]\s*,?)+)\]\s*\]", body
+    ):
+        eras[m.group(1)] = [
+            (int(e.group(1)), e.group(2))
+            for e in re.finditer(r"\[\s*(\d+)\s*,\s*(\w+)\s*\]", m.group(2))
+        ]
+    return eras
+
+
+def test_conf_js_entries_match_files_and_sizes() -> None:
+    consts = _js_consts()
+    files = sorted(p.name for p in conf_files())
+    assert sorted(f for f, *_ in consts.values()) == files
+    for name, (file, width, height, dark_file) in consts.items():
+        assert dark_file == file, name
+        assert height == 20, name
+        vb_w, vb_h = _view_box(CONF_DIR / file)
+        assert abs(width - round(height * vb_w / vb_h)) <= 1, name
+
+
+def test_conf_js_eras_match_manifest() -> None:
+    consts = _js_consts()
+    js_eras = _js_eras()
+    manifest = _eras_by_conference()
+    assert set(js_eras) == set(manifest) == FBS_CONFERENCES
+    used = [const for eras in js_eras.values() for _, const in eras]
+    assert sorted(used) == sorted(consts)
+    for conference, rows in manifest.items():
+        js = js_eras[conference]
+        assert [s for s, _ in js] == [int(r["seasons_from"]) for r in rows], conference
+        assert [consts[c][0] for _, c in js] == [r["file"] for r in rows], conference
+
+
+def test_conf_js_uses_map_and_never_builds_html() -> None:
+    js = CONF_JS.read_text(encoding="utf-8")
+    assert "new Map(" in js
+    assert "ERAS.has(" in js
+    assert "ERAS[" not in js
+    assert "D-10" in js
+    for banned in ("innerHTML", "insertAdjacentHTML", "outerHTML"):
+        assert banned not in js
