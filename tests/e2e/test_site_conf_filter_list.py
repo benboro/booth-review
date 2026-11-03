@@ -97,13 +97,6 @@ def test_names_align(conf_page: Page) -> None:
     assert max(lefts) - min(lefts) == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "D-05: the 44px slot narrows the 218px Conference list row so 'FBS Independents' "
-        "wraps (50px vs 29px); needs a style.css change outside plan 28-05"
-    ),
-)
 def test_row_heights_match(conf_page: Page) -> None:
     rows = _rows(conf_page)
     heights = {row["rowH"] for row in rows.values()}

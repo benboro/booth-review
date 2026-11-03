@@ -46,7 +46,10 @@ async ([name, season]) => {
 }
 """
 
-_SRC_JS = "() => [...document.querySelectorAll('img.cf-logo')].map((i) => i.getAttribute('src'))"
+_SRC_JS = (
+    "() => [...document.querySelectorAll('img.cf-logo:not(.cf-slot img)')]"
+    ".map((i) => i.getAttribute('src'))"
+)
 
 
 @pytest.fixture
@@ -167,7 +170,7 @@ def test_theme_change_swaps_every_logo(app_page: Page) -> None:
     ]
     _set_theme(app_page, "dark")
     app_page.wait_for_function(
-        "() => [...document.querySelectorAll('img.cf-logo')]"
+        "() => [...document.querySelectorAll('img.cf-logo:not(.cf-slot img)')]"
         ".every((i) => i.getAttribute('src').startsWith('logos/dark/conf/'))"
     )
     assert app_page.evaluate(_SRC_JS) == [
@@ -176,7 +179,7 @@ def test_theme_change_swaps_every_logo(app_page: Page) -> None:
     ]
     _set_theme(app_page, "light")
     app_page.wait_for_function(
-        "() => [...document.querySelectorAll('img.cf-logo')]"
+        "() => [...document.querySelectorAll('img.cf-logo:not(.cf-slot img)')]"
         ".every((i) => i.getAttribute('src').startsWith('logos/conf/'))"
     )
 

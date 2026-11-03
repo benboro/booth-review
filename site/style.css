@@ -2134,9 +2134,10 @@ input[type="checkbox"] {
   flex: 1;
 }
 
-/* Room for the Only button beside the name and count (plan 04.2-10). */
+/* Room for the Only button beside the name and count (plan 04.2-10), and for the 44px
+   logo slot (Phase 28) so "FBS Independents" stays on one line. */
 #pop-conference {
-  width: 330px;
+  width: 380px;
 }
 
 /* D-28: the Networks popover fits its visible rows. The count column is fixed so a count
