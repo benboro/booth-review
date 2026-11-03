@@ -72,11 +72,14 @@ def test_modal_title_badge_for_a_both_ranked_game(
     _open_panel(guarded_page, 0)
     title = guarded_page.locator("#panel-title")
     assert title.locator(".rk-badge").count() == 1
-    # The badge ends the title, glued to its last word so it never wraps alone.
+    # The badge ends the title, glued to its last word so it never wraps alone, inside the
+    # joiner-and-home part that a wrapping title moves to the next line (2026-11-03).
     assert guarded_page.evaluate(
         """() => {
-          const glue = document.querySelector('#panel-title').lastChild;
-          return glue.classList.contains('rk-glue')
+          const part = document.querySelector('#panel-title').lastChild;
+          const glue = part.lastChild;
+          return part.classList.contains('mu-part')
+            && glue.classList.contains('rk-glue')
             && glue.lastChild.classList.contains('rk-badge');
         }"""
     )
@@ -617,9 +620,10 @@ def test_matched_games_badge_for_a_both_ranked_game(
     assert svg.get_attribute("role") == "img"
     assert svg.get_attribute("aria-label") == "Both teams ranked"
     assert svg.get_attribute("aria-hidden") is None
+    # The badge ends the joiner-and-home part, which ends the cell (2026-11-03).
     assert guarded_page.evaluate(
         "document.querySelector('#games-table td.matchup:has(.rk-badge)')"
-        ".lastElementChild.classList.contains('rk-badge')"
+        ".lastElementChild.lastElementChild.classList.contains('rk-badge')"
     )
     text = cell.inner_text()
     assert text.startswith("#5 ")

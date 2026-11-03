@@ -14,10 +14,11 @@ import {
 } from './weekend-view.js';
 import { makeCaretIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 import {
-  boothLine, cellState, matchupText, stripCollapsedByDefault,
+  boothLine, cellState, matchupSides, stripCollapsedByDefault,
 } from './weekend.js';
 
 function item(game, ctx, { showTime = false } = {}) {
@@ -44,7 +45,9 @@ function item(game, ctx, { showTime = false } = {}) {
   }
   const text = el('span', 'wk-item-text');
   const when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
-  const l1 = el('span', 'wk-item-l1', showTime ? `${when} ${matchupText(game)}` : matchupText(game));
+  const l1 = el('span', 'wk-item-l1');
+  const sides = matchupSides(game);
+  fillWrappingMatchup(l1, showTime ? { ...sides, away: `${when} ${sides.away}` } : sides);
   const l2 = el('span', 'wk-item-l2');
   if (line.star) {
     const star = el('span', 'wk-star', '★');

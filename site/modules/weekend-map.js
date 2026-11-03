@@ -9,7 +9,7 @@ import { venueTitle } from './map-model.js';
 import { sortNetworks } from './network.js';
 import { FAMILY_ORDER, WEEKEND_MAP_DOT, familyKey } from './palette.js';
 import { isRankedMatchup } from './rank-badge.js';
-import { boothLine, cellState, clock12, matchupText } from './weekend.js';
+import { boothLine, cellState, clock12, matchupSides, matchupText } from './weekend.js';
 
 // ---------------------------------------------------------------- window shape (D-03)
 
@@ -229,6 +229,9 @@ function hoverLines(game, nowWall, venueLine) {
   const time = game.kickoffMin == null ? 'Time TBA' : `${clock12(game.kickoffMin)} ET`;
   const lines = {
     matchup: matchupText(game),
+    // The card's matchup line breaks before the joiner (2026-11-03); the Plotly text keeps
+    // the one string.
+    matchupSides: matchupSides(game),
     booth: { star: booth.star, text: booth.text, weight: booth.weight },
     kickoff: `${time}, ${game.networkName ?? 'Network TBA'}`,
     venue: venueLine,

@@ -34,6 +34,7 @@ import { networkMark, networkMarks, sortNetworks } from './network.js';
 import { conferenceMark } from './conf-logos.js';
 import { crewBox } from './panel-parts.js';
 import { rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { apKickoff } from './weekend.js';
 import { makeRolePill, nameWithRoles, roleKey, ROLE_PILL_TEXT } from './pill.js';
 import {
@@ -533,10 +534,12 @@ function cardConferenceLine(conf) {
  * rect) when given, so it never covers the controls above the map.
  * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
  *   kickoff: string, venue: string, family: string, ranked?: boolean, rankSlot?: boolean,
- *   conf?: {away: string|null, home: string|null, season: number|null}}} card
+ *   conf?: {away: string|null, home: string|null, season: number|null},
+ *   matchupSides?: {away: string, joiner: string, home: string}}} card
  *   `ranked` adds the badge at the top right (Phase 28, D-01); `rankSlot` (every CFB card)
  *   keeps the badge's padding even without it, so the same text wraps the same ranked or not;
- *   `conf` adds the conference line under the venue.
+ *   `conf` adds the conference line under the venue; `matchupSides` lets the matchup line
+ *   break before its joiner.
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
  *   onOpen?: () => void, within?: {top: number, bottom: number}}} opts
  */
@@ -562,8 +565,11 @@ export function showGameTooltip(
   boothText.style.fontWeight = String(card.booth.weight ?? 600);
   boothLine.append(boothText);
 
+  const matchup = text('strong', 'tooltip-title tooltip-game-matchup', card.matchup);
+  // A wrapping matchup breaks before its joiner (2026-11-03); same text, same textContent.
+  if (card.matchupSides) fillWrappingMatchup(matchup, card.matchupSides);
   const children = [
-    text('strong', 'tooltip-title tooltip-game-matchup', card.matchup),
+    matchup,
     boothLine,
     text('div', 'tooltip-game-kickoff', card.kickoff),
     text('div', 'tooltip-game-venue', card.venue),

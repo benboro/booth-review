@@ -41,6 +41,7 @@ import {
 } from './panel-parts.js';
 import { sortNetworks } from './network.js';
 import { bothRanked, rankBadge } from './rank-badge.js';
+import { joinerBreakNodes } from './matchup-wrap.js';
 import { personOnGame } from './select.js';
 import { scheduledFacade } from './weekend-data.js';
 import { apKickoff } from './weekend.js';
@@ -296,8 +297,7 @@ function buildRivalryLine(name) {
  */
 export function renderMatchupTitle(titleEl, data, i) {
   const parts = matchupParts(data, i, { withScore: true });
-  const nodes = [];
-  const side = ({ rank, team, score }) => {
+  const side = (nodes, { rank, team, score }) => {
     if (rank != null) {
       const sup = document.createElement('sup');
       sup.className = 'title-rank';
@@ -305,10 +305,12 @@ export function renderMatchupTitle(titleEl, data, i) {
       nodes.push(sup);
     }
     nodes.push(document.createTextNode(score != null ? `${team} ${score}` : team));
+    return nodes;
   };
-  side(parts.away);
-  nodes.push(document.createTextNode(` ${parts.separator} `));
-  side(parts.home);
+  const away = side([], parts.away);
+  // A wrapping title breaks before its joiner (2026-11-03): the joiner, the home side and the
+  // badge share one inline-block after the away side (matchup-wrap.js).
+  const nodes = side([document.createTextNode(`${parts.separator} `)], parts.home);
   // Phase 28 (D-01, D-04): a both-ranked game ends the title with the ranked badge; the
   // title's aria-label carries the sentence, so the badge itself is aria-hidden. Only the CFB
   // modal reaches here (NFL and MLB have their own panels), and data without rank columns
@@ -326,7 +328,7 @@ export function renderMatchupTitle(titleEl, data, i) {
     glue.append(document.createTextNode(text.slice(cut)), rankBadge({ hidden: true }));
     nodes.push(glue);
   }
-  titleEl.replaceChildren(...nodes);
+  titleEl.replaceChildren(...joinerBreakNodes(away, nodes));
   const label = formatMatchup(data, i, { withScore: true });
   // A matchup usually ends without a full stop, so the sentence gets one first: screen readers
   // pause only at punctuation, and "34 Both" would otherwise run into the score.

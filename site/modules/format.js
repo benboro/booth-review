@@ -450,10 +450,23 @@ export function noRatingLine(data, i) {
  * @returns {string} e.g. "#5 Northfield 20 at #3 Lakeview 27".
  */
 export function formatMatchup(data, i, options = {}) {
+  const { away, joiner, home } = matchupSideTexts(data, i, options);
+  return `${away} ${joiner} ${home}`;
+}
+
+/**
+ * The three runs of `formatMatchup` ("#5 Northfield 20", "at", "#3 Lakeview 27"), for a cell
+ * that breaks before the joiner.
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @param {{withScore?: boolean}} [options]
+ * @returns {{away: string, joiner: string, home: string}}
+ */
+export function matchupSideTexts(data, i, options = {}) {
   const parts = matchupParts(data, i, options);
   const side = ({ rank, team, score }) =>
     `${rank != null ? `#${rank} ` : ''}${team}${score != null ? ` ${score}` : ''}`;
-  return `${side(parts.away)} ${parts.separator} ${side(parts.home)}`;
+  return { away: side(parts.away), joiner: parts.separator, home: side(parts.home) };
 }
 
 /**

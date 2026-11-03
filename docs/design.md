@@ -135,7 +135,8 @@ records only where the site settles or applies them.
   fails on any other middle dot in site code or built pages.
 - Dates in tooltips and panels follow AP style (`Sept.`, lowercase `pm`, no dot between
   parts), and a neutral-site or head-to-head pairing writes AP's `vs.` with the period
-  (2026-11-02). View code builds the page with `createElement` and `textContent`; a test fails on
+  (2026-11-02); a matchup that wraps breaks before its "at", "@" or "vs." (Matchup marks,
+  2026-11-03). View code builds the page with `createElement` and `textContent`; a test fails on
   any `innerHTML`.
 - Where a game was played (2026-11-02): both game modals put a location line right under the
   date for any game with a venue ("AT&T Stadium, Arlington, TX", with " (neutral site)" for a
@@ -313,6 +314,21 @@ records only where the site settles or applies them.
   reserve the badge's space on every CFB item whether or not it shows, so identical text
   wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
   lengths to hold it. The two tables set the badge inline after the matchup instead.
+- A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the next line starts
+  with "at", "@" or "vs." and holds the home side and any inline badge, so a line never ends
+  with a dangling joiner and the home side never splits while it fits on one line. It applies
+  on every surface where a CFB matchup can wrap: the ESPN+ and regional table, Matched games,
+  the This weekend phone rows, the map game card and the CFB modal title. Timeline cells are one
+  truncated line and are unaffected. `site/modules/matchup-wrap.js` builds it once: plain away
+  text, a space, then the joiner, home side and inline badge in one inline-block
+  (`span.mu-part`); a rank stays on the line of the word after it (`span.mu-glue`). The copy,
+  textContent and accessible names do not change, and a matchup on one line looks exactly as
+  before. A side longer than a whole line still wraps inside itself; when the away side does,
+  the joiner part follows its last word, or starts the next line if it does not fit there. The
+  NFL weekend phone rows and map card share these builders and follow the same rule; the NFL
+  and MLB tables and modals are separate code and unchanged. Matched games does not wrap as
+  built (nowrap on desktop, a max-content table that scrolls on a phone), so the rule there
+  only takes effect if that changes.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label

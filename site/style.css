@@ -7599,6 +7599,19 @@ tr.is-matched > :first-child {
   height: 18px;
 }
 
+/* A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the joiner, the
+   home side and an inline badge form one inline-block after the plain away text, so the space
+   before the joiner is the only break between the sides, and a home part longer than its line
+   still wraps inside itself. A rank stays on the line of the word after it. Built by
+   matchup-wrap.js for the two tables, the phone rows, the map card and the modal title. */
+.mu-part {
+  display: inline-block;
+}
+
+.mu-glue {
+  white-space: nowrap;
+}
+
 .wk-c-game .rk-badge {
   height: 18px;
   vertical-align: middle;

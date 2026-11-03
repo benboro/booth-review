@@ -17,11 +17,12 @@
 
 import {
   WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState, clock12,
-  dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupText,
+  dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupSides, matchupText,
   stripCollapsedByDefault,
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel-parts.js';
 import { playedInText, venueCity } from './venue.js';
@@ -392,7 +393,8 @@ function activateOnKey(node, fn) {
 /** The ESPN+ table's matchup; a neutral-site game adds its city: "TCU vs. Kansas State (Arlington, TX)". */
 function compactMatchup(g) {
   const city = g.neutral ? venueCity(g.venue) : null;
-  return city ? `${matchupText(g)} (${city})` : matchupText(g);
+  const sides = matchupSides(g);
+  return city ? { ...sides, home: `${sides.home} (${city})` } : sides;
 }
 
 /** The CFB ESPN+ and regional booktabs table (D-10); absent when empty and for the NFL. */
@@ -425,8 +427,8 @@ export function buildCompactTable(ctx) {
     }
     const booth = el('td', 'wk-c-booth', line.text);
     booth.style.fontWeight = String(line.weight);
-    const gameTd = el('td', 'wk-c-game', compactMatchup(g));
-    if (isRankedMatchup(g)) gameTd.append(rankBadge({ hidden: true }));
+    const gameTd = el('td', 'wk-c-game');
+    fillWrappingMatchup(gameTd, compactMatchup(g), isRankedMatchup(g) ? rankBadge({ hidden: true }) : null);
     tr.append(
       el('td', 'wk-c-time', g.kickoffMin == null ? 'Time TBA' : clock12(g.kickoffMin)),
       gameTd,

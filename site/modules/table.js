@@ -19,6 +19,7 @@ import {
   formatDate,
   formatMatchup,
   formatViewers,
+  matchupSideTexts,
   measurementLabel,
   NO_RATING_LABEL,
   figureSourceOf,
@@ -28,6 +29,7 @@ import { networkMark } from './network.js';
 import { attachScrollCue } from './scroll-cue.js';
 import { crewList, makeRolePill, nameWithRoles } from './pill.js';
 import { bothRanked, rankBadge } from './rank-badge.js';
+import { fillWrappingMatchup } from './matchup-wrap.js';
 import { personOnGame } from './select.js';
 import { venueFilterInfo } from './map-model.js';
 import { playedInText } from './venue.js';
@@ -167,11 +169,11 @@ function buildRow(data, state, onDetails, i) {
 
   const matchupTd = document.createElement('td');
   matchupTd.className = 'matchup';
-  matchupTd.textContent = formatMatchup(data, i, { withScore: true });
   // Phase 28 (D-01, D-04): a both-ranked game ends the cell with the ranked badge. The row's
   // "Details for ..." label does not carry the sentence, so the badge keeps role img and its
-  // own "Both teams ranked" label.
-  if (bothRanked(t.away_rank?.[i], t.home_rank?.[i])) matchupTd.append(rankBadge());
+  // own "Both teams ranked" label. A wrapping cell breaks before the joiner (2026-11-03).
+  const badge = bothRanked(t.away_rank?.[i], t.home_rank?.[i]) ? rankBadge() : null;
+  fillWrappingMatchup(matchupTd, matchupSideTexts(data, i, { withScore: true }), badge);
   // Too many columns for inline text: a neutral-site game names its city in a tooltip.
   if (t.neutral[i]) {
     const playedIn = playedInText(data.lookups.venues?.[t.place?.[i]]);
