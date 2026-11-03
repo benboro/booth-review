@@ -286,6 +286,56 @@ function buildRivalryLine(name) {
   return p;
 }
 
+/** Titles already watched for a change in their line count. */
+const watchedTitles = new WeakSet();
+
+/**
+ * Whether the title's text runs over more than one line. Measures the plain text runs only
+ * (not the badge's own title, and not the raised superscript ranks), so a line is a change in
+ * the text's bottom edge of more than half a line.
+ * @param {HTMLElement} titleEl
+ * @returns {boolean}
+ */
+function titleWraps(titleEl) {
+  const bottoms = [];
+  let tall = 0;
+  const walk = document.createTreeWalker(titleEl, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge, sup') || !n.data.trim()) continue;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r of range.getClientRects()) {
+      if (r.height === 0) continue;
+      bottoms.push(r.bottom);
+      tall = Math.max(tall, r.height);
+    }
+  }
+  if (bottoms.length === 0) return false;
+  return Math.max(...bottoms) - Math.min(...bottoms) > tall / 2;
+}
+
+/**
+ * The ranked badge on a wrapped title (user feedback 2026-11-03): on one line it ends the line,
+ * glued to the last word; once the title wraps it moves into the reserved space at the right
+ * and centres on the title's lines, as the map card does. The class only moves the badge (it
+ * takes no inline room either way), so toggling it never changes the line breaks or the
+ * title's height. Re-checked whenever the title changes size, which covers the dialog opening
+ * and the viewport resizing.
+ * @param {HTMLElement} titleEl
+ */
+export function syncTitleWrap(titleEl) {
+  const ranked = titleEl.querySelector('.rk-badge') !== null;
+  titleEl.classList.toggle('rk-wrapped', ranked && titleWraps(titleEl));
+}
+
+/** @param {HTMLElement} titleEl */
+function watchTitleWrap(titleEl) {
+  syncTitleWrap(titleEl);
+  if (watchedTitles.has(titleEl) || typeof ResizeObserver !== 'function') return;
+  watchedTitles.add(titleEl);
+  new ResizeObserver(() => syncTitleWrap(titleEl)).observe(titleEl);
+}
+
 /**
  * Writes the modal title with each rank as a superscript and no "#" (notes 2026-11-02): the
  * title's large serif makes a full-size "#7" read as part of the name. Text nodes only, never
@@ -329,6 +379,7 @@ export function renderMatchupTitle(titleEl, data, i) {
     nodes.push(glue);
   }
   titleEl.replaceChildren(...joinerBreakNodes(away, nodes));
+  watchTitleWrap(titleEl);
   const label = formatMatchup(data, i, { withScore: true });
   // A matchup usually ends without a full stop, so the sentence gets one first: screen readers
   // pause only at punctuation, and "34 Both" would otherwise run into the score.
@@ -601,6 +652,8 @@ function showPanel(args) {
   opener = active && active !== document.body ? active : document.getElementById('chart');
   openSession += 1;
   dialog.showModal();
+  // The title had no layout while the dialog was closed; place the badge before first paint.
+  syncTitleWrap(titleEl);
 }
 
 /** Closes the modal if open; the `close` event handler restores focus. */

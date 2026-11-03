@@ -2,9 +2,9 @@
 
 On every surface that lets a matchup wrap (the ESPN+ and regional table, Matched games, the This
 weekend phone rows, the map game card and the CFB modal title), line 2 starts with "at", "@" or
-"vs." and holds the home side, and an inline badge sits on the last line. The away side never
-ends a line with the joiner, and the home side stays on one line when it fits there. Synthetic
-games and an in-memory copy of the contract fixture only.
+"vs." and holds the home side, and an inline badge (the two tables) sits on the last line. The
+away side never ends a line with the joiner, and the home side stays on one line when it fits
+there. Synthetic games and an in-memory copy of the contract fixture only.
 """
 
 from __future__ import annotations
@@ -255,7 +255,7 @@ def test_phone_row_breaks_before_the_joiner(
     ]
     _mount_phone(guarded_page, games)
     got = _lines(guarded_page, '#wk-host .wk-item[data-wk-id="g:r"] .wk-item-l1')
-    # The phone row's badge sits at the top right, outside the text, so it is not inline.
+    # The phone row's badge sits at the right, centred on the matchup lines, so not inline.
     _assert_breaks_before_joiner(
         got,
         joiner="@",
@@ -325,14 +325,23 @@ def test_modal_title_breaks_before_the_joiner_at_390(
     guarded_page.evaluate("window.__testHooks.openPanel(4)")
     guarded_page.wait_for_selector("#detail-panel[open]")
     got = _lines(guarded_page, "#panel-title")
-    # The title writes ranks as superscripts with no "#".
+    # The title writes ranks as superscripts with no "#". A wrapped title's badge leaves the
+    # last line for the reserved space at the right, centred on the title's lines (user
+    # feedback 2026-11-03), so it is not inline here.
     _assert_breaks_before_joiner(
         got,
         joiner="at",
         text=f"5{away} 20 at 3{home} 27",
-        inline_badge=True,
+        inline_badge=False,
         away_wraps=away == HOSTILE,
     )
+    # Measured together in one call: the dialog may still be easing into place.
+    off = guarded_page.evaluate(
+        "(() => { const r = document.querySelector('#panel-title').getBoundingClientRect();"
+        " const b = document.querySelector('#panel-title .rk-badge').getBoundingClientRect();"
+        " return (b.top + b.bottom) / 2 - (r.top + r.bottom) / 2; })()"
+    )
+    assert abs(off) <= 1, got
     label = guarded_page.get_attribute("#panel-title", "aria-label")
     assert label == f"#5 {away} 20 at #3 {home} 27. Both teams ranked."
 

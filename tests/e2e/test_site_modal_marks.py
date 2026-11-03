@@ -168,9 +168,28 @@ _PHONE_TITLE_JS = """() => {
   badge.style.display = '';
   const overlapsClose = b.left < x.right && b.right > x.left
     && b.top < x.bottom && b.bottom > x.top;
+  // Lines, counted from the plain text runs' bottoms (the raised superscript ranks and the
+  // badge's own title aside): a new line is a bottom more than half a line below the last.
+  const bottoms = [];
+  const walk = document.createTreeWalker(title, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    if (n.parentElement.closest('.rk-badge, sup') || !n.data.trim()) continue;
+    const r = document.createRange();
+    r.selectNodeContents(n);
+    for (const q of r.getClientRects()) if (q.height > 0) bottoms.push(q.bottom);
+  }
+  bottoms.sort((a, c) => a - c);
+  const lh = parseFloat(getComputedStyle(title).fontSize) * 1.2;
+  let lines = bottoms.length ? 1 : 0;
+  for (let k = 1; k < bottoms.length; k += 1) if (bottoms[k] - bottoms[k - 1] > lh / 2) lines += 1;
+  const cs = getComputedStyle(title);
+  const top = t.top + parseFloat(cs.paddingTop) + parseFloat(cs.borderTopWidth);
+  const bottom = t.bottom - parseFloat(cs.paddingBottom) - parseFloat(cs.borderBottomWidth);
   return { ranked, bare, word: glue.firstChild.textContent, wordTop: word.top,
            wordBottom: word.bottom, gap: b.left - word.right, badgeTop: b.top,
-           badgeBottom: b.bottom, badgeRight: b.right, titleRight: t.right, overlapsClose };
+           badgeBottom: b.bottom, badgeLeft: b.left, badgeRight: b.right, titleRight: t.right,
+           overlapsClose, lines, linesTop: top, linesMid: (top + bottom) / 2,
+           badgeMid: (b.top + b.bottom) / 2, wrappedClass: title.classList.contains('rk-wrapped') };
 }"""
 
 
@@ -188,13 +207,22 @@ def _assert_phone_badge_reserved(got: dict[str, Any]) -> None:
     # D-05 / WR-05: the badge never adds a line, so the title is exactly as tall as the same
     # title without it.
     assert got["ranked"] == pytest.approx(got["bare"], abs=0.01)
-    # It still ends the last line, 10px after the last word, in the title's reserved space,
-    # clear of the close button.
-    assert got["badgeTop"] < got["wordBottom"]
-    assert got["badgeBottom"] > got["wordTop"]
-    assert got["gap"] == pytest.approx(10, abs=0.5)
+    # User feedback 2026-11-03: the badge centres on the title's lines and never sits above the
+    # first line's top, in the title's reserved space, clear of the close button.
+    assert abs(got["badgeMid"] - got["linesMid"]) <= 1, got
+    assert got["badgeTop"] >= got["linesTop"] - 0.01, got
     assert got["badgeRight"] <= got["titleRight"] + 0.5
     assert not got["overlapsClose"]
+    assert got["wrappedClass"] == (got["lines"] > 1), got
+    if got["lines"] == 1:
+        # One line looks as before: the badge ends the line, 10px after the last word.
+        assert got["badgeTop"] < got["wordBottom"]
+        assert got["badgeBottom"] > got["wordTop"]
+        assert got["gap"] == pytest.approx(10, abs=0.5)
+    else:
+        # A wrapped title, like the map card: the badge sits at the right of the reserved 36px.
+        assert got["badgeRight"] == pytest.approx(got["titleRight"], abs=0.5)
+        assert got["badgeLeft"] >= got["titleRight"] - 36 - 0.01
 
 
 @pytest.mark.parametrize(
@@ -320,6 +348,61 @@ def test_phone_modal_title_badge_reserves_its_space_for_hostile_long_names(
     markup = "#panel-title img, #panel-title b, #panel-title i"
     assert mobile_page.locator(markup).count() == 0
     assert home in (mobile_page.text_content("#panel-title") or "")
+
+
+@pytest.mark.parametrize(
+    ("width", "names", "lines"),
+    [
+        (390, ("Lake", "North"), 1),
+        (390, ("Lakeview State University", "Northfield A&M"), 2),
+        (1440, None, 1),
+        (1440, (_SWEEP_NAME_WIDE, "Northfield Agricultural and Mechanical"), 2),
+    ],
+)
+def test_modal_title_badge_centres_on_the_title_lines(
+    guarded_page: Page,
+    open_app: OpenApp,
+    fixture_raw: dict[str, Any],
+    width: int,
+    names: tuple[str, str] | None,
+    lines: int,
+) -> None:
+    """User feedback 2026-11-03: on one line the badge ends the line, centred on it; once the
+    title wraps it moves to the right of the reserved 36px and centres on the title's lines, as
+    the map card does. Its top never sits above the first line, and the title is as tall as the
+    same title without the badge."""
+    guarded_page.set_viewport_size({"width": width, "height": 900})
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    if names is not None:
+        teams = raw["lookups"]["teams"]
+        teams[raw["telecasts"]["away_team"][0]]["name"] = names[0]
+        teams[raw["telecasts"]["home_team"][0]]["name"] = names[1]
+    got = _phone_title(guarded_page, open_app, raw)
+    if lines == 1:
+        assert got["lines"] == 1, got
+    else:
+        assert got["lines"] >= 2, got
+    _assert_phone_badge_reserved(got)
+
+
+def test_modal_title_badge_follows_a_resize_across_the_wrap(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """The badge re-places itself when the open modal changes width: a title on one line at
+    1440 wraps at 390, and the badge moves from the line's end to the centre of the lines."""
+    guarded_page.set_viewport_size({"width": 1440, "height": 900})
+    raw = _mutated(fixture_raw, away_rank={0: 7}, home_rank={0: 12})
+    teams = raw["lookups"]["teams"]
+    teams[raw["telecasts"]["away_team"][0]]["name"] = "Lakeview State"
+    teams[raw["telecasts"]["home_team"][0]]["name"] = "Northfield Tech"
+    assert _phone_title(guarded_page, open_app, raw)["lines"] == 1
+    guarded_page.set_viewport_size({"width": 390, "height": 844})
+    guarded_page.wait_for_function(
+        "document.querySelector('#panel-title').classList.contains('rk-wrapped')"
+    )
+    got: dict[str, Any] = guarded_page.evaluate(_PHONE_TITLE_JS)
+    assert got["lines"] >= 2, got
+    _assert_phone_badge_reserved(got)
 
 
 # ------------------------------------------------------------------ Conference line

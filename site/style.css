@@ -7724,8 +7724,22 @@ tr.is-matched > :first-child {
    never gains a line. flow-root keeps the title's box clear of the floated close button, so
    the reserved space on the lines beside the x is free too, rather than under the button. */
 #panel-title {
+  position: relative;
   display: flow-root;
   padding-inline-end: 36px;
+}
+
+/* A wrapped title (user feedback 2026-11-03; panel.js sets rk-wrapped from the measured line
+   count) moves the badge into the reserved 36px at the right and centres it on the title's
+   lines, as the map card does; on one line it stays glued to the last word. The title has no
+   block padding, so 50% of its box is the middle of its lines. Out of flow either way, so the
+   line breaks and the height do not change. */
+#panel-title.rk-wrapped .rk-badge {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  margin: 0;
+  transform: translateY(-50%);
 }
 
 .panel-conferences,
