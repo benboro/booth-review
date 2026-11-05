@@ -38,7 +38,9 @@ AA_FEED_CANDIDATES: Final = {
     "schedules": "https://awfulannouncing.com/schedules/feed",
     "site": "https://awfulannouncing.com/feed",
 }
-"""Both UNVERIFIED until the one real `booth-review collect` request (D-10)."""
+"""The two feeds `--verify` may try (D-10). Both are the no-slash form: since 2026-11-03 AA
+answers the trailing-slash URLs with a 301 to these. The job reads the verified one from
+`ledger/aa_feed_watch.json`, not from here."""
 
 FEED_MAX_BYTES: Final = 1_500_000
 FEED_STATE_NAME: Final = "aa_feed_watch.json"

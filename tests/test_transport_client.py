@@ -796,6 +796,65 @@ def test_aa_redirect_is_returned_not_followed() -> None:
         "https://awfulannouncing.com/a.html",
         "https://awfulannouncing.com/a.html",
     ]
+    assert resp.location == "https://awfulannouncing.com/b.html"
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ({"Location": "/feed"}, "https://awfulannouncing.com/feed"),
+        (
+            {"Location": "https://awfulannouncing.com/b.html?sig=SECRET&token=x#frag"},
+            "https://awfulannouncing.com/b.html",
+        ),
+        ({}, None),
+    ],
+)
+def test_aa_redirect_location_is_sanitised(header: dict[str, str], expected: str | None) -> None:
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", header),
+    }
+    client = _client(_recording_handler(responses, []))
+    resp = client.fetch("https://awfulannouncing.com/a.html")
+    assert resp.status_code == 301
+    assert resp.location == expected
+    assert "SECRET" not in (resp.location or "")
+
+
+@pytest.mark.parametrize(
+    "location", ["https://awfulannouncing.com/b\x1b\x07.html", "javascript:alert(1)"]
+)
+def test_aa_redirect_with_an_invalid_location_fails_without_storing_it(location: str) -> None:
+    """httpx rejects a Location with control characters or no usable URL before the client
+    reads it: the fetch fails (no hop is sent) and nothing carries the header."""
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", {"Location": location}),
+    }
+    with pytest.raises(FetchError):
+        _client(_recording_handler(responses, log)).fetch("https://awfulannouncing.com/a.html")
+    assert [str(r.url) for r in log][-1] == "https://awfulannouncing.com/a.html"
+
+
+def test_aa_redirect_location_is_capped() -> None:
+    long_path = "/" + "a" * 5000
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", {"Location": long_path}),
+    }
+    resp = _client(_recording_handler(responses, [])).fetch("https://awfulannouncing.com/a.html")
+    assert resp.location is not None and len(resp.location) == 512
+
+
+def test_followed_or_plain_responses_carry_no_location() -> None:
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (200, b"ok", {"Location": "https://x.example/"}),
+    }
+    resp = _client(_recording_handler(responses, [])).fetch("https://awfulannouncing.com/a.html")
+    assert resp.status_code == 200 and resp.location is None
 
 
 # -- Response size cap --------------------------------------------------------

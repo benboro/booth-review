@@ -57,6 +57,29 @@ _MAX_REDIRECTS = 5
 
 # GitHub release-asset redirects carry short-lived signed query strings; the
 # manifest's final_url keeps scheme, host and path only for these hosts.
+_LOCATION_MAX_CHARS = 512
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+
+
+def _safe_location(request_url: str, raw: str | None) -> str | None:
+    """An unfollowed redirect's target, safe to store and print: resolved against the request
+    URL, with no query or fragment (a signed link or token never reaches the ledger), no control
+    characters, and at most _LOCATION_MAX_CHARS long. None when absent or unparseable."""
+    if raw is None:
+        return None
+    cleaned = _CONTROL_CHARS.sub("", raw).strip()
+    if not cleaned:
+        return None
+    try:
+        target = httpx2.URL(request_url).join(cleaned)
+    except (httpx2.InvalidURL, ValueError):
+        return None
+    if target.scheme not in ("http", "https") or not target.host:
+        return None
+    safe = f"{target.scheme}://{target.host}{target.path}"
+    return safe[:_LOCATION_MAX_CHARS]
+
+
 _STRIP_FINAL_QUERY_HOSTS = frozenset(
     {"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
 )
@@ -296,7 +319,7 @@ class PoliteClient:
             call_limit_remaining=call_limit_remaining,
             final_url=final_url,
             fetched_at=datetime.now(UTC),
-            location=response.headers.get("Location") if unfollowed else None,
+            location=_safe_location(url, response.headers.get("Location")) if unfollowed else None,
         )
         logger.info(
             "fetch host=%s path=%s status=%s bytes=%d",
@@ -342,6 +365,10 @@ class PoliteClient:
             return self._send_with_budgeted_retries(attempt)
         except httpx2.TransportError as exc:
             raise FetchError(f"transport failure fetching {url}") from exc
+        except httpx2.InvalidURL as exc:
+            # httpx builds a 3xx's next request while sending, so an unusable Location header
+            # raises here; it is the response's fault, not the caller's.
+            raise FetchError(f"invalid redirect target fetching {url}") from exc
 
     def _approve_redirect(
         self, from_host: str, request: httpx2.Request, *, check_robots: bool
