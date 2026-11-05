@@ -55,31 +55,44 @@ _RETRY_ATTEMPTS = 4
 # the allow-list and its robots.txt, and paced, before the hop is sent.
 _MAX_REDIRECTS = 5
 
-# GitHub release-asset redirects carry short-lived signed query strings; the
-# manifest's final_url keeps scheme, host and path only for these hosts.
 _LOCATION_MAX_CHARS = 512
-_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+_TRUNCATED = "...[truncated]"
+# Anything outside printable ASCII. The stored target keeps httpx's percent-encoded raw path
+# and punycode host, so a decoded control, line-break or bidi character can only appear if
+# something upstream is wrong; it is then dropped rather than stored or printed.
+_UNSAFE_CHARS = re.compile(r"[^\x21-\x7e]")
 
 
 def _safe_location(request_url: str, raw: str | None) -> str | None:
     """An unfollowed redirect's target, safe to store and print: resolved against the request
-    URL, with no query or fragment (a signed link or token never reaches the ledger), no control
-    characters, and at most _LOCATION_MAX_CHARS long. None when absent or unparseable."""
+    URL; scheme, punycode host, any non-default port and the still percent-encoded path only
+    (no userinfo, query or fragment, so a signed link or token never reaches the ledger, and an
+    encoded `%3F` or `%0d%0a` stays encoded); printable ASCII only; and at most
+    _LOCATION_MAX_CHARS long, marked when cut. None when absent, unparseable or not http(s)."""
     if raw is None:
         return None
-    cleaned = _CONTROL_CHARS.sub("", raw).strip()
+    cleaned = raw.strip()
     if not cleaned:
         return None
     try:
         target = httpx2.URL(request_url).join(cleaned)
-    except (httpx2.InvalidURL, ValueError):
+        host = target.raw_host.decode("ascii")
+        path = target.raw_path.split(b"?", 1)[0].decode("ascii")
+    except (httpx2.InvalidURL, ValueError, UnicodeDecodeError):
         return None
-    if target.scheme not in ("http", "https") or not target.host:
+    if target.scheme not in ("http", "https") or not host:
         return None
-    safe = f"{target.scheme}://{target.host}{target.path}"
-    return safe[:_LOCATION_MAX_CHARS]
+    if ":" in host:  # an IPv6 literal
+        host = f"[{host}]"
+    port = f":{target.port}" if target.port is not None else ""
+    safe = _UNSAFE_CHARS.sub("", f"{target.scheme}://{host}{port}{path}")
+    if len(safe) > _LOCATION_MAX_CHARS:
+        safe = safe[: _LOCATION_MAX_CHARS - len(_TRUNCATED)] + _TRUNCATED
+    return safe
 
 
+# GitHub release-asset redirects carry short-lived signed query strings; the
+# manifest's final_url keeps scheme, host and path only for these hosts.
 _STRIP_FINAL_QUERY_HOSTS = frozenset(
     {"release-assets.githubusercontent.com", "objects.githubusercontent.com"}
 )
