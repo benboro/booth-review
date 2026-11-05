@@ -455,9 +455,7 @@ def verify_feed(
     response = client.fetch(url, validators=None, max_bytes=FEED_MAX_BYTES)
     _audit(paths, url, response)
     if response.status_code != 200:
-        return VerifyResult(
-            url, response.status_code, 0, (), (), False, location=response.location
-        )
+        return VerifyResult(url, response.status_code, 0, (), (), False, location=response.location)
     entries = parse_feed(response.content)
     cfb: list[str] = []
     other: list[str] = []
