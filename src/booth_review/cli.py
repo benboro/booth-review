@@ -1276,10 +1276,14 @@ def _collect_aa_feed(args: argparse.Namespace) -> int:
                     print(f"  {url}")
                 for url in result.other_schedule_links:
                     print(f"  other {url}")
+                if result.location is not None:
+                    print(f"  redirects to {result.location} (not followed)")
                 if result.verified:
                     print(f"verified {result.feed_url}")
-                else:
+                elif verify == "schedules":
                     print("not verified; try --verify site")
+                else:
+                    print("not verified")
                 code = 0 if result.verified else 4
             else:
                 assert week is not None
@@ -1303,7 +1307,7 @@ def _collect_aa_feed(args: argparse.Namespace) -> int:
             print(f"error: {type(exc).__name__}", file=sys.stderr)
             code = 4
         except FeedStatusError as exc:
-            print(f"error: {type(exc).__name__}", file=sys.stderr)
+            print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
             code = 4
         if not args.no_commit:
             runtime.vault.commit_batch(
