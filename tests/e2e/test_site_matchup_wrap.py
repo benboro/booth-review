@@ -318,20 +318,29 @@ def test_compact_table_badge_follows_a_resize(compact_page: Page) -> None:
     _mount(compact_page, _compact_badge_games(), width=COMPACT_WIDTH)
     first = _badge(compact_page, _crow("w"))
     _assert_badge_centred(first)
-    compact_page.set_viewport_size({"width": 1440, "height": 900})
-    _wait_wrapped(compact_page, _crow("w"), wrapped=False)
+    _resize_and_settle(compact_page, 1440, _crow("w"), wrapped=False)
     _assert_badge_inline(_badge(compact_page, _crow("w")))
-    compact_page.set_viewport_size({"width": COMPACT_WIDTH, "height": 900})
-    _wait_wrapped(compact_page, _crow("w"), wrapped=True)
+    _resize_and_settle(compact_page, COMPACT_WIDTH, _crow("w"), wrapped=True)
     _assert_badge_centred(_badge(compact_page, _crow("w")))
 
 
-def _wait_wrapped(page: Page, selector: str, *, wrapped: bool) -> None:
-    # The ResizeObserver re-syncs after the next layout, not within set_viewport_size; poll on
-    # a timer (not animation frames) until the cell's wrapped state settles. This raced in CI.
+def _resize_and_settle(page: Page, width: int, selector: str, *, wrapped: bool) -> None:
+    """Resize, then wait for the weekend view's debounced rebuild (weekend-view.js,
+    RESIZE_DEBOUNCE_MS) to replace the cell and for the new cell's wrapped state.
+
+    Waiting on the old cell raced in CI: its own ResizeObserver re-synced it, the wait passed,
+    and the rebuild then swapped in a new cell that `_badge` could measure before that cell's
+    first ResizeObserver report (2 lines, `rk-wrapped` not yet set). Visitors never see that
+    state, since the report lands before paint."""
+    page.evaluate(
+        "(sel) => { document.querySelector(sel + ' .mu-lines').dataset.preResize = '1'; }",
+        selector,
+    )
+    page.set_viewport_size({"width": width, "height": 900})
     page.wait_for_function(
-        "([sel, want]) => document.querySelector(sel + ' .mu-lines')"
-        ".classList.contains('rk-wrapped') === want",
+        """([sel, want]) => { const el = document.querySelector(sel + ' .mu-lines');
+          return el !== null && el.dataset.preResize === undefined
+            && el.classList.contains('rk-wrapped') === want; }""",
         arg=[selector, wrapped],
         polling=100,
     )
