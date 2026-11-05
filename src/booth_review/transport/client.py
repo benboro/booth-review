@@ -296,6 +296,7 @@ class PoliteClient:
             call_limit_remaining=call_limit_remaining,
             final_url=final_url,
             fetched_at=datetime.now(UTC),
+            location=response.headers.get("Location") if unfollowed else None,
         )
         logger.info(
             "fetch host=%s path=%s status=%s bytes=%d",

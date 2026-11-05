@@ -371,8 +371,8 @@ TARGETS: Final[dict[PolicySource, PolicyTarget]] = {
         pages=(("disclaimer", f"https://{AA_HOST}/disclaimer"),),
         planned_samples=(
             f"https://{AA_HOST}/college-football/2023-college-football-week-1-viewership-sample.html",
-            f"https://{AA_HOST}/schedules/feed/",
-            f"https://{AA_HOST}/feed/",
+            f"https://{AA_HOST}/schedules/feed",
+            f"https://{AA_HOST}/feed",
         ),
     ),
 }

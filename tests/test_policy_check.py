@@ -390,8 +390,8 @@ def test_aa_planned_samples_include_both_feed_urls() -> None:
     from booth_review.sources.policy import TARGETS
 
     samples = TARGETS["aa"].planned_samples
-    assert "https://awfulannouncing.com/schedules/feed/" in samples
-    assert "https://awfulannouncing.com/feed/" in samples
+    assert "https://awfulannouncing.com/schedules/feed" in samples
+    assert "https://awfulannouncing.com/feed" in samples
     assert any("viewership-sample" in url for url in samples)
 
 

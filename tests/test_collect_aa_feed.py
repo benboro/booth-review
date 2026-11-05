@@ -182,7 +182,9 @@ def test_verify_with_no_cfb_posts_is_not_verified(
     patched_client(mock_transport_factory(_responses(empty)))
     _policy(git_vault)
     assert main(["collect", "aa", "--feed", "--verify", "site"]) == 4
-    assert "not verified; try --verify site" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "not verified\n" in out
+    assert "try --verify site" not in out
     assert load_feed_state(git_vault).verified_feed_url is None
 
 
@@ -298,3 +300,49 @@ def test_malformed_feed_exits_4_and_still_commits_the_audit_row(
     assert len(commits) == 1
     assert "ledger/requests.jsonl" in commits[0][1]
     assert "raw/_robots/awfulannouncing.com" in commits[0][1]
+
+
+MOVED = f"{HOST}/feeds/schedules.xml"
+
+
+def _moved(url: str) -> dict[str, Any]:
+    responses = _responses()
+    responses[url] = (301, b"", {"Location": MOVED})
+    return responses
+
+
+def _manifest_rows(paths: DataPaths) -> list[dict[str, Any]]:
+    lines = (paths.ledger / "requests.jsonl").read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line]
+
+
+def test_week_check_redirect_records_location_without_following(
+    git_vault, mock_transport_factory, patched_client, commits, capsys
+) -> None:
+    handle = mock_transport_factory(_moved(SCHEDULES))
+    patched_client(handle)
+    _policy(git_vault)
+    _state(git_vault)
+    _games(git_vault)
+    assert main(["collect", "aa", "--feed"]) == 4
+    assert f"redirects to {MOVED} (not followed)" in capsys.readouterr().err
+    assert _feed_requests(handle) == [SCHEDULES]
+    feed_rows = [r for r in _manifest_rows(git_vault) if r["url"] == SCHEDULES]
+    assert feed_rows[-1]["status"] == 301
+    assert feed_rows[-1]["redirect_location"] == MOVED
+    assert load_feed_state(git_vault).verified_feed_url == SCHEDULES
+
+
+def test_verify_redirect_prints_location_and_does_not_verify(
+    git_vault, mock_transport_factory, patched_client, capsys
+) -> None:
+    site = AA_FEED_CANDIDATES["site"]
+    handle = mock_transport_factory(_moved(site))
+    patched_client(handle)
+    _policy(git_vault)
+    assert main(["collect", "aa", "--feed", "--verify", "site"]) == 4
+    out = capsys.readouterr().out
+    assert f"redirects to {MOVED} (not followed)" in out
+    assert "not verified\n" in out
+    assert _feed_requests(handle) == [site]
+    assert load_feed_state(git_vault).verified_feed_url is None

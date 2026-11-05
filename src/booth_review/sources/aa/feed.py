@@ -35,8 +35,8 @@ from booth_review.transport.client import PoliteClient
 from booth_review.transport.types import FetchResponse, Validators
 
 AA_FEED_CANDIDATES: Final = {
-    "schedules": "https://awfulannouncing.com/schedules/feed/",
-    "site": "https://awfulannouncing.com/feed/",
+    "schedules": "https://awfulannouncing.com/schedules/feed",
+    "site": "https://awfulannouncing.com/feed",
 }
 """Both UNVERIFIED until the one real `booth-review collect` request (D-10)."""
 
@@ -61,9 +61,13 @@ class FeedNotVerifiedError(Exception):
 class FeedStatusError(Exception):
     """The feed answered with an unexpected HTTP status."""
 
-    def __init__(self, status: int) -> None:
-        super().__init__(f"aa feed: unexpected status {status}")
+    def __init__(self, status: int, location: str | None = None) -> None:
+        message = f"aa feed: unexpected status {status}"
+        if location is not None:
+            message += f", redirects to {location} (not followed)"
+        super().__init__(message)
         self.status = status
+        self.location = location
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,8 @@ class VerifyResult:
     cfb_links: tuple[str, ...]
     other_schedule_links: tuple[str, ...]
     verified: bool
+    location: str | None = None
+    """Where an unfollowed redirect pointed (never requested)."""
 
 
 # -- parse ---------------------------------------------------------------------------------
@@ -389,6 +395,7 @@ def _audit(paths: DataPaths, url: str, response: FetchResponse) -> None:
             path=None,
             bytes=None,
             final_url=response.final_url,
+            redirect_location=response.location,
         )
     )
 
@@ -418,7 +425,7 @@ def check_week(
         save_feed_state(paths, replace(state, checked_at=checked_at))
         return WeekCheck(None, True, 304)
     if response.status_code != 200:
-        raise FeedStatusError(response.status_code)
+        raise FeedStatusError(response.status_code, response.location)
 
     entries = parse_feed(response.content)
     url = match_week_post(entries, now)
@@ -448,7 +455,9 @@ def verify_feed(
     response = client.fetch(url, validators=None, max_bytes=FEED_MAX_BYTES)
     _audit(paths, url, response)
     if response.status_code != 200:
-        return VerifyResult(url, response.status_code, 0, (), (), False)
+        return VerifyResult(
+            url, response.status_code, 0, (), (), False, location=response.location
+        )
     entries = parse_feed(response.content)
     cfb: list[str] = []
     other: list[str] = []

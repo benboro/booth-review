@@ -155,13 +155,13 @@ model, and build phases; read the relevant section before starting a phase.
   that its plain reminder went out (after which that week is not checked again, so it
   gets one comment), the Friday and Saturday crews re-check slots already used, and
   each week whose Tuesday post request failed (which is not requested again). The
-  feed is the `/schedules/feed/` category feed, or the site
-  feed if a first `booth-review collect aa --feed --verify` request shows the category
-  feed lacks the posts. It needs an AA policy check from the last 30 days with
-  confirmed terms; when that is stale, or robots.txt now refuses the feed, the job
-  skips the request, posts the plain reminder and asks for `--policy-check` and
-  `--confirm-terms`. If robots.txt or the terms ban automated access, stop. It ends
-  with the 2026 season.
+  feed is the `/schedules/feed` category feed (no trailing slash; AA 301s the slash
+  form), or the site feed if a first `booth-review collect aa --feed --verify`
+  request shows the category feed lacks the posts. It needs an AA policy check from
+  the last 30 days with confirmed terms; when that is stale, or robots.txt now
+  refuses the feed, the job skips the request, posts the plain reminder and asks for
+  `--policy-check` and `--confirm-terms`. If robots.txt or the terms ban automated
+  access, stop. It ends with the 2026 season.
 - Awful Announcing crew posts (2026 college football season only): the scheduled job
   may fetch only the weekly college football announcing-schedule posts whose links the
   feed watch recorded in `ledger/aa_feed_watch.json`, and only through

@@ -74,6 +74,8 @@ class FetchResponse:
     final_url: str
     fetched_at: datetime
     """Timezone-aware UTC."""
+    location: str | None = None
+    """The Location header of an unfollowed 3xx response, else None."""
 
 
 class FetchGuard(Protocol):

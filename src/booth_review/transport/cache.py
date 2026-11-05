@@ -116,6 +116,9 @@ class ManifestEntry:
     """The hand-saved file's own modified time (UTC, `%Y-%m-%dT%H:%M:%SZ`); the
     browser's save time, used by job.gaps506 for staleness (WR-07). Omitted from
     the JSON line when None."""
+    redirect_location: str | None = None
+    """The Location header of an unfollowed redirect, kept so a moved URL can be
+    reviewed without another request. Omitted from the JSON line when None."""
 
     def to_json(self) -> str:
         payload: dict[str, Any] = {
@@ -136,6 +139,8 @@ class ManifestEntry:
             payload["origin"] = self.origin
         if self.saved_at is not None:
             payload["saved_at"] = self.saved_at
+        if self.redirect_location is not None:
+            payload["redirect_location"] = self.redirect_location
         return json.dumps(payload, sort_keys=True)
 
 
