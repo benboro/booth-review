@@ -17,6 +17,7 @@ from booth_review.errors import (
     RobotsUnavailableError,
     UnknownHostError,
 )
+from booth_review.transport import client as client_module
 from booth_review.transport.client import PoliteClient
 from booth_review.transport.types import Validators
 
@@ -796,6 +797,98 @@ def test_aa_redirect_is_returned_not_followed() -> None:
         "https://awfulannouncing.com/a.html",
         "https://awfulannouncing.com/a.html",
     ]
+    assert resp.location == "https://awfulannouncing.com/b.html"
+
+
+@pytest.mark.parametrize(
+    ("header", "expected"),
+    [
+        ({"Location": "/feed"}, "https://awfulannouncing.com/feed"),
+        (
+            {"Location": "https://awfulannouncing.com/b.html?sig=SECRET&token=x#frag"},
+            "https://awfulannouncing.com/b.html",
+        ),
+        ({}, None),
+    ],
+)
+def test_aa_redirect_location_is_sanitised(header: dict[str, str], expected: str | None) -> None:
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", header),
+    }
+    client = _client(_recording_handler(responses, []))
+    resp = client.fetch("https://awfulannouncing.com/a.html")
+    assert resp.status_code == 301
+    assert resp.location == expected
+    assert "SECRET" not in (resp.location or "")
+
+
+@pytest.mark.parametrize(
+    "location", ["https://awfulannouncing.com/b\x1b\x07.html", "javascript:alert(1)"]
+)
+def test_aa_redirect_with_an_invalid_location_fails_without_storing_it(location: str) -> None:
+    """httpx rejects a Location with control characters or no usable URL before the client
+    reads it: the fetch fails (no hop is sent) and nothing carries the header."""
+    log: list[httpx2.Request] = []
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", {"Location": location}),
+    }
+    with pytest.raises(FetchError):
+        _client(_recording_handler(responses, log)).fetch("https://awfulannouncing.com/a.html")
+    assert [str(r.url) for r in log] == [
+        "https://awfulannouncing.com/robots.txt",
+        "https://awfulannouncing.com/a.html",
+    ]
+
+
+def test_aa_redirect_location_is_capped() -> None:
+    long_path = "/" + "a" * 5000
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (301, b"", {"Location": long_path}),
+    }
+    resp = _client(_recording_handler(responses, [])).fetch("https://awfulannouncing.com/a.html")
+    assert resp.location is not None and len(resp.location) == 512
+    assert resp.location.endswith("...[truncated]")
+
+
+_BASE = "https://awfulannouncing.com/feed/"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # Encoded CR/LF, query and bidi characters stay encoded: never decoded into the value.
+        ("https://h.com/%0d%0aSet-Cookie:x", "https://h.com/%0d%0aSet-Cookie:x"),
+        ("/a%3Fsig%3DSECRET%23f", "https://awfulannouncing.com/a%3Fsig%3DSECRET%23f"),
+        ("/x%e2%80%aey", "https://awfulannouncing.com/x%e2%80%aey"),
+        ("https://bücher.de/a b", "https://xn--bcher-kva.de/a%20b"),
+        ("https://h.com:8443/p?q=1#f", "https://h.com:8443/p"),
+        ("https://h.com:443/p", "https://h.com/p"),
+        ("https://u:p@h.com/p", "https://h.com/p"),
+        ("//other.example/x", "https://other.example/x"),
+        ("http://[::1]:8080/x", "http://[::1]:8080/x"),
+        ("../x", "https://awfulannouncing.com/x"),
+        ("ftp://h.com/x", None),
+        ("http://[::1", None),
+        ("   ", None),
+    ],
+)
+def test_safe_location(raw: str, expected: str | None) -> None:
+    got = client_module._safe_location(_BASE, raw)
+    assert got == expected
+    if got is not None:
+        assert all(0x21 <= ord(c) <= 0x7E for c in got)
+
+
+def test_followed_or_plain_responses_carry_no_location() -> None:
+    responses = {
+        "https://awfulannouncing.com/robots.txt": ALLOW_ALL_ROBOTS,
+        "https://awfulannouncing.com/a.html": (200, b"ok", {"Location": "https://x.example/"}),
+    }
+    resp = _client(_recording_handler(responses, [])).fetch("https://awfulannouncing.com/a.html")
+    assert resp.status_code == 200 and resp.location is None
 
 
 # -- Response size cap --------------------------------------------------------

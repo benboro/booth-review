@@ -782,3 +782,28 @@ def test_nfl_ratingsref_is_refresh_exempt(tmp_path) -> None:
     assert guard.is_frozen("nfl_ratingsref", 2015) is True
     assert guard.is_frozen("nfl_ratingsref", 2015, refresh=True) is False
     assert guard.is_frozen("nfl_wikipedia", 2015, refresh=True) is True
+
+
+def test_manifest_redirect_location_only_when_set() -> None:
+    """Rows without an unfollowed redirect keep the fixed key set; one with it adds the key."""
+    base = dict(
+        url="https://awfulannouncing.com/schedules/feed",
+        source="aa",
+        season=None,
+        kind="page",
+        fetched_at="2026-11-04T07:13:26Z",
+        status=301,
+        etag=None,
+        last_modified=None,
+        sha256=None,
+        path=None,
+        bytes=None,
+        final_url="https://awfulannouncing.com/schedules/feed",
+    )
+    plain = json.loads(cache_module.ManifestEntry(**base).to_json())
+    assert set(plain) == _MANIFEST_KEYS
+    moved = json.loads(
+        cache_module.ManifestEntry(**base, redirect_location="https://x.example/f").to_json()
+    )
+    assert set(moved) == _MANIFEST_KEYS | {"redirect_location"}
+    assert moved["redirect_location"] == "https://x.example/f"
