@@ -68,7 +68,7 @@ import contextlib
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TypeVar
 
@@ -142,7 +142,6 @@ from booth_review.job.attention import (
 )
 from booth_review.job.catchup import (
     EASTERN,
-    SCHEDULE_ONLY,
     CatchupWindow,
     JobState,
     RunMode,
@@ -152,6 +151,7 @@ from booth_review.job.catchup import (
     load_state,
     resolve_mode,
     save_state,
+    schedule_only_slots,
 )
 from booth_review.job.gaps506 import find_506_gaps
 from booth_review.job.gaps_espnpr import espnpr_page_week, find_espnpr_gap
@@ -418,21 +418,19 @@ class ScheduledJob:
         """Friday 18:00 / Saturday 08:00 ET: one conditional re-check of the week's AA
         crews post, before the build so it sees the page (D-01). It never raises.
 
+        A late run still re-checks: the latest slot in the last
+        CREWS_RECHECK_WINDOW_HOURS hours counts, keyed by that slot's own date and hour.
+
         Phase 27 review WR-02: a re-check only (no first fetch of an uncached post),
         and at most one request per slot occurrence, however many runs land in it."""
         try:
-            local = now.astimezone(EASTERN)
-            slot = next(
-                (
-                    f"{local.date().isoformat()}T{hour:02d}"
-                    for weekday, hour in SCHEDULE_ONLY
-                    if local.weekday() == weekday
-                    and 0 <= local.hour - hour < CREWS_RECHECK_WINDOW_HOURS
-                ),
-                None,
+            latest = max(
+                schedule_only_slots(now - timedelta(hours=CREWS_RECHECK_WINDOW_HOURS), now),
+                default=None,
             )
-            if slot is None:
+            if latest is None:
                 return
+            slot = latest.astimezone(EASTERN).strftime("%Y-%m-%dT%H")
             week = current_cfb_week(self._runtime.paths, now)
             if week is None:
                 return
