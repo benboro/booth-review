@@ -2987,6 +2987,43 @@ def test_crews_off_slot_schedule_run_makes_no_request(
     assert _post_requests(handle) == []
 
 
+@pytest.mark.parametrize(
+    ("when", "slot"),
+    [
+        (_FRI_1800 + timedelta(hours=3, minutes=33), "2026-10-16T18"),  # Fri 21:33
+        (_FRI_1800 + timedelta(hours=13, minutes=30), "2026-10-16T18"),  # Sat 07:30
+        (_SAT_0800 + timedelta(hours=4, minutes=57), "2026-10-17T08"),  # Sat 12:57
+        (_SAT_0800 + timedelta(hours=15, minutes=30), "2026-10-17T08"),  # Sat 23:30
+    ],
+)
+def test_crews_late_schedule_run_still_rechecks_its_slot(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch, when, slot
+) -> None:
+    """GitHub started the Nov 6-7 runs hours late (21:33 Fri, 12:57 Sat ET) and both
+    re-checks were skipped; a late run now re-checks the latest slot, keyed by it."""
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(paths, handle, fake_clock, when, monkeypatch)
+    job.run()
+    assert len(_post_requests(handle)) == 1
+    state = json.loads((paths.ledger / "aa_feed_watch.json").read_text(encoding="utf-8"))
+    assert state["crews_rechecked"] == [slot]
+
+
+def test_crews_saturday_slot_closes_at_midnight(
+    git_vault, mock_transport_factory, fake_clock, monkeypatch
+) -> None:
+    paths = git_vault
+    _seed_required_state(paths, cfbd_month="2026-10")
+    handle = mock_transport_factory(_crews_responses())
+    job, _ = _crews_job(
+        paths, handle, fake_clock, _SAT_0800 + timedelta(hours=16, minutes=30), monkeypatch
+    )
+    job.run()
+    assert _post_requests(handle) == []
+
+
 def test_crews_full_run_makes_no_request(
     git_vault, mock_transport_factory, fake_clock, monkeypatch
 ) -> None:
