@@ -246,6 +246,52 @@ def test_rank_prefers_committee_poll_once_it_exists(build_vault: DataPaths) -> N
     assert row2["rank_poll"] == "Playoff Committee Rankings"
 
 
+def _poll_week(week: int, polls: dict[str, dict[str, int]]) -> CfbdPollWeek:
+    return CfbdPollWeek(
+        season=2099,
+        season_type="regular",
+        week=week,
+        polls=[
+            CfbdPoll(
+                poll=name,
+                ranks=[
+                    CfbdRank(rank=rank, school=school, conference=None)
+                    for school, rank in ranks.items()
+                ],
+            )
+            for name, ranks in polls.items()
+        ],
+    )
+
+
+def test_committee_poll_carries_forward_over_a_later_ap_only_week() -> None:
+    # Week 11's AP poll is out but the week-11 committee poll is not yet:
+    # the week-10 committee ranks stay in force rather than reverting to AP.
+    rankings = [
+        _poll_week(9, {"AP Top 25": {"Home Team": 9}}),
+        _poll_week(
+            10,
+            {"AP Top 25": {"Home Team": 4}, "Playoff Committee Rankings": {"Home Team": 6}},
+        ),
+        _poll_week(11, {"AP Top 25": {"Home Team": 2, "Away Team": 12}}),
+    ]
+    games = [
+        _game(id=9, week=9),
+        _game(id=10, week=10),
+        _game(id=11, week=11),
+        _game(id=12, week=12),  # no poll of any kind yet
+    ]
+    frame = build_games_frame([_sources(games=games, rankings=rankings)])
+    rows = {r["game_id"]: r for r in frame.iter_rows(named=True)}
+
+    assert (rows[9]["home_rank"], rows[9]["rank_poll"]) == (9, "AP Top 25")
+    assert (rows[10]["home_rank"], rows[10]["rank_poll"]) == (6, "Playoff Committee Rankings")
+    assert rows[11]["home_rank"] == 6
+    assert rows[11]["away_rank"] is None
+    assert rows[11]["rank_poll"] == "Playoff Committee Rankings"
+    assert rows[12]["rank_poll"] is None
+
+
 def test_unranked_team_gets_null_rank(build_vault: DataPaths) -> None:
     sources = load_all_sources(build_vault, seasons=[2025])
     frame = build_games_frame(sources)
