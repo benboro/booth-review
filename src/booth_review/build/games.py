@@ -12,7 +12,9 @@ kickoff for any of those games. This deviates from research Open Question
 Ranks otherwise come from the CFBD poll at week + RANK_WEEK_OFFSET,
 preferring "Playoff Committee Rankings" over "AP Top 25" when both exist for
 that week (matching 506's own rank-prefix convention, which follows AP until
-the committee poll starts, per Phase 1's finding). RANK_WEEK_OFFSET was
+the committee poll starts, per Phase 1's finding). Once the committee poll
+has started, a week without one carries the latest committee poll forward
+rather than switching back to AP. RANK_WEEK_OFFSET was
 picked by running `python -m booth_review.build.games` against the real
 2014-2026 vault: offset 0 agreed with 506's own printed rank digit 96.2% of
 the time (3275/3403 comparisons) against offset -1's 23.8% (748/3149) -- see
@@ -89,10 +91,22 @@ _RankIndex = dict[int, dict[tuple[str, int], tuple[dict[str, int], str]]]
 
 
 def _build_rank_index(sources: Sequence[SeasonSources]) -> _RankIndex:
+    """Each (season_type, week)'s ranks from the most-preferred poll CFBD has.
+
+    Once a season's committee rankings have begun, they stay the ranking in
+    force: a later week that has a new AP poll but no committee poll yet
+    (the Sunday-to-Tuesday window before the next CFP release, or a week
+    CFBD never published, such as 2019 week 14) carries the latest earlier
+    committee poll forward instead of falling back to AP.
+    """
     index: _RankIndex = {}
     for season_sources in sources:
         by_week: dict[tuple[str, int], tuple[dict[str, int], str]] = {}
-        for poll_week in season_sources.rankings:
+        latest_lead: dict[str, tuple[dict[str, int], str]] = {}
+        ordered = sorted(
+            season_sources.rankings, key=lambda w: (w.season_type or "regular", w.week)
+        )
+        for poll_week in ordered:
             season_type = poll_week.season_type or "regular"
             polls_by_name = {poll.poll: poll.ranks for poll in poll_week.polls}
             for preferred in POLL_PREFERENCE:
@@ -100,7 +114,12 @@ def _build_rank_index(sources: Sequence[SeasonSources]) -> _RankIndex:
                     ranks_by_team = {
                         normalize_team(rank.school): rank.rank for rank in polls_by_name[preferred]
                     }
-                    by_week[(season_type, poll_week.week)] = (ranks_by_team, preferred)
+                    entry = (ranks_by_team, preferred)
+                    if preferred == POLL_PREFERENCE[0]:
+                        latest_lead[season_type] = entry
+                    elif season_type in latest_lead:
+                        entry = latest_lead[season_type]
+                    by_week[(season_type, poll_week.week)] = entry
                     break
         index[season_sources.season] = by_week
     return index
