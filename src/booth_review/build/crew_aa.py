@@ -49,7 +49,12 @@ from booth_review.people.registry import PeopleRegistry
 from booth_review.people.roles import Role
 from booth_review.resolve.diagnose import UnmatchedRow, UnresolvedTeamRow
 from booth_review.resolve.games import GameIndex
-from booth_review.resolve.networks import NetworkTable, primary_network, split_outlets
+from booth_review.resolve.networks import (
+    NetworkTable,
+    primary_network,
+    split_outlets,
+    strip_feed_marker,
+)
 from booth_review.resolve.overrides import GameOverride
 from booth_review.resolve.teams import TeamResolver
 from booth_review.sources.aa.crews import (
@@ -260,15 +265,17 @@ def load_506_times(paths: DataPaths) -> dict[tuple[int, str], datetime]:
 
 @dataclass(frozen=True)
 class _Cand:
-    """One booth with the page it came from."""
+    """One booth with the page it came from. `rank` is how it matched its
+    telecast: 0 on AA's primary network, higher for the outlet fallbacks."""
 
     booth: AaBooth
     page: AaPage
+    rank: int = 0
 
     @property
-    def key(self) -> tuple[str, str]:
+    def key(self) -> tuple[int, str, str]:
         stamp = self.page.aa_time.strftime(_TIME_FORMAT) if self.page.aa_time else ""
-        return (stamp, self.booth.pointer)
+        return (-self.rank, stamp, self.booth.pointer)
 
 
 def _unmatched(booth: AaBooth, confidence: str, reason: str) -> UnmatchedRow:
@@ -286,7 +293,9 @@ def _unmatched(booth: AaBooth, confidence: str, reason: str) -> UnmatchedRow:
 
 
 def _settle(candidates: Sequence[_Cand]) -> tuple[_Cand, bool]:
-    """(winner, conflict): the later page wins; ties break on pointer. `conflict`
+    """(winner, conflict): a booth matched on AA's primary network beats one
+    matched through an outlet fallback; then the later page wins, and ties break
+    on pointer. `conflict`
     is True when another candidate names different people."""
     winner = max(candidates, key=lambda c: c.key)
     folded = {fold_person(n) for n, _ in winner.booth.people}
@@ -300,6 +309,51 @@ def _stamp(moment: datetime | None) -> str:
 
 def _url_ok(url: str) -> bool:
     return crew_source_url_problem(url) is None and host_matches(_SOURCE, url)
+
+
+def _main_outlets(network_raw: str, season: int, networks: NetworkTable) -> frozenset[str]:
+    """The networks AA lists for a booth with no alt-cast or Spanish marker,
+    and whose table row is a main feed."""
+    ids: set[str] = set()
+    for outlet in split_outlets(network_raw):
+        base, marker = strip_feed_marker(outlet)
+        row = networks.lookup(base, season)
+        if marker is None and row is not None and row.feed_type == "main":
+            ids.add(row.network_id)
+    return frozenset(ids)
+
+
+def _pick_target(
+    game_mains: Sequence[tuple[str, str | None]],
+    network_id: str,
+    aa_outlets: Collection[str],
+    side_feeds: Collection[str],
+    info: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, int] | None:
+    """(telecast id, rank) for the main telecast an AA booth belongs to: rank 0
+    on AA's primary network; else rank 1, the one whose network is among AA's
+    main outlets (AA "Peacock/NBCSN" picks NBCSN while we chart Peacock); else
+    rank 2, the one that lists AA's network among its own outlets (a simulcast
+    AA names by its other channel). The fallbacks never use a network the game
+    has an alt-cast or Spanish telecast on (`side_feeds`), since a telecast's
+    outlets drop feed markers. A step that finds more than one telecast is
+    ambiguous and matches nothing; an exact primary match is taken even when a
+    fallback would also fit another telecast.
+    """
+    simulcast_ok = network_id not in side_feeds
+    steps: tuple[list[str], ...] = (
+        [tid for tid, nid in game_mains if nid == network_id],
+        [tid for tid, nid in game_mains if nid in aa_outlets and nid not in side_feeds],
+        [
+            tid
+            for tid, _ in game_mains
+            if simulcast_ok and network_id in (info[tid].get("outlets") or ())
+        ],
+    )
+    for rank, hits in enumerate(steps):
+        if hits:
+            return (hits[0], rank) if len(hits) == 1 else None
+    return None
 
 
 def apply_crew_aa(
@@ -343,6 +397,11 @@ def apply_crew_aa(
     for row in telecasts.filter(pl.col("feed_type") == "main").iter_rows(named=True):
         mains_by_game.setdefault(row["game_id"], []).append((row["telecast_id"], row["network_id"]))
         info[row["telecast_id"]] = row
+    # Networks each game has an alt-cast or Spanish telecast on.
+    side_feeds: dict[int, set[str]] = {}
+    for row in telecasts.filter(pl.col("feed_type") != "main").iter_rows(named=True):
+        if row["network_id"] is not None:
+            side_feeds.setdefault(row["game_id"], set()).add(row["network_id"])
     override_ids = (
         set(override_telecast_ids)
         | set(telecasts.filter(pl.col("crew_patched").fill_null(False))["telecast_id"].to_list())
@@ -394,7 +453,12 @@ def apply_crew_aa(
                 counts["unmapped_network"] += 1
                 unmatched_rows.append(_unmatched(booth, "", "unmapped_network"))
                 continue
-            cand = _Cand(booth, page)
+            if chart.feed_type != "main":
+                # AA marks every outlet alt-cast or Spanish: never a main booth.
+                counts["network_mismatch"] += 1
+                unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
+                continue
+            aa_outlets = _main_outlets(booth.network_raw, booth.season, networks)
             game_mains = mains_by_game.get(game.id, [])
             if not game_mains:
                 if (
@@ -404,18 +468,26 @@ def apply_crew_aa(
                 ):
                     counts["no_telecast"] += 1
                     continue
-                if scheduled_networks[game.id] != chart.network_id:
+                scheduled = scheduled_networks[game.id]
+                if scheduled == chart.network_id:
+                    rank = 0
+                elif scheduled in aa_outlets:
+                    rank = 1
+                else:
                     counts["network_mismatch"] += 1
                     unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
                     continue
-                scheduled_targets.setdefault(game.id, []).append(cand)
+                scheduled_targets.setdefault(game.id, []).append(_Cand(booth, page, rank))
                 continue
-            target = next((tid for tid, nid in game_mains if nid == chart.network_id), None)
-            if target is None:
+            picked = _pick_target(
+                game_mains, chart.network_id, aa_outlets, side_feeds.get(game.id, set()), info
+            )
+            if picked is None:
                 counts["network_mismatch"] += 1
                 unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
                 continue
-            targets.setdefault(target, []).append(cand)
+            target, rank = picked
+            targets.setdefault(target, []).append(_Cand(booth, page, rank))
 
     working = working_registry(registry, people)
     statuses: dict[str, str] = {}

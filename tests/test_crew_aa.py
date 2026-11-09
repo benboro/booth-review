@@ -234,7 +234,15 @@ def _networks() -> NetworkTable:
             priority=None,
         )
 
-    return NetworkTable([row("ESPN", "espn"), row("ABC", "abc")])
+    return NetworkTable(
+        [
+            row("ESPN", "espn"),
+            row("ABC", "abc"),
+            row("ESPN2", "espn2"),
+            row("NBCSN", "nbcsn"),
+            row("Peacock", "peacock"),
+        ]
+    )
 
 
 def _registry() -> PeopleRegistry:
@@ -551,6 +559,93 @@ def test_booth_on_another_network_is_skipped_and_counted() -> None:
     assert result.counts["network_mismatch"] == 1 and result.counts["filled"] == 0
     assert result.statuses == {}
     assert len(result.unmatched_rows) == 1
+
+
+def test_booth_matches_a_telecast_on_one_of_its_other_outlets() -> None:
+    # "Peacock/NBCSN" picks NBCSN as primary; the game is charted on Peacock.
+    result = _run(
+        [_tel(network_id="peacock")], [_page([_booth(PBP_ANALYST, network="Peacock/NBCSN")])]
+    )
+    assert result.counts["network_mismatch"] == 0 and result.counts["filled"] == 1
+    assert _crew_of(result, "100-peacock") == [("avery-lane", "pbp"), ("morgan-pike", "analyst")]
+
+
+def test_booth_matches_a_simulcast_that_lists_its_network() -> None:
+    tel = _tel(network_id="nbcsn", outlets=["nbcsn", "peacock"])
+    result = _run([tel], [_page([_booth(PBP_ANALYST, network="Peacock")])])
+    assert result.counts["network_mismatch"] == 0 and result.counts["filled"] == 1
+    assert _crew_of(result, "100-nbcsn") == [("avery-lane", "pbp"), ("morgan-pike", "analyst")]
+
+
+def test_booth_whose_outlets_fit_two_telecasts_is_not_matched() -> None:
+    tels = [_tel(network_id="peacock"), _tel(network_id="nbcsn")]
+    booth = _booth(PBP_ANALYST, network="ESPN2/Peacock/NBCSN")
+    result = _run(tels, [_page([booth])])
+    assert result.counts["network_mismatch"] == 1 and result.counts["filled"] == 0
+
+
+def test_scheduled_game_matches_one_of_the_booths_outlets() -> None:
+    booth = _booth(PBP_ANALYST, network="Peacock/NBCSN")
+    result = _run([], [_page([booth])], scheduled_networks={100: "peacock"})
+    assert result.counts["scheduled_filled"] == 1 and 100 in result.scheduled_crews
+
+
+OTHER_BOOTH: tuple[tuple[str, Role], ...] = (("Blair Tolley", "pbp"), ("Quinn Harrow", "analyst"))
+
+
+def test_exact_primary_match_wins_over_a_fallback_on_another_telecast() -> None:
+    # Both mains fit "Peacock/NBCSN"; NBCSN is AA's primary, so it takes the booth.
+    tels = [_tel(network_id="peacock"), _tel(network_id="nbcsn")]
+    result = _run(tels, [_page([_booth(PBP_ANALYST, network="Peacock/NBCSN")])])
+    assert result.statuses == {"100-nbcsn": "filled"}
+
+
+def test_fallback_skips_a_network_the_game_has_an_alt_cast_on() -> None:
+    tels = [
+        _tel(network_id="abc", outlets=["abc", "espn2"]),
+        _tel(network_id="espn2", telecast_id="100-espn2-alt", feed_type="alt"),
+    ]
+    result = _run(tels, [_page([_booth(PBP_ANALYST, network="ESPN2")])])
+    assert result.counts["network_mismatch"] == 1 and result.statuses == {}
+
+
+def test_fallback_skips_an_outlet_aa_marks_alt_cast() -> None:
+    result = _run(
+        [_tel(network_id="peacock")],
+        [_page([_booth(PBP_ANALYST, network="NBCSN/Peacock (alt-cast)")])],
+    )
+    assert result.counts["network_mismatch"] == 1 and result.statuses == {}
+
+
+def test_booth_aa_marks_only_alt_cast_is_never_a_main_booth() -> None:
+    result = _run([_tel(network_id="espn2")], [_page([_booth(PBP_ANALYST, network="ESPN2 (alt)")])])
+    assert result.counts["network_mismatch"] == 1 and result.statuses == {}
+
+
+def test_simulcast_fallback_that_fits_two_telecasts_is_not_matched() -> None:
+    tels = [
+        _tel(network_id="peacock", outlets=["peacock", "espn2"]),
+        _tel(network_id="nbcsn", outlets=["nbcsn", "espn2"]),
+    ]
+    result = _run(tels, [_page([_booth(PBP_ANALYST, network="ESPN2")])])
+    assert result.counts["network_mismatch"] == 1 and result.statuses == {}
+
+
+def test_exact_booth_beats_a_later_fallback_booth_on_one_telecast() -> None:
+    exact = _booth(PBP_ANALYST, network="ABC", pointer="invented:1")
+    fallback = _booth(OTHER_BOOTH, network="ESPN2", pointer="invented:2")
+    result = _run([_tel(network_id="abc", outlets=["abc", "espn2"])], [_page([exact, fallback])])
+    assert _crew_of(result, "100-abc") == [("avery-lane", "pbp"), ("morgan-pike", "analyst")]
+
+
+def test_scheduled_exact_booth_beats_a_later_outlet_booth() -> None:
+    exact = _booth(PBP_ANALYST, network="Peacock", pointer="invented:1")
+    fallback = _booth(OTHER_BOOTH, network="Peacock/NBCSN", pointer="invented:2")
+    result = _run([], [_page([exact, fallback])], scheduled_networks={100: "peacock"})
+    assert result.scheduled_crews[100].entries == (
+        ("avery-lane", "pbp"),
+        ("morgan-pike", "analyst"),
+    )
 
 
 def test_unmatched_game_is_counted_with_a_reason() -> None:
