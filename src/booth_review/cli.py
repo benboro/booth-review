@@ -549,6 +549,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     job_run.add_argument("--site-out", type=Path, default=None)
     job_run.add_argument("--result-out", type=Path, default=None)
+    job_alerts = job_sub.add_parser(
+        "crew-alerts", help="email games the built site shows with no crew (once per stage)"
+    )
+    job_alerts.add_argument(
+        "--dry-run", action="store_true", help="find and compose, but send and record nothing"
+    )
+    job_alerts.add_argument(
+        "--show", action="store_true", help="print the email (local use; names games)"
+    )
+    job_alerts.add_argument("--no-commit", action="store_true")
+    job_alerts.add_argument(
+        "--reminders",
+        type=Path,
+        default=None,
+        help="the job's --reminders-out file; its new lines are emailed too",
+    )
+    job_alerts.add_argument(
+        "--now", type=datetime.fromisoformat, default=None, help="aware ISO time (testing)"
+    )
 
     budget = sub.add_parser("budget", help="report and record CFBD budget usage")
     budget.add_argument("--offline", action="store_true")
@@ -2142,6 +2161,24 @@ def _freeze(args: argparse.Namespace) -> int:
 # -- job run (AUTO-01) -------------------------------------------------------------------
 
 
+def _job_crew_alerts(args: argparse.Namespace) -> int:
+    from booth_review.job.crew_alerts import run_crew_alerts
+
+    now = args.now or datetime.now(UTC)
+    if now.tzinfo is None:
+        print("error: --now needs a UTC offset", file=sys.stderr)
+        return 2
+    return run_crew_alerts(
+        DataPaths.from_env(),
+        now,
+        nfl_required=os.environ.get("NFL_SITE_ENABLED") == "true",
+        reminders_file=args.reminders,
+        dry_run=args.dry_run,
+        show=args.show,
+        commit=not args.no_commit,
+    )
+
+
 def _job_run(args: argparse.Namespace) -> int:
     """Run one scheduled pass (collect-only, or the full update with --update).
     Never prints or logs the CFBD key (loaded via config.load_cfbd_key, same
@@ -2781,6 +2818,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "job":
             if args.job_command == "run":
                 return _job_run(args)
+            if args.job_command == "crew-alerts":
+                return _job_crew_alerts(args)
             raise AssertionError(f"unknown job command: {args.job_command!r}")
         if args.command == "budget":
             return _budget(args)

@@ -420,6 +420,29 @@ jobs:
             gh issue close "$number" --repo "$GITHUB_REPOSITORY"
           fi
 
+      - name: Email games with no crew and hand-save reminders
+        id: crew_alerts
+        # Every run that installed booth-review, the no-op backup slots (exit 5) included:
+        # it reads only the vault's built site files and this run's reminder file (no
+        # data-source request) and emails what is new: each game at most once before
+        # kickoff and once after it is played, each reminder line once, recorded in
+        # ledger/crew_alerts.json. Its log carries counts only. It fails (and so turns
+        # the run red) when a site file is missing or malformed, or when there is
+        # something to send and a secret is missing or the send fails; exit 4 means the
+        # email went out but the ledger push failed, so it will be sent again.
+        if: ${{ !cancelled() && steps.job.outcome != 'skipped' }}
+        working-directory: src
+        env:
+          BOOTH_REVIEW_VAULT: ${{ github.workspace }}/vault
+          NFL_SITE_ENABLED: ${{ vars.NFL_SITE_ENABLED }}
+          BOOTH_REVIEW_SMTP_HOST: ${{ secrets.BOOTH_REVIEW_SMTP_HOST }}
+          BOOTH_REVIEW_SMTP_PORT: ${{ secrets.BOOTH_REVIEW_SMTP_PORT }}
+          BOOTH_REVIEW_SMTP_USER: ${{ secrets.BOOTH_REVIEW_SMTP_USER }}
+          BOOTH_REVIEW_SMTP_PASSWORD: ${{ secrets.BOOTH_REVIEW_SMTP_PASSWORD }}
+          BOOTH_REVIEW_ALERT_TO: ${{ secrets.BOOTH_REVIEW_ALERT_TO }}
+          BOOTH_REVIEW_ALERT_FROM: ${{ secrets.BOOTH_REVIEW_ALERT_FROM }}
+        run: uv run booth-review job crew-alerts --reminders "$RUNNER_TEMP/reminders.md"
+
       - name: Fail the workflow on a hard failure
         if: always()
         env:

@@ -66,7 +66,7 @@ def test_version_matches_pyproject_and_lock() -> None:
     lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
     locked = next(pkg for pkg in lock["package"] if pkg["name"] == "booth-review")
     assert booth_review.__version__ == pyproject["project"]["version"] == locked["version"]
-    assert booth_review.__version__ == "0.20.4"
+    assert booth_review.__version__ == "0.21.0"
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
@@ -272,7 +272,8 @@ def test_job_and_deploy_steps_carry_the_nfl_site_flag_from_vars() -> None:
         if isinstance(env, dict) and "NFL_SITE_ENABLED" in env:
             assert env["NFL_SITE_ENABLED"] == "${{ vars.NFL_SITE_ENABLED }}"
             carriers.append(step.get("id"))
-    assert sorted(str(c) for c in carriers) == ["deploy", "job"]
+    # crew_alerts requires nfl-data.json only when the NFL site is on.
+    assert sorted(str(c) for c in carriers) == ["crew_alerts", "deploy", "job"]
 
 
 _BASH = shutil.which("bash")
@@ -424,8 +425,13 @@ def test_job_step_env_carries_the_github_token_for_the_nflverse_api_route() -> N
 def test_no_nfl_step_adds_a_deploy() -> None:
     # The NFL steps live inside `booth-review job run`; the workflow gains no
     # step of its own, and the only deploy is still the gated CFB site deploy.
+    # The crew-alert step only reads the built site files and sends email.
     runs = [(s.get("id"), str(s.get("run", ""))) for s in _steps()]
-    assert [sid for sid, run in runs if "uv run booth-review" in run] == ["job", "deploy"]
+    assert [sid for sid, run in runs if "uv run booth-review" in run] == [
+        "job",
+        "deploy",
+        "crew_alerts",
+    ]
     assert [sid for sid, run in runs if "uv run booth-review deploy" in run] == ["deploy"]
     for _sid, run in runs:
         assert "nfl" not in run.lower()
@@ -439,11 +445,22 @@ def test_workflow_secret_references_are_the_exact_expected_set() -> None:
     found = re.findall(r"secrets\.(\w+)", non_comment)
     # DEPLOY_KEY_PROD / DEPLOY_KEY_SCRATCH sit in one ssh-key expression.
     assert sorted(found) == [
+        "BOOTH_REVIEW_ALERT_FROM",
+        "BOOTH_REVIEW_ALERT_TO",
+        "BOOTH_REVIEW_SMTP_HOST",
+        "BOOTH_REVIEW_SMTP_PASSWORD",
+        "BOOTH_REVIEW_SMTP_PORT",
+        "BOOTH_REVIEW_SMTP_USER",
         "CFBD_API_KEY",
         "CFBD_API_KEY",
         "DEPLOY_KEY_PROD",
         "DEPLOY_KEY_SCRATCH",
     ]
+    # The SMTP secrets reach only the crew-alert step.
+    for step in _steps():
+        env = dict(step.get("env") or {})  # type: ignore[call-overload]
+        smtp = [name for name in env if name.startswith("BOOTH_REVIEW_SMTP")]
+        assert not smtp or step.get("id") == "crew_alerts"
     assert non_comment.count("CFBD_API_KEY: ${{ secrets.CFBD_API_KEY }}") == 2
 
 
@@ -766,8 +783,11 @@ _SETUP = [
 ]
 _TAIL = [
     "Update the attention issue (count-only, one tracked issue)",
+    "crew_alerts",
     "Fail the workflow on a hard failure",
 ]
+# A setup failure skips the job step, and with it the crew-alert step.
+_ALWAYS_TAIL = [_TAIL[0], _TAIL[-1]]
 _DEPLOYS = ["target", "deploy"]
 _READY = "deploy_ready=true\nstale_only=false\n"
 _CFB_REPORT = "Counts only.\n- 506 2026 pages to save: week 1"
@@ -846,7 +866,7 @@ def test_a_failed_setup_or_target_checkout_still_never_deploys(
     else:
         # Every later step but the two always() ones is skipped, the job step
         # included, so the result step never reads a file.
-        assert ran == [*_SETUP[: _SETUP.index(failing) + 1], *_TAIL]
+        assert ran == [*_SETUP[: _SETUP.index(failing) + 1], *_ALWAYS_TAIL]
 
 
 @pytest.mark.skipif(_BASH is None, reason="bash not available")
