@@ -154,27 +154,35 @@ class DataPaths:
         return cls(vault=Path(vault) if vault else Path("data/vault"))
 
 
-def load_cfbd_key(env_file: Path = Path(".env")) -> str:
-    """Return the CFBD API key from the environment, else from `env_file`.
-
-    Raises MissingApiKeyError (never containing key text) when absent or empty.
-    """
-    key = os.environ.get("CFBD_API_KEY")
-    if key:
-        return key
+def read_env_value(name: str, env_file: Path = Path(".env")) -> str | None:
+    """Return `name` from the environment, else from `env_file`; None when absent or empty."""
+    value = os.environ.get(name)
+    if value:
+        return value
 
     if env_file.is_file():
         for raw_line in env_file.read_text(encoding="utf-8").splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
-            name, _, value = line.partition("=")
-            if name.strip() != "CFBD_API_KEY":
+            key, _, raw_value = line.partition("=")
+            if key.strip() != name:
                 continue
-            value = value.strip()
-            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-                value = value[1:-1]
-            if value:
-                return value
+            raw_value = raw_value.strip()
+            if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in {'"', "'"}:
+                raw_value = raw_value[1:-1]
+            if raw_value:
+                return raw_value
+    return None
+
+
+def load_cfbd_key(env_file: Path = Path(".env")) -> str:
+    """Return the CFBD API key from the environment, else from `env_file`.
+
+    Raises MissingApiKeyError (never containing key text) when absent or empty.
+    """
+    key = read_env_value("CFBD_API_KEY", env_file)
+    if key:
+        return key
 
     raise MissingApiKeyError("CFBD_API_KEY is not set in the environment or .env file")
