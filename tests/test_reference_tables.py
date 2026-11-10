@@ -373,3 +373,18 @@ def test_game_overrides_reject_unknown_source(tmp_path: Path) -> None:
     )
     with pytest.raises(ReferenceTableError, match="invalid source"):
         load_game_overrides(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("variant", "network_id"), [("Big Ten Network", "big-ten-network"), ("TNT Sports", "tnt")]
+)
+def test_awful_announcing_network_spellings_map(variant: str, network_id: str) -> None:
+    row = load_networks(REFERENCE_DIR).lookup(variant, 2026)
+    assert row is not None and row.network_id == network_id
+
+
+def test_awful_announcing_miami_ohio_maps() -> None:
+    rows = load_team_crosswalk(REFERENCE_DIR)
+    assert any(
+        r.source == "aa" and r.variant == "Miami Ohio" and r.cfbd_team_id == 193 for r in rows
+    )
