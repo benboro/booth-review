@@ -3588,11 +3588,13 @@ dialog.detail-panel {
     display: flex;
     height: 24px;
     margin-top: var(--space-sm);
-    overflow: hidden;
+    /* Sideways only: a vertical clip cut the serif count's descenders ("games"). */
+    overflow-x: clip;
+    overflow-y: visible;
   }
 
-  /* The 22px serif count's line is taller than the band, and centring it clipped descenders
-     ("games"): a 20px line on the band's top edge, with its detail on the same baseline. */
+  /* The 22px serif count's line is taller than the band: a 20px line on the band's top edge,
+     with its detail on the same baseline, and its descenders hang below unclipped. */
   #summary .sum-left,
   #nfl-summary-band .sum-left {
     height: 24px;
@@ -4254,7 +4256,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   color: var(--ink);
   line-height: 24px;
   white-space: nowrap;
-  overflow: hidden;
+  /* Clip sideways only (for the ellipsis): the 22px serif's descenders hang below the 24px
+     line, and a vertical clip cut the "g" of "games". */
+  overflow-x: clip;
+  overflow-y: visible;
   text-overflow: ellipsis;
 }
 
