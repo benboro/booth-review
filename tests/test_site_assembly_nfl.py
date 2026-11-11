@@ -64,7 +64,11 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # gives the old site-data digest cec8bf26b5e0...); coverage.html gains the "Of which Awful
 # Announcing" column (dropping its header and cells gives the old coverage digest
 # c0475d22f70c...); the index moves only through its site-data cache-bust version.
-_SITE_DATA_SHA256 = "534196a957ee24f64259a6cb693eccf35bd29c0dd4f0e2c8015e4edd8e33e1a1"
+# Re-pinned for the This weekend rivalry icon (2026-11-11): contract 2.10.0 adds
+# telecasts_scheduled.rivalry, null on every fixture row (dropping it and setting the version
+# back to 2.8.0 gives the old digest 534196a957ee...); the index moves only through its
+# site-data cache-bust version.
+_SITE_DATA_SHA256 = "bcb91475ff65b4e2c08037516f18281a9143706aed9ebceb2e234cde039b0b6e"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
@@ -113,7 +117,9 @@ _COVERAGE_SHA256 = "1d3cfc66d673c021045d2d225b89daa91999bb4698e5de461f761eb2a924
 # through its site-data cache-bust version (cec8bf26b5 -> 534196a957, the one changed line).
 # Re-pinned at Phase 28 Plan 06: the footer trademark line names conference logos too
 # (probe: the previous pages.py reproduces the old digest, so only that sentence moved it).
-_INDEX_PRE_PHASE_SHA256 = "d4bb70ab5f3508dd8c6bd9772db86ad36992097e97f28572b8164188121fc066"
+# Re-pinned for the This weekend rivalry icon (2026-11-11): only the site-data cache-bust
+# version moved (contract 2.10.0; diffed against origin/main, one changed line).
+_INDEX_PRE_PHASE_SHA256 = "8d8d1f81e1018c37a15e13eabafbfba5cd8fbe1595c3313026378d244bb3a7a5"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

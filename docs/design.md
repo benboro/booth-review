@@ -221,7 +221,9 @@ records only where the site settles or applies them.
   outline hides under the sticky axis and row heads; a pick's heavier ring replaces it. Module
   subtitles sit on the title's baseline.
 - The This weekend timeline is plain DOM, not a chart: rows follow network precedence in
-  a 96px label column, the time scale runs 80-120 px/hour (80, not the spec's 88,
+  a 96px label column (network logos centred in it, user 2026-11-11: the round marks get
+  equal room on both sides instead of a gap before the lane; the phone rows' 56px logo slot
+  centres too), the time scale runs 80-120 px/hour (80, not the spec's 88,
   so a 15-hour day fits at 1440), cells are 44px tall on a 48px
   row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18). A day
   narrower than the module (the 120 cap, or floor rounding) stretches its lane to the
@@ -318,37 +320,37 @@ records only where the site settles or applies them.
   `currentColor`, so it takes the text colour of the cell, row or line it sits on. It is never
   gold: gold is the lead-booth mark (the gold star before the crew and the `--lead-frame`), and
   the two must read apart.
-- Sizes and places: the This weekend timeline cell puts it 18px high at the top right, inside
-  28px of reserved right padding, so the matchup text keeps its room and the cell never grows;
-  every CFB cell, ranked or not, keeps that 28px, so the same matchup and booth truncate at the
-  same place with or without the badge (NFL cells keep 8px), and
-  its badge's top is the matchup line's top, so it never rides above it;
+- Sizes and places: the This weekend timeline cell puts it 18px high at the top right (6px in,
+  its top the matchup line's top, so it never rides above it), and the cell never grows;
   the phone list rows set it 18px at the right, 6px in, centred vertically on the matchup lines
   (line 1, or lines 1-2 when the matchup wraps, the lines the 2-line clamp shows; never the
   booth line or the whole row, so it never sits above the first line) (user feedback
-  2026-11-03), and every CFB phone row, ranked
-  or not, keeps the badge's 28px of right padding, so the same text wraps and clamps at the
-  same place with or without the badge (NFL rows keep 16px); the ESPN+ and regional table and
+  2026-11-03); the ESPN+ and regional table and
   Matched games set it 18px inline after the matchup's last word on one line, and once the
   matchup wraps it centres vertically on the matchup lines, as the card, the phone rows and
   the modal title do (user decision 2026-11-03), its left edge 6px after the longest line's
   right edge, the same gap as on one line, not at the cell's right edge (user feedback
-  2026-11-03); the map hover card draws it 25.5px at
-  the top right, and every CFB game card, ranked or not, keeps its 43.5px of right padding (the
-  NFL card and the other tooltips keep 16px); the CFB modal title ends with a 26px badge glued
-  to the title's last word on one line, so it never sits alone on a line, and once the title
-  wraps the badge moves to the right of the reserved space, 6px in from the close button, and
-  centres vertically on the title's lines, as the card does (user feedback 2026-11-03; the map
-  card is the reference). The longest-line gap rule is for table cells only. At
-  every width every CFB modal title, ranked or not, keeps
-  the badge's 36px free at the end of each line (beside the close button too, since the title
-  clears the button's float), and the badge overhangs into that space without taking inline
-  room, so a ranked title breaks its lines exactly as the same title without the badge. No
-  cell, row, card or title changes height with a badge. The rule behind all of these (user
-  decision 2026-11-03): the timeline cell, the phone row, the map card and the modal title
-  reserve the badge's space on every CFB item whether or not it shows, so identical text
-  wraps, clamps or truncates identically ranked or not; each surface's e2e tests sweep text
-  lengths to hold it. The two tables reserve nothing on a one-line cell (the badge is inline
+  2026-11-03); the map hover card draws it 25.5px at the top right, and a ranked card keeps
+  43.5px of right padding (any other card keeps 16px); the CFB modal title ends with a 26px
+  badge glued to the title's last word on one line, so it never sits alone on a line, and once
+  the title wraps the badge moves to the right of the reserved space, 6px in from the close
+  button, and centres vertically on the title's lines, as the card does (user feedback
+  2026-11-03; the map card is the reference). The longest-line gap rule is for table cells
+  only. A ranked modal title keeps the badge's 36px free at the end of each line (beside the
+  close button too, since the title clears the button's float), and the badge overhangs into
+  that space without taking inline room. No cell, row, card or title changes height with a
+  badge.
+- Room only for visible marks (user 2026-11-11, reversing the 2026-11-03 "reserve badge space
+  everywhere"): text truncates or wraps on what is visible, so an item gives up room only for
+  a mark it shows, and each line only for a mark drawn on that line. A plain timeline cell
+  keeps its 8px right padding and a plain phone row its 16px; a cell's line gives up 20px more
+  and a phone row's line 12px more for a mark on it, so the text stops 4px short of the 18px
+  slot 6px in. A ranked or rivalry cell's matchup line gives up that room and its booth line
+  keeps its full width, unless the cell has both marks (the swords then sit on the booth line).
+  An unranked map card keeps 16px and an unranked modal title reserves nothing. So the same
+  text may cut or wrap a little earlier on a marked item than on a plain one; the e2e sweeps
+  hold that a plain item never cuts or wraps earlier, and that a line without a mark is
+  unaffected. The two tables reserve nothing on a one-line cell (the badge is inline
   there); a wrapped ranked cell gives its lines the badge's 24px (18px badge, 6px gap) at the end
   and starts the badge 6px after its longest line, so it never overlaps the text and stays
   inside the cell. Whether a cell wraps is measured on the inline layout, and the longest
@@ -372,6 +374,16 @@ records only where the site settles or applies them.
   and MLB tables and modals are separate code and unchanged. Matched games does not wrap as
   built (nowrap on desktop, a max-content table that scrolls on a phone), so the rule there,
   and its centred wrapped badge, only take effect if that changes.
+- Rivalry mark (user pick B2, 2026-11-11): CFB timeline cells and phone rows show the
+  crossed swords (`makeGameTypeIcon('rivalry')`) for a game tagged with a rivalry, 16px in the
+  item's text colour (never the rivalry red, which fails on the family fills; strokes 1.5 on
+  the 16px grid so they sit beside the solid badge). They share the badge's slot: alone they
+  take the badge's place (a cell's top right, a phone row's matchup lines); with the badge they
+  sit under it in the same column, centred on the booth line. The item's accessible name ends
+  with "Rivalry: <name>." (after "Both teams ranked." on a game with both), the mark is
+  `aria-hidden`, and its title reads "Rivalry: <name>". Scheduled games carry the rivalry too
+  (contract 2.10.0 `telecasts_scheduled.rivalry`). The Time TBA strip shares the cell and row
+  builders and shows it too; the ESPN+ and regional table and NFL items do not.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is
   `aria-hidden`. In Matched games and the map hover card it is `role="img"` with the label

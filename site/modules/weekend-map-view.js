@@ -256,7 +256,6 @@ function createMount(host) {
         kickoff: hit.lines.kickoff,
         venue: hit.lines.venue,
         ranked: hit.lines.ranked,
-        rankSlot: hit.lines.rankSlot,
         conf: hit.lines.conf,
         family: hit.d.family,
       },

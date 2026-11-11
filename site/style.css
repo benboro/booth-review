@@ -7123,6 +7123,9 @@ tr.is-matched > :first-child {
   border-right: 1px solid var(--rule-strong);
   display: flex;
   align-items: flex-start;
+  /* Logos centre in the column (user 2026-11-11): wide wordmarks barely move, and the round
+     marks (ABC, TNT, ESPNU) get equal room on both sides instead of a gap before the lane. */
+  justify-content: center;
 }
 
 /* The mark sits on the first sub-row: a 44px box at the top of the column. */
@@ -7130,6 +7133,11 @@ tr.is-matched > :first-child {
 .wk-rowhead .wk-rowname {
   min-height: var(--wk-cell-h);
   max-width: 100%;
+}
+
+.wk-rowhead .wk-rowname,
+.wk-rowhead .net-name {
+  text-align: center;
 }
 
 .wk-rowname,
@@ -7465,6 +7473,8 @@ tr.is-matched > :first-child {
   min-width: 0;
   display: flex;
   align-items: center;
+  /* Centred like the timeline's row-label column (user 2026-11-11). */
+  justify-content: center;
 }
 
 .wk-item-mark .net-mark {
@@ -7475,11 +7485,12 @@ tr.is-matched > :first-child {
 .wk-item-mark .net-logo {
   max-width: 100%;
   object-fit: contain;
-  object-position: left center;
+  object-position: center;
 }
 
 .wk-item-mark .net-name,
 .wk-item-nonet {
+  text-align: center;
   font: var(--font-caption);
   font-weight: var(--weight-semibold);
   display: -webkit-box;
@@ -7798,13 +7809,15 @@ tr.is-matched > :first-child {
   overflow: visible;
 }
 
-/* Every CFB cell, ranked or not, keeps the badge's 28px at its right (user decision
-   2026-11-03, "reserve badge space everywhere"): the cell is fixed height and truncates on one
-   line, so without it the same matchup or booth would cut off earlier on a ranked cell. NFL
-   cells never show the badge and keep 8px. */
-.wk-root[data-sport="cfb"] .wk-cell,
-.wk-cell.rk-has {
-  padding-right: 28px;
+/* A cell's marks sit in its top-right corner (user pick B2, 2026-11-11): the badge on the
+   matchup line, the rivalry swords in its place when alone, else under it on the booth line.
+   Each line gives up room only for a mark drawn on it (user 2026-11-11, reversing the
+   2026-11-03 "reserve badge space everywhere"): 20px more than the cell's 8px padding, so the
+   text stops 4px short of the 18px mark at 6px in. A plain cell uses its full width. */
+.wk-cell.rk-has .wk-line1,
+.wk-cell.rv-has .wk-line1,
+.wk-cell.rk-has.rv-has .wk-line2 {
+  margin-right: 20px;
 }
 
 .wk-cell .rk-badge {
@@ -7814,20 +7827,48 @@ tr.is-matched > :first-child {
   height: 18px;
 }
 
-/* Every CFB phone row, ranked or not, keeps the badge's 28px at its right (user decision
-   2026-11-03, "reserve badge space everywhere"), so the same matchup and booth text wrap and
-   clamp at the same place with or without the badge. NFL rows never show it and keep 16px. */
-.wk-root[data-sport="cfb"] .wk-item,
-.wk-item.rk-has {
-  position: relative;
-  padding-right: 28px;
+/* The swords: 16px centred in the badge's 18px slot, in the cell's text colour (never the
+   rivalry red, which fails on the family fills), strokes a touch heavier to sit beside the
+   solid badge. Under a badge they centre on the booth line (22-40px). */
+.rv-mark {
+  position: absolute;
+  line-height: 0;
+}
+
+.rv-mark .game-type-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+}
+
+.rv-mark path[stroke] {
+  stroke-width: 1.5;
+}
+
+.wk-cell .rv-mark {
+  top: 5px;
+  right: 7px;
+}
+
+.wk-cell.rk-has .rv-mark {
+  top: 23px;
+}
+
+/* A phone row's marks sit 6px in from its right edge (the badge's 18px slot spans 6-24px), and
+   a line gives up room only for a mark drawn on it (user 2026-11-11): 12px more than the row's
+   16px padding, so the text stops 4px short of the mark. A plain row uses its full width. */
+.wk-item.rk-has .wk-item-l1,
+.wk-item.rv-has .wk-item-l1,
+.wk-item.rk-has.rv-has .wk-item-l2 {
+  margin-right: 12px;
 }
 
 /* The phone row's badge centres on the matchup lines (user feedback 2026-11-03), line 1 or
    lines 1-2 when the matchup wraps, never the booth line or the whole row: the matchup's own
    wrapper (.wk-item-mu) is its positioning context, and that wrapper is exactly as tall as the
-   lines the 2-line clamp shows. Its right edge is the row's content edge, so right: -22px puts
-   the badge 6px in from the row's edge, inside the reserved 28px. */
+   lines the 2-line clamp shows. Its right edge is the row's content edge (16px in), so
+   right: -10px puts the badge 6px in from the row's edge. */
 .wk-item-mu {
   position: relative;
   min-width: 0;
@@ -7836,9 +7877,29 @@ tr.is-matched > :first-child {
 .wk-item-mu .rk-badge {
   position: absolute;
   top: 50%;
-  right: -22px;
+  right: -10px;
   height: 18px;
   transform: translateY(-50%);
+}
+
+/* The swords centre in the same slot: on the matchup lines when alone, else on the booth line
+   under the badge (the booth line's box ends 12px short of the content edge, so 28px in). */
+.wk-item-mu .rv-mark,
+.wk-item-l2 .rv-mark {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.wk-item-mu .rv-mark {
+  right: -9px;
+}
+
+.wk-item-l2 {
+  position: relative;
+}
+
+.wk-item-l2 .rv-mark {
+  right: -21px;
 }
 
 /* A wrapping matchup breaks before its joiner (user decisions 2026-11-03): the joiner, the
@@ -7864,10 +7925,8 @@ tr.is-matched > :first-child {
   top: -2px;
 }
 
-/* Every CFB game card, ranked or not (rk-slot), keeps the badge's padding (user decision
-   2026-11-03, "reserve badge space everywhere"), so the same text wraps at the same place with
-   or without the badge. The other tooltips drop both classes and keep their 16px. */
-.chart-tooltip.rk-slot,
+/* Only a ranked card keeps the badge's padding (user 2026-11-11, reversing the 2026-11-03
+   "reserve badge space everywhere"): text wraps on what is visible. Other cards keep 16px. */
 .chart-tooltip.rk-has {
   padding-right: 43.5px;
 }
@@ -7947,16 +8006,19 @@ tr.is-matched > :first-child {
   white-space: nowrap;
 }
 
-/* Every width (review WR-05, extended by the user's 2026-11-03 "reserve badge space
-   everywhere"): every CFB modal title, ranked or not, keeps 36px (the badge's 10px gap and
-   26px width) free at the end of each line, and the badge takes no inline room of its own (its
-   -36px end margin above cancels its width and gap), so it overhangs into that space after the
-   last word. Line breaks are then the same with and without the badge, and a ranked title
-   never gains a line. flow-root keeps the title's box clear of the floated close button, so
-   the reserved space on the lines beside the x is free too, rather than under the button. */
+/* Every width (review WR-05): a ranked title (rk-has, panel.js) keeps 36px (the badge's 10px
+   gap and 26px width) free at the end of each line, and the badge takes no inline room of its
+   own (its -36px end margin above cancels its width and gap), so it overhangs into that space
+   after the last word and a ranked title's breaks never depend on the badge. A title without
+   the badge reserves nothing (user 2026-11-11, reversing the 2026-11-03 "reserve badge space
+   everywhere"). flow-root keeps the title's box clear of the floated close button, so the
+   reserved space on the lines beside the x is free too, rather than under the button. */
 #panel-title {
   position: relative;
   display: flow-root;
+}
+
+#panel-title.rk-has {
   padding-inline-end: 36px;
 }
 

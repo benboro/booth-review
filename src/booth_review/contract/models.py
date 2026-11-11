@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.8.0"
+SCHEMA_VERSION = "2.10.0"
 
 _S506_HOST = "506sports.com"
 
@@ -428,6 +428,9 @@ class ScheduledColumns(BaseModel):
     # The game's own week label in lookups.weeks (18-13 F1): a Labor Day Monday game keeps
     # its CFBD week even though its date falls in the next week's Monday-to-Sunday span.
     week: list[str]
+    # Index into lookups.rivalries, by the same rule as telecasts.rivalry (04.9 D-13): the
+    # first regular-season meeting of a curated rivalry's two teams in the season.
+    rivalry: list[int | None]
 
 
 class CoverageRow(BaseModel):
@@ -459,7 +462,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.8.0"]
+    schema_version: Literal["2.10.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups
@@ -628,6 +631,18 @@ class SiteData(BaseModel):
                     raise ValueError(
                         f"telecasts_scheduled.{conf_name}[{i}]: conference index out of range"
                     )
+            sched_rivalry = sc.rivalry[i]
+            if sched_rivalry is not None:
+                if not 0 <= sched_rivalry < num_rivalries:
+                    raise ValueError(
+                        f"telecasts_scheduled.rivalry[{i}]: rivalry index out of range"
+                    )
+                pair = sorted((sc.away_team[i], sc.home_team[i]))
+                if pair != self.lookups.rivalries[sched_rivalry].teams:
+                    raise ValueError(
+                        f"telecasts_scheduled.rivalry[{i}]: teams do not match the rivalry"
+                    )
+                referenced_rivalries.add(sched_rivalry)
             sched_place = sc.place[i]
             if sched_place is not None:
                 if not 0 <= sched_place < len(self.lookups.venues):
@@ -696,7 +711,9 @@ class SiteData(BaseModel):
 
         for k in range(num_rivalries):
             if k not in referenced_rivalries:
-                raise ValueError(f"lookups.rivalries[{k}]: not referenced by any telecast")
+                raise ValueError(
+                    f"lookups.rivalries[{k}]: not referenced by any telecast or scheduled game"
+                )
 
         for k in range(len(self.lookups.venues)):
             if k not in referenced_venues:
