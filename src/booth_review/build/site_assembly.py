@@ -683,12 +683,13 @@ def _assemble_into(
             ),
         )
         copied.append(dark_rel.as_posix())
-    # Conference logos (Phase 28) get their own dark folder so a conference file can
-    # never collide with a network file of the same name.
-    for logo in sorted((site_src / "logos" / "conf").glob("*.svg")):
-        dark_rel = Path("logos") / "dark" / "conf" / logo.name
-        atomic_write_bytes(stage / dark_rel, logos_dark.dark_variant(logo.read_bytes()))
-        copied.append(dark_rel.as_posix())
+    # Conference logos (Phase 28) and game marks (the title-game emblem) get their own dark
+    # folders so neither can collide with a network file of the same name.
+    for sub in ("conf", "marks"):
+        for logo in sorted((site_src / "logos" / sub).glob("*.svg")):
+            dark_rel = Path("logos") / "dark" / sub / logo.name
+            atomic_write_bytes(stage / dark_rel, logos_dark.dark_variant(logo.read_bytes()))
+            copied.append(dark_rel.as_posix())
     atomic_write_bytes(stage / "site-data.json", body)
     for sid in ids[1:]:
         data_file = sport_spec(sid).data_file

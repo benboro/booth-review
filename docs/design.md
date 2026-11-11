@@ -157,6 +157,20 @@ records only where the site settles or applies them.
 - The CFB chart tooltip shows the primary network only; the other outlets are listed in the
   panel's "Also on" line, which never lists ESPN Radio, since a game with a primary network
   always has another broadcast (user 2026-11-09, superseding the 2026-10-24 every-outlet row).
+- Crews tables (CFB, NFL, MLB): a click anywhere on a row, its names included, opens and
+  closes its games; picking a crew is a small funnel button right after the names, shown on
+  the row's hover or focus (always for any touch pointer, and while it is the active pick).
+  The chevron stays on the row's first text line, its lowest point on that line's baseline,
+  so it holds its place when a name wraps (user 2026-11-11).
+- A Crews game list lines up under its row table, Matchup first, under the names (user
+  2026-11-11). CFB and NFL: Date under Season (or Rank by season), Network under Network, and
+  Excitement and Viewers ending under their averages. MLB, which has no Season or viewers
+  column: Date in a fixed slot before Network, the crew under Network, Excitement ending
+  under Excitement and Viewers under the last column. CFB lists put a marks column between
+  Matchup and Date: rivalry, bowl, playoff trophy, the national championship emblem (the CFP
+  football mark, title game only, beside the trophy) and the ranked-matchup star. A CFB
+  person row's games name the rest of the booth after the matchup, muted, instead of in a
+  Crew column.
 
 ## Chart marks
 

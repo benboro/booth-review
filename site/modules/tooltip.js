@@ -30,6 +30,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
+import { titleGameMark } from './title-mark.js';
 import { broadcastNetworks, networkMark, networkMarks } from './network.js';
 import { conferenceMark } from './conf-logos.js';
 import { crewBox } from './panel-parts.js';
@@ -152,7 +153,7 @@ export function renderTooltipContent(el, model, theme) {
     // The icons are decorative (aria-hidden) and the visible name carries the
     // meaning (04.10 D-10, reversing 04.2 D-22's icon-only rule). If any icon
     // can't be built, draw none (never a partial marker); the text still shows.
-    const icons = model.gameType.icons.map((kind) => makeGameTypeIcon(kind));
+    const icons = model.gameType.icons.map((kind) => (kind === 'title' ? titleGameMark() : makeGameTypeIcon(kind)));
     const type = document.createElement('div');
     type.className = 'tooltip-game-type';
     if (icons.every((icon) => icon != null)) type.replaceChildren(...icons);

@@ -353,7 +353,8 @@ def test_a_pick_past_the_cut_off_is_the_only_row_shown(app: Page) -> None:
     _set(app, {"crew": key})
     row = _rows(app).last
     expect(row).to_have_attribute("data-crew-key", key)
-    expect(row).to_have_attribute("aria-pressed", "true")
+    expect(row.locator("button.crews-pick")).to_have_attribute("aria-pressed", "true")
+    expect(row).to_have_class(re.compile(r"is-picked"))
     # The pick would sort last; the table narrows to it (user rule 2026-10-27), so the row
     # is shown with no paging button, and clearing the pick restores the first page.
     expect(_rows(app)).to_have_count(1)
@@ -428,33 +429,34 @@ def test_person_pick_highlight_respects_role(app: Page) -> None:
     expect(highlighted).to_contain_text(_name(CASE_TRIO["pbp"]))
 
 
-def test_crew_row_click_sets_crew_and_clears_people(app: Page) -> None:
+def test_crew_pick_button_sets_crew_and_clears_people(app: Page) -> None:
     trio_names = [_name(s) for s in (CASE_TRIO["pbp"], *CASE_TRIO["analysts"])]
     _set(app, {"people": ["fill-pbp"]})
     _show_all(app)
     row = _row(app, _name(CASE_TRIO["pbp"]))
-    row.click()
+    pick = row.locator("button.crews-pick")
+    pick.click()
     state = _state(app)
     assert state["crew"] == _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
     assert state["people"] == []
     status = app.locator("#pick-status")
     expect(status).to_have_text(f"Crew pick set to {_join(trio_names)}. Announcers pick cleared.")
-    expect(row).to_have_attribute("aria-pressed", "true")
+    expect(pick).to_have_attribute("aria-pressed", "true")
     expect(row).to_have_class(re.compile(r"is-picked"))
-    row.click()
+    pick.click()
     assert _state(app)["crew"] is None
     expect(status).to_have_text("Crew pick cleared.")
-    expect(row).to_have_attribute("aria-pressed", "false")
+    expect(pick).to_have_attribute("aria-pressed", "false")
 
 
-def test_person_row_click_sets_announcers_and_clears_crew(app: Page) -> None:
+def test_person_pick_button_sets_announcers_and_clears_crew(app: Page) -> None:
     key = _key(app, [CASE_TRIO["pbp"], *CASE_TRIO["analysts"]])
     _set(app, {"crew": key})
     app.locator("#crews-panel button[data-cmode=pbp]").click()
     assert _state(app)["crew"] == key
     _show_all(app)
     row = _row(app, _name(CASE_TRIO["pbp"]))
-    row.click()
+    row.locator("button.crews-pick").click()
     state = _state(app)
     assert state["people"] == [CASE_TRIO["pbp"]]
     assert state["crew"] is None
@@ -462,27 +464,27 @@ def test_person_row_click_sets_announcers_and_clears_crew(app: Page) -> None:
         f"Announcers pick set to {_name(CASE_TRIO['pbp'])}. Crew pick cleared."
     )
     expect(row).to_have_class(re.compile(r"is-picked"))
-    row.click()
+    row.locator("button.crews-pick").click()
     assert _state(app)["people"] == []
 
 
-def test_crew_row_click_narrows_the_table_to_the_crew_and_never_touches_booth(
+def test_crew_pick_button_narrows_the_table_to_the_crew_and_never_touches_booth(
     app: Page,
 ) -> None:
     """todo 2026-10-23-cfb-crews-row-click-narrows (user rule 2026-10-27): a Crew-mode row
-    click narrows the table to that crew, as an NFL booth row click does; the tier Booth
-    filter stays untouched, and a second click on the row restores every row."""
+    pick narrows the table to that crew, as an NFL booth pick does; the tier Booth
+    filter stays untouched, and a second click on the pick button restores every row."""
     _set(app, {"booth": []})
     total = _model(app)["totalRows"]
     _show_all(app)
     row = _row(app, _name(CASE_TRIO["pbp"]))
-    row.click()
+    row.locator("button.crews-pick").click()
     assert _state(app)["booth"] == []
     assert _model(app)["totalRows"] == 1
     expect(_rows(app)).to_have_count(1)
     expect(_rows(app).first).to_have_class(re.compile(r"is-picked"))
     expect(app.locator("#crews-panel .crews-count")).to_have_text("Showing 1 of 1 rows.")
-    _rows(app).first.click()
+    _rows(app).first.locator("button.crews-pick").click()
     assert _state(app)["crew"] is None
     _show_all(app)
     expect(_rows(app)).to_have_count(total)
@@ -507,12 +509,19 @@ def test_crew_pick_narrows_the_person_modes_to_the_crew_s_people(app: Page) -> N
     assert _model(app)["totalRows"] > len(CASE_TRIO["analysts"])
 
 
-def test_chevron_click_sets_no_pick(app: Page) -> None:
-    _rows(app).first.locator("button.crews-chevron").click()
+def test_chevron_and_row_clicks_expand_and_set_no_pick(app: Page) -> None:
+    first = _rows(app).first
+    first.locator("button.crews-chevron").click()
+    expect(first).to_have_attribute("aria-expanded", "true")
+    first.locator("button.crews-chevron").click()
+    expect(first).to_have_attribute("aria-expanded", "false")
+    first.locator("td.crews-name").click(position={"x": 2, "y": 2})
+    expect(first).to_have_attribute("aria-expanded", "true")
     state = _state(app)
     assert state["crew"] is None
     assert state["people"] == []
-    expect(_rows(app).first).to_have_attribute("aria-pressed", "false")
+    expect(first.locator("button.crews-pick")).to_have_attribute("aria-pressed", "false")
+    expect(first).not_to_have_class(re.compile(r"is-picked"))
 
 
 def test_per_season_marks_every_row_of_the_picked_crew(app: Page) -> None:
@@ -520,7 +529,7 @@ def test_per_season_marks_every_row_of_the_picked_crew(app: Page) -> None:
     _show_all(app)
     full = _row(app, "Full Pbp")
     expect(full).to_have_count(3)  # seasons 2023, 2024 and 2025
-    full.first.click()
+    full.first.locator("button.crews-pick").click()
     expect(
         _row(app, "Full Pbp").locator("xpath=self::tr[contains(@class,'is-picked')]")
     ).to_have_count(3)

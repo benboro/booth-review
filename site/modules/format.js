@@ -249,6 +249,8 @@ export function namedGameInfo(data, i) {
   if (info.atBowl) {
     return { icons: ['bowl', 'playoff'], text: core ? `${core}, ${info.label}` : info.label };
   }
+  // The title game adds the national championship emblem after the trophy (title-mark.js).
+  if (data.t.playoff_round?.[i] === 'championship') return { icons: ['playoff', 'title'], text: info.label };
   return { icons: ['playoff'], text: info.label };
 }
 

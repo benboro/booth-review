@@ -13,6 +13,10 @@ covered by this repository's MIT license.
   SEC Network), equal to the file's existing width and height, and the removal of
   the unused SVG 1.1 `DOCTYPE` line from the CBS file so it passes the lint. Line
   endings are normalised to LF.
+- ESPN (`espn.svg`) was replaced on 2026-11-11 by the red digital wordmark the user saved by
+  hand from ESPN's design site (https://espn.design/). Its only edit is a `viewBox` tightened
+  to the drawn letters (24 24 292 72, from 0 0 340 120) with matching `width`/`height`, so it
+  draws at the same 57 x 14 px as the Commons file it replaced.
 - Logos are rendered only through `<img>`, so no script inside a file can run.
 - Dark-theme variants are generated at build time by
   `src/booth_review/build/logos_dark.py` into `logos/dark/<name>.svg` (same viewBox,
@@ -48,3 +52,20 @@ are not covered by this repository's MIT license.
 - FBS Independents, FCS Independents and every FCS conference are shown as text. No FCS
   logos are collected (D-11).
 - A conference's logo comes down if the conference objects.
+
+# Game marks
+
+The CFP national championship emblem in `marks/` is a trademark of the College Football
+Playoff. It is shown only to mark the national championship game, beside the trophy icon,
+in the Crews game list, the hover tooltip and the game panel, and it is not covered by this
+repository's MIT license.
+
+- `marks/manifest.csv` has the network manifest's columns plus `mark` and `edit`.
+- The file was saved by hand by the user from its Wikimedia Commons file page (PD-textlogo,
+  Trademarked) and approved on 2026-11-11. Nothing here was
+  fetched by a script.
+- Edits, recorded in the `edit` column: the NATIONAL CHAMPIONSHIP lettering group was
+  removed (unreadable at 16 px) and the `viewBox` tightened to the CFP football mark that remains (two gold arcs around four laces); the XML
+  declaration was dropped.
+- Its dark variant is built into `logos/dark/marks/` the same way as the others.
+- The mark comes down if the College Football Playoff objects.

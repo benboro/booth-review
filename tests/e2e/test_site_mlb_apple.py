@@ -244,11 +244,20 @@ def test_difference_line_and_spanning_zero(
     assert "win" not in (stakes + excitement).lower()
 
 
-def test_row_click_lists_booth_games_and_toggles(mlb: Page) -> None:
+def test_row_click_expands_and_pick_button_lists_booth_games_and_toggles(mlb: Page) -> None:
     mlb.click(f"{ROW} td.crews-name >> nth=1")
+    assert mlb.locator(ROW).nth(1).get_attribute("aria-expanded") == "true"
+    assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
+    assert "booth=" not in mlb.url
+    mlb.click(f"{ROW} td.crews-name >> nth=1")
+    assert mlb.locator(ROW).nth(1).get_attribute("aria-expanded") == "false"
+    mlb.click(f"{ROW} >> nth=1 >> button.crews-pick")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == [3, 2]
     assert mlb.locator("#mlb-view-apple tr.is-picked").count() == 1
-    assert mlb.locator(ROW).nth(1).get_attribute("aria-pressed") == "true"
+    assert mlb.locator(ROW).nth(1).locator("button.crews-pick").get_attribute("aria-pressed") == (
+        "true"
+    )
+    assert mlb.locator(ROW).nth(1).get_attribute("aria-pressed") is None
     assert "booth=p2" in mlb.url
     # Exactly one inset inline-start marker, 2px, in the picked row.
     marks = mlb.evaluate(
@@ -258,7 +267,7 @@ def test_row_click_lists_booth_games_and_toggles(mlb: Page) -> None:
     assert len(marks) == 1
     assert "inset" in marks[0]
     assert "2px" in marks[0]
-    mlb.click(f"{ROW} td.crews-name >> nth=1")
+    mlb.click(f"{ROW} >> nth=1 >> button.crews-pick")
     assert mlb.evaluate(f"{HOOKS}.getTableIndexes()") == []
     assert "booth=" not in mlb.url
 
@@ -282,7 +291,7 @@ def test_every_head_sorts_and_third_click_returns_to_position(mlb: Page) -> None
     assert names() == ["Lead", "#2", "#3"]
 
 
-def test_row_keys_pick_and_expand(mlb: Page) -> None:
+def test_row_keys_expand_and_pick_button_keys_pick(mlb: Page) -> None:
     mlb.locator(ROW).first.focus()
     mlb.keyboard.press("ArrowDown")
     assert mlb.evaluate("document.activeElement.dataset.rowKey") == "1"
@@ -294,6 +303,12 @@ def test_row_keys_pick_and_expand(mlb: Page) -> None:
     mlb.keyboard.press("Escape")
     assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "false"
     mlb.keyboard.press("Enter")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    assert "booth=" not in mlb.url
+    mlb.keyboard.press("Space")
+    assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "false"
+    mlb.locator(ROW).first.locator("button.crews-pick").focus()
+    mlb.keyboard.press("Enter")
     assert "booth=p0" in mlb.url or "booth=" in mlb.url
 
 
@@ -302,6 +317,7 @@ def test_picking_or_clearing_a_booth_keeps_the_row_expanded(mlb: Page) -> None:
     mlb.locator(ROW).first.focus()
     mlb.keyboard.press("ArrowRight")
     assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
+    mlb.locator(ROW).first.locator("button.crews-pick").focus()
     mlb.keyboard.press("Enter")
     assert "booth=" in mlb.url
     assert mlb.locator(ROW).first.get_attribute("aria-expanded") == "true"
@@ -431,6 +447,28 @@ def test_more_names_popover_on_phone_toggles_and_closes(heavy_phone: Page) -> No
     assert pop.count() == 0
 
 
+def test_phone_game_item_puts_the_crew_on_its_own_full_width_line(heavy_phone: Page) -> None:
+    """Codex review 2026-11-11: on a phone the Crew cell takes the full-width line under the
+    date line, never the top-right slot beside the matchup."""
+    page = heavy_phone
+    page.locator(ROW).nth(0).locator("td.crews-name").tap(position={"x": 20, "y": 12})
+    game = page.locator("#mlb-view-apple tr.crews-game").first
+    game.wait_for()
+    got = game.evaluate(
+        """(tr) => {
+          const box = (sel) => tr.querySelector(sel).getBoundingClientRect();
+          const m = box('td.crews-game-matchup');
+          const d = box('td.crews-game-date');
+          const c = box('td.crews-game-crew');
+          return { crewTop: c.top, dateBottom: d.bottom, matchupBottom: m.bottom,
+                   crewLeft: c.left, matchupLeft: m.left };
+        }"""
+    )
+    assert got["crewTop"] >= got["dateBottom"] - 1
+    assert got["crewTop"] >= got["matchupBottom"] - 1
+    assert abs(got["crewLeft"] - got["matchupLeft"]) <= 1
+
+
 def test_expanded_row_lists_analysts_games_and_fill_in(heavy: Page) -> None:
     row = heavy.locator(ROW).nth(0)
     row.locator(".crews-chevron").click()
@@ -443,7 +481,7 @@ def test_expanded_row_lists_analysts_games_and_fill_in(heavy: Page) -> None:
     assert f"{TRICKY} (1)" in line
     assert sub.locator("b").count() == 0
     heads = sub.locator("table.crews-games thead th").all_inner_texts()
-    assert heads == ["Date", "Matchup", "Crew", "Excitement", "Viewers"]
+    assert heads == ["Matchup", "Date", "Crew", "Excitement", "Viewers"]
     games = sub.locator("tr.crews-game")
     assert games.count() == 4
     excitement = [c.strip() for c in games.locator("td.crews-game-exc").all_inner_texts()]
@@ -473,7 +511,7 @@ def test_game_row_opens_the_panel_and_focus_returns(heavy: Page) -> None:
 
 def test_booth_picked_game_row_escape_returns_focus_to_the_row(heavy: Page) -> None:
     """F2: the picked booth's games are also in Matched games; focus still returns to the row."""
-    heavy.locator(ROW).nth(0).locator("td.crews-name").click()
+    heavy.locator(ROW).nth(0).locator("button.crews-pick").click()
     assert heavy.evaluate(f"{HOOKS}.getState().booth") == "0"
     heavy.locator(ROW).nth(0).locator(".crews-chevron").click()
     game = heavy.locator("#mlb-view-apple tr.crews-game").first

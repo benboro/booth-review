@@ -2484,6 +2484,16 @@ input[type="checkbox"] {
   margin-right: var(--space-xs);
 }
 
+/* The title game's emblem follows its trophy in the tooltip and panel: as tall as the text's
+   cap-to-descender run, 4px before the label. */
+.panel-game-type .title-mark,
+.tooltip-game-type .title-mark {
+  width: auto;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  margin-right: var(--space-xs);
+}
+
 /* D-11 booth tier line: muted, label-size text in the tooltip and the detail panel. */
 .tooltip-booth,
 .panel-booth {
@@ -5365,8 +5375,16 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   text-align: left;
 }
 
+/* The caret sits on the first line of the row's text, its lowest point on that line's baseline
+   (user 2026-11-11), so it stays on line 1 when a name wraps. The baseline is 22.5px below the
+   row top (8px pad, 1.6px half-leading, Roboto's ascent). The caret is an 8px square turned 45
+   degrees, so its lowest point is 5.66px below its centre, which therefore belongs at 16.84px.
+   The 28px button starts 4.5px down (centre 18.5px), so the caret moves up 1.66px inside it; the
+   phone's 44px button (centre 22.5px) moves it 5.66px. */
 .crews-chevron {
+  --caret-dy: -1.66px;
   margin-left: 6px;
+  margin-top: 4px;
 }
 
 .crews-chevron {
@@ -5387,7 +5405,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   height: 6px;
   border-right: 2px solid var(--muted);
   border-bottom: 2px solid var(--muted);
-  transform: rotate(-45deg);
+  transform: translateY(var(--caret-dy, 0)) rotate(-45deg);
 }
 
 .crews-chevron:focus-visible {
@@ -5396,7 +5414,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 }
 
 .crews-row[aria-expanded="true"] .crews-chevron::before {
-  transform: rotate(45deg);
+  transform: translateY(var(--caret-dy, 0)) rotate(45deg);
 }
 
 .crews-row {
@@ -5428,6 +5446,79 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crews-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+/* The filter button after a row's names. A click on the row opens its games; this button picks
+   the crew. It keeps its box at all times (nothing shifts) but shows only on the row's hover or
+   focus, or while it is the active pick; a touch screen, with no hover, always shows it. */
+.crews-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  margin-left: var(--space-xs);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--muted);
+  vertical-align: -3px;
+  cursor: pointer;
+  opacity: 0;
+  position: relative;
+}
+
+/* The drawn button stays 24 x 20 everywhere, so it never makes the names' first line taller
+   (a 44px box there pushed the name 12px below its row's other cells on a phone). A touch
+   pointer gets a 44 x 44 hit area from this invisible layer instead. */
+.crews-table .crews-pick {
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (any-pointer: coarse) {
+  .crews-pick::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 44px;
+    height: 44px;
+    transform: translate(-50%, -50%);
+  }
+}
+
+.crews-row:hover .crews-pick,
+.crews-row:focus-within .crews-pick,
+.crews-pick[aria-pressed="true"] {
+  opacity: 1;
+}
+
+/* Any touch pointer (a phone, or a touch-screen laptop that also reports hover) always shows
+   the button, so a tap never lands on an invisible one. */
+@media (any-pointer: coarse) {
+  .crews-pick {
+    opacity: 1;
+  }
+}
+
+.crews-pick:hover {
+  border-color: var(--rule-strong);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.crews-pick[aria-pressed="true"] {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.crews-pick:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .crews-more {
@@ -5500,10 +5591,18 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   white-space: normal;
 }
 
+/* The inner box starts at the names' column (past the 40px chevron column), so "Worked with",
+   the game list and its "View more" line up under the names; the list's columns are then
+   placed under the row table's by crews-table.js. */
 .crews-expanded-inner {
   box-sizing: border-box;
-  padding: var(--space-md);
+  padding: var(--space-md) 0 var(--space-md) 40px;
   width: 100%;
+}
+
+.crews-expanded-inner > .crews-worked-label,
+.crews-expanded-inner > .crews-worked {
+  padding-left: var(--space-md);
 }
 
 .crews-worked-label {
@@ -5528,6 +5627,78 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   background: transparent;
 }
 
+/* Once crews-table.js has sized its columns, the list keeps them exactly. */
+.crews-games.is-aligned {
+  table-layout: fixed;
+}
+
+.crews-games.is-aligned td.crews-game-matchup {
+  overflow-wrap: anywhere;
+}
+
+/* Rivalry, bowl, playoff, title-game and ranked marks: one 16px row of icons, 4px apart, in
+   the narrow column before Date. Each icon keeps the colour it has in the tooltip and panel. */
+.crews-games th.crews-gcol-marks,
+.crews-games td.crews-game-marks {
+  padding-left: var(--space-xs);
+  padding-right: var(--space-xs);
+}
+
+.crews-marks {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  height: calc(1.4em);
+}
+
+.crews-mark {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+
+.crews-mark .game-type-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: 0;
+}
+
+.crews-mark .game-type-icon + .game-type-icon {
+  margin-left: 0;
+}
+
+/* The star's centre sits low in its box (y 54 of 100), so it rises 1px to sit level with the
+   other icons. */
+.crews-mark .rk-badge {
+  position: relative;
+  top: -1px;
+  height: 16px;
+  color: var(--ink);
+}
+
+.crews-mark .title-mark {
+  display: block;
+  width: 12px;
+  height: 16px;
+}
+
+/* A person row's game: the rest of the booth follows the matchup (after a real space), muted,
+   as the row's partners do. MLB keeps its own Crew cell, also muted. */
+.crews-games .crews-game-crew {
+  color: var(--muted);
+}
+
+.crews-games span.crews-game-crew {
+  margin-left: var(--space-xs);
+}
+
+/* An ISO date is 72px wide; a 4px right pad keeps it inside the narrowest slot it gets (96px under
+   Season), with the column gap still before the network logo. */
+.crews-games.is-aligned td.crews-game-date {
+  padding-right: var(--space-xs);
+  white-space: nowrap;
+}
+
 .crews-games td,
 .crews-games th {
   vertical-align: top;
@@ -5540,10 +5711,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
 .crews-games tbody tr:last-child td {
   border-bottom: none;
-}
-
-.crews-games td.crews-game-crew {
-  color: var(--muted);
 }
 
 .crews-games td.crews-game-matchup {
@@ -5584,6 +5751,24 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     position: sticky;
     left: 0;
     width: var(--crews-scroll-w, 100%);
+    padding: var(--space-md);
+  }
+
+  .crews-expanded-inner > .crews-worked-label,
+  .crews-expanded-inner > .crews-worked {
+    padding-left: 0;
+  }
+
+  .crews-chevron {
+    --caret-dy: -5.66px;
+    margin-top: 0;
+  }
+
+  /* On a phone the rest of the booth gets its own line under the matchup. */
+  .crews-games span.crews-game-crew {
+    display: block;
+    margin-left: 0;
+    font-size: 12px;
   }
 
   .crews-games-more {
@@ -5597,7 +5782,7 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     background-color: var(--surface);
   }
 
-  /* Game items stack: matchup on line 1; date, logo and viewers on line 2; crew on line 3. */
+  /* Game items stack: matchup and its marks on line 1; date, logo and viewers on line 2. */
   .table-scroll .games-table.crews-games {
     display: block;
     width: 100%;
@@ -5618,11 +5803,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 
   .table-scroll .crews-games tbody tr.crews-game {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: auto auto 1fr auto;
     grid-template-areas:
-      "matchup matchup matchup"
-      "date network viewers"
-      "crew crew crew";
+      "matchup matchup matchup marks"
+      "date network viewers viewers"
+      "crew crew crew crew";
     column-gap: var(--space-sm);
     align-items: center;
     min-height: 44px;
@@ -5666,8 +5851,19 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     grid-area: network;
   }
 
+  /* MLB's Crew cell takes the full-width last line (CFB names the booth inside the matchup). */
   .table-scroll .games-table.crews-games td.crews-game-crew {
     grid-area: crew;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-marks {
+    grid-area: marks;
+    justify-self: end;
+    align-self: start;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-marks:empty {
+    display: none;
   }
 
   .table-scroll .games-table.crews-games td.crews-game-viewers {
@@ -5678,10 +5874,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
      labeled since the heads are hidden. */
   .table-scroll .crews-games tbody tr.crews-game.has-exc {
     grid-template-areas:
-      "matchup matchup matchup"
-      "date network viewers"
-      "exc exc exc"
-      "crew crew crew";
+      "matchup matchup matchup marks"
+      "date network viewers viewers"
+      "exc exc exc exc"
+      "crew crew crew crew";
   }
 
   .table-scroll .games-table.crews-games td.crews-game-exc {

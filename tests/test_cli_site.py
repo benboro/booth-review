@@ -198,12 +198,10 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
         "fonts/OFL-roboto-condensed.txt",
     }
     source_svgs = {path.relative_to(SITE_SRC).as_posix() for path in SITE_SRC.rglob("*.svg")}
+    # Network logos sit at logos/, conference logos and game marks in their own subfolders;
+    # each dark variant keeps its subfolder under logos/dark/.
     dark_svgs = {
-        (
-            f"logos/dark/conf/{Path(name).name}"
-            if name.startswith("logos/conf/")
-            else f"logos/dark/{Path(name).name}"
-        )
+        "logos/dark/" + name.removeprefix("logos/")
         for name in source_svgs
         if name.startswith("logos/")
     }

@@ -53,7 +53,8 @@ const ICON_PATHS = {
 
 /**
  * Builds the decorative icon for a game-type kind.
- * @param {"bowl"|"playoff"|"rivalry"} kind - one of `format.js#namedGameInfo().icons`.
+ * @param {"bowl"|"playoff"|"rivalry"} kind - one of `format.js#namedGameInfo().icons` (its
+ *   "title" kind is the emblem image from title-mark.js, not drawn here).
  * @returns {SVGSVGElement|null} null for an unknown kind.
  */
 export function makeGameTypeIcon(kind) {

@@ -123,11 +123,11 @@ def _assert_adjusted(page: Page) -> None:
 # ------------------------------------------------------------------ D-04, D-05
 
 
-def test_row_click_sets_booths_and_announces(crews: Callable[[str], Page]) -> None:
+def test_pick_button_sets_booths_and_announces(crews: Callable[[str], Page]) -> None:
     page = crews("&perseason=0")
     _filter_bar_person(page, "synth-an-two-a", "Synth An Two A")
     assert _state(page)["people"] == ["synth-an-two-a"]
-    _row(page, KEY_A).locator("td.crews-name").click()
+    _row(page, KEY_A).locator("button.crews-pick").click()
     page.wait_for_function(f"JSON.stringify({HOOKS}.getState().booths) === '[\"{CATALOG}\"]'")
     state = _state(page)
     assert state["people"] == []
@@ -139,8 +139,8 @@ def test_row_click_sets_booths_and_announces(crews: Callable[[str], Page]) -> No
     assert page.get_attribute("#nfl-trigger-booths", "data-active") == "true"
     assert page.get_attribute("#nfl-trigger-announcers", "data-active") != "true"
     assert "booths=" in page.url and "people=" not in page.url
-    # The same row again clears the pick.
-    _row(page, KEY_A).locator("td.crews-name").click()
+    # The same button again clears the pick.
+    _row(page, KEY_A).locator("button.crews-pick").click()
     page.wait_for_function(f"{HOOKS}.getState().booths.length === 0")
     assert _status(page) == "Booths pick cleared."
     assert page.get_attribute("#nfl-trigger-booths", "data-active") != "true"
@@ -163,7 +163,7 @@ def test_lineup_only_row_click_leaves_picks_alone(crews: Callable[[str], Page]) 
 
 def test_announcer_in_filter_bar_clears_a_row_made_pick(crews: Callable[[str], Page]) -> None:
     page = crews("&perseason=0")
-    _row(page, KEY_A).locator("td.crews-name").click()
+    _row(page, KEY_A).locator("button.crews-pick").click()
     page.wait_for_function(f"{HOOKS}.getState().booths.length === 1")
     _filter_bar_person(page, "synth-an-two-a", "Synth An Two A")
     state = _state(page)
@@ -186,7 +186,9 @@ def test_two_filter_bar_booths_mark_no_row(crews: Callable[[str], Page]) -> None
     page.wait_for_function(f"{HOOKS}.getState().booths.length === 2")
     vm = _vm(page)
     assert not any(r["picked"] for r in vm["rows"])
-    pressed = page.eval_on_selector_all(ROW, "els => els.map(e => e.getAttribute('aria-pressed'))")
+    pressed = page.eval_on_selector_all(
+        f"{ROW} button.crews-pick", "els => els.map(e => e.getAttribute('aria-pressed'))"
+    )
     assert pressed and set(pressed) == {"false"}
     keys = {r["rowKey"] for r in vm["rows"]}
     assert {KEY_A, KEY_B} <= keys  # both analyst rows of the first booth remain
