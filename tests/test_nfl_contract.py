@@ -43,7 +43,9 @@ REPO = Path(__file__).resolve().parent.parent
 # Re-pinned at Phase 18 Plan 13 (F7): telecasts_scheduled gains the ESPN Press Room crew columns.
 # Re-pinned at the Phase 27 review (2026-11-01, WR-05): contract 2.8.0 adds coverage
 # matched_crew_aa.
-CFB_SCHEMA_SHA256 = "65c29b9ae6185140f635d1ad34282adb020c0cfcb5dbe8e753189ab168cbab00"
+# Re-pinned for the Crews score column (2026-11-11): contract 2.9.0 adds telecasts[_unrated]
+# overtimes.
+CFB_SCHEMA_SHA256 = "79a4d6b1cfc23fd59c444678a888664e208bd0279d6f959b96c097d745acf3ad"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 
@@ -626,7 +628,7 @@ def test_schema_version_pinned() -> None:
 
 
 def test_cfb_contract_unchanged() -> None:
-    assert cfb_models.SCHEMA_VERSION == "2.8.0"
+    assert cfb_models.SCHEMA_VERSION == "2.9.0"
     digest = hashlib.sha256((REPO / "docs" / "site-data.schema.json").read_bytes()).hexdigest()
     assert digest == CFB_SCHEMA_SHA256
 

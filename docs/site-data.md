@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.8.0"`). See
+- `schema_version` — the contract version (currently `"2.9.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -70,7 +70,7 @@ shape, so the schema version stays the same.
 One list per display field, index-aligned like `telecasts`. Each field has the same
 meaning as the `telecasts` field of the same name: `season`, `date`, `kickoff`,
 `time_slot`, `away_team`, `home_team`, `neutral`, `away_points`, `home_points`,
-`away_rank`, `home_rank`, `network`, `outlets`, `s506_url`, `crew_source_url`,
+`overtimes`, `away_rank`, `home_rank`, `network`, `outlets`, `s506_url`, `crew_source_url`,
 `crew_source_label`, `excitement`, `home_spread`, `crew`, `game_type`, `playoff_round`,
 `home_conference`, `away_conference`, `bowl`, `rivalry`, `place`, `booth`, `week`. The rated-only fields
 `viewers`, `measurement_type`, `publisher`, `source_url`, `rr_urls`, `flags`, and
@@ -161,6 +161,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 | `neutral` | bool | never null | SITE-04 |
 | `away_points` | int \| null | null before/if a final score isn't known | SITE-04 |
 | `home_points` | int \| null | null before/if a final score isn't known | SITE-04 |
+| `overtimes` | int \| null. Overtimes from CFBD's per-period line scores (entries past the fourth quarter): 0 for regulation (zero-filled extra entries after an untied fourth quarter count as regulation), 1 for "went to overtime" (CFBD's 2026 data folds every overtime period into one entry, so 1 can mean several), and 2 or more only when CFBD lists the periods one by one. The Crews game lists show it after the score as "OT" or "2OT"; null shows the bare score, like regulation | null without a final score, or when the line scores are missing, shorter than four periods, a different count per team, not all integers, don't add up to the final score, or show overtime after an untied fourth quarter | Crews score column |
 | `away_rank` | int \| null | null when that team is unranked | SITE-04 |
 | `home_rank` | int \| null | null when that team is unranked | SITE-04 |
 | `network` | int, index into `lookups.networks` | never null; the primary network (rights holder, JOIN-06) | SITE-01, SITE-04 |
@@ -334,7 +335,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.4.0 -> 2.5.0` added coverage `matched_crew_backup` (SRC-09, 04.19); minor bump;
   `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
   `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive);
-  `2.7.0 -> 2.8.0` added coverage `matched_crew_aa` (Phase 27 AA crews, review WR-05); minor bump, additive.
+  `2.7.0 -> 2.8.0` added coverage `matched_crew_aa` (Phase 27 AA crews, review WR-05); minor bump, additive;
+  `2.8.0 -> 2.9.0` added `telecasts[_unrated].overtimes` (the Crews score column, 2026-11-11); minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).

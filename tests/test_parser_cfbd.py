@@ -340,3 +340,47 @@ def test_parse_venues_duplicate_ids_keep_first_and_count_rest() -> None:
     )
     assert [v.name for v in result.venues] == ["Synthetic Field"]
     assert result.malformed == 2
+
+
+def _games_with_line_scores(
+    home: object, away: object, points: tuple[object, object] | None = None
+) -> bytes:
+    """games.json's first game with these line scores; the final score is their sums unless
+    `points` (home, away) overrides it."""
+    data = json.loads((FIXTURES / "games.json").read_bytes())
+    data[0]["homeLineScores"] = home
+    data[0]["awayLineScores"] = away
+    if points is None and isinstance(home, list) and isinstance(away, list):
+        points = (sum(home), sum(away))
+    if points is not None:
+        data[0]["homePoints"], data[0]["awayPoints"] = points
+    return json.dumps(data).encode("utf-8")
+
+
+@pytest.mark.parametrize(
+    ("home", "away", "points", "expected"),
+    [
+        pytest.param([7, 7, 3, 7], [0, 10, 7, 0], None, 0, id="regulation"),
+        pytest.param([7, 7, 3, 7, 7], [0, 10, 7, 7, 0], None, 1, id="one-overtime"),
+        pytest.param([7, 7, 3, 7, 7, 3, 2], [0, 10, 7, 7, 7, 3, 0], None, 3, id="three-listed"),
+        # CFBD 2026 folds every overtime period into one entry: more than one period's points,
+        # still read as "went to overtime".
+        pytest.param([7, 7, 3, 7, 22], [0, 10, 7, 7, 20], None, 1, id="folded-periods"),
+        # Zero padding after an untied fourth quarter is regulation.
+        pytest.param([7, 7, 7, 7, 0], [0, 7, 0, 7, 0], None, 0, id="zero-padding"),
+        # Overtime entries that aren't zero after an untied fourth quarter: inconsistent.
+        pytest.param([7, 7, 3, 7, 3], [0, 3, 7, 7, 0], None, None, id="untied-then-ot"),
+        pytest.param([7, 7, 3, 7], [0, 10, 7, 0], (27, 17), None, id="sum-differs"),
+        pytest.param([7, 7, 3, 7], [7, 7, 3, 7], None, None, id="tied-final"),
+        pytest.param([7, 7, None, 7], [0, 10, 7, 7], (21, 24), None, id="null-entry"),
+        pytest.param([7, 7, 3, 7], [0, 10, 7, 7], (None, None), None, id="no-final-score"),
+        pytest.param([], [], None, None, id="empty"),
+        pytest.param([7, 7], [0, 3], None, None, id="partial"),
+        pytest.param([7, 7, 3, 7, 7], [0, 10, 7, 7], (31, 24), None, id="length-mismatch"),
+        pytest.param(None, None, (24, 17), None, id="absent"),
+    ],
+)
+def test_parse_games_overtimes_from_line_scores(
+    home: object, away: object, points: tuple[object, object] | None, expected: int | None
+) -> None:
+    assert parse_games(_games_with_line_scores(home, away, points))[0].overtimes == expected

@@ -397,7 +397,15 @@ def test_person_mode_lists_partners_by_count_and_the_crew_in_the_matchup(app: Pa
         f"Big Ana ({CASE_BIG['games']}), Big Ana2 ({CASE_BIG['other_games']})"
     )
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Matchup", HIDDEN_MARKS_HEAD, "Date", "Network", "Excitement", "Viewers"]
+    assert heads == [
+        "Matchup",
+        HIDDEN_MARKS_HEAD,
+        "Score",
+        "Date",
+        "Network",
+        "Excitement",
+        "Viewers",
+    ]
     assert sub.locator("td.crews-game-crew").count() == 0
     crews = {
         c.strip().removeprefix("with ")
@@ -411,7 +419,15 @@ def test_crew_mode_has_no_worked_with_and_no_crew_names(app: Page) -> None:
     sub = _expand(app, BIG_CREW)
     expect(sub.locator(".crews-worked-label")).to_have_count(0)
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Matchup", HIDDEN_MARKS_HEAD, "Date", "Network", "Excitement", "Viewers"]
+    assert heads == [
+        "Matchup",
+        HIDDEN_MARKS_HEAD,
+        "Score",
+        "Date",
+        "Network",
+        "Excitement",
+        "Viewers",
+    ]
     assert sub.locator("span.crews-game-crew").count() == 0
 
 
@@ -541,8 +557,12 @@ def test_phone_sub_row_stays_in_view_and_game_items_are_stacked(app: Page) -> No
     assert abs(viewers["y"] - date["y"]) <= 2, "viewers is on line 2 with the date"
     exc = game.locator("td.crews-game-exc")
     exc_box = exc.bounding_box()
-    assert exc_box and exc_box["y"] > date["y"] + 2, "excitement gets its own line under line 2"
-    assert abs(exc_box["x"] - date["x"]) <= 2, "excitement lines up with the date"
+    score = game.locator("td.crews-game-score").bounding_box()
+    assert exc_box and score
+    assert score["y"] > date["y"] + 2, "the score opens line 3, under line 2"
+    assert abs(score["x"] - date["x"]) <= 2, "the score lines up with the date"
+    assert abs(exc_box["y"] - score["y"]) <= 2, "excitement follows the score on line 3"
+    assert exc_box["x"] > score["x"] + score["width"], "excitement sits after the score"
     label = exc.evaluate("el => getComputedStyle(el, '::after').content")
     assert label == '" excitement"'
     size = game.locator("td.crews-game-matchup").evaluate("el => getComputedStyle(el).fontSize")

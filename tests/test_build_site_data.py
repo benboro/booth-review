@@ -1794,7 +1794,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.8.0"
+    assert payload["schema_version"] == "2.9.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]
@@ -1838,6 +1838,30 @@ def test_home_spread_emits_closing_spread_and_no_pregame_column(
     columns = _site(tables, build_reference)["telecasts"]
     assert columns["home_spread"] == [-6.5, 3.0, None]
     assert "pregame" not in columns
+
+
+def test_overtimes_ship_in_both_blocks(build_reference: Path) -> None:
+    """The games table's overtime count reaches telecasts and telecasts_unrated unchanged."""
+    games = [
+        _game_row(game_id=1, overtimes=2),
+        _game_row(game_id=2, week=3, date_et=date(2024, 9, 21), overtimes=0),
+        _game_row(game_id=3, week=4, date_et=date(2024, 9, 28), overtimes=1),
+    ]
+    telecasts = [
+        _telecast_row(telecast_id="1-net-a", game_id=1),
+        _telecast_row(telecast_id="2-net-a", game_id=2, date_et=date(2024, 9, 21)),
+        _unrated_row(telecast_id="3-net-a", game_id=3, date_et=date(2024, 9, 28)),
+    ]
+    tables = _build_tables(
+        games_rows=games,
+        telecast_rows=telecasts,
+        flag_rows=[],
+        people_rows=_people_rows(),
+        telecast_people_rows=[],
+    )
+    payload = _site(tables, build_reference)
+    assert payload["telecasts"]["overtimes"] == [2, 0]
+    assert payload["telecasts_unrated"]["overtimes"] == [1]
 
 
 # -- bowl franchises and curated rivalries (04.9-05) ----------------------------------------

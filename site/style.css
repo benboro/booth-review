@@ -5636,6 +5636,11 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   overflow-wrap: anywhere;
 }
 
+/* While crews-table.js measures the widest matchup, each one sits on one line. */
+.crews-games.is-measuring td.crews-game-matchup {
+  white-space: nowrap;
+}
+
 /* Rivalry, bowl, playoff, title-game and ranked marks: one 16px row of icons, 4px apart, in
    the narrow column before Date. Each icon keeps the colour it has in the tooltip and panel. */
 .crews-games th.crews-gcol-marks,
@@ -5680,6 +5685,18 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: block;
   width: 12px;
   height: 16px;
+}
+
+/* The final score, away first as in the matchup, after the marks and before Date. An overtime
+   game adds "OT" / "2OT" in muted ink. Tabular digits keep the dash in one place down the list. */
+.crews-games td.crews-game-score {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.crews-games .crews-game-ot {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 /* A person row's game: the rest of the booth follows the matchup (after a real space), muted,
@@ -5866,17 +5883,35 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
     display: none;
   }
 
+  .table-scroll .games-table.crews-games td.crews-game-score {
+    grid-area: score;
+  }
+
+  .table-scroll .games-table.crews-games td.crews-game-score:empty {
+    display: none;
+  }
+
   .table-scroll .games-table.crews-games td.crews-game-viewers {
     grid-area: viewers;
   }
 
-  /* CFB game items carry excitement on its own line under line 2 (line 2 has no room left at 360px),
-     labeled since the heads are hidden. */
+  /* Game items with excitement carry it on its own line under line 2 (line 2 has no room left
+     at 360px), labeled since the heads are hidden. A CFB item with a final score opens that line
+     with the score; NFL and MLB items (no score cell) and unscored CFB items start it with
+     excitement. */
   .table-scroll .crews-games tbody tr.crews-game.has-exc {
     grid-template-areas:
       "matchup matchup matchup marks"
       "date network viewers viewers"
       "exc exc exc exc"
+      "crew crew crew crew";
+  }
+
+  .table-scroll .crews-games tbody tr.crews-game.has-exc:has(> td.crews-game-score:not(:empty)) {
+    grid-template-areas:
+      "matchup matchup matchup marks"
+      "date network viewers viewers"
+      "score exc exc exc"
       "crew crew crew crew";
   }
 

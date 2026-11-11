@@ -11,7 +11,7 @@
  */
 
 import { NATURAL_DIR, defaultSort, modelBreakSeason, sortCrewRows } from './crew-groups.js';
-import { crewEntries, figureSourceOf, formatAudienceTable, formatMatchup } from './format.js';
+import { crewEntries, figureSourceOf, finalScore, formatAudienceTable, formatMatchup } from './format.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
 import { createTableState, el, excitementCell, renderCrewsTable } from './crews-table.js';
@@ -205,19 +205,30 @@ function viewersCell(data, i) {
 
 /**
  * The game list's columns, laid under the row table's (crews-table.js `layoutGameCols`):
- * Matchup under the names, the marks just before Date, Date under Season (or Rank by season
- * when rows are pooled; a fixed slot when neither shows), Network under Network, and the two
- * figures ending under their averages.
+ * Matchup under the names, the marks right after the widest matchup, the final score in a fixed
+ * slot just before Date, Date under Season (or Rank by season when rows are pooled; a fixed slot
+ * when neither shows), Network under Network, and the two figures ending under their averages.
  */
 function gameColsFor(mode) {
   return [
     { head: 'Matchup', cls: 'crews-gcol-matchup', anchor: 'crew' },
-    { srHead: 'Game type', cls: 'crews-gcol-marks', width: 72 },
+    { srHead: 'Game type', cls: 'crews-gcol-marks', width: 72, hug: true },
+    { head: 'Score', cls: 'crews-gcol-score', width: 88 },
     { head: 'Date', cls: 'crews-gcol-date', anchor: mode === 'crew' ? ['season', 'rank'] : ['season'], width: 104 },
     { head: 'Network', cls: 'crews-gcol-network', anchor: 'network' },
     { head: 'Excitement', cls: 'crews-gcol-exc', anchor: 'exc', num: true },
     { head: 'Viewers', cls: 'crews-gcol-viewers', anchor: 'viewers', num: true },
   ];
+}
+
+/** The final score, away first as in the matchup, with "OT" / "2OT" after an overtime game. */
+function scoreCell(data, i) {
+  const td = el('td', 'crews-game-score');
+  const final = finalScore(data, i);
+  if (!final) return td;
+  td.append(final.score);
+  if (final.ot) td.append(' ', el('span', 'crews-game-ot', final.ot));
+  return td;
 }
 
 function gameRow(row, mode, ctx, i) {
@@ -243,7 +254,7 @@ function gameRow(row, mode, ctx, i) {
   const net = data.lookups.networks[data.t.network[i]];
   const netTd = el('td', 'crews-game-network');
   netTd.append(networkMark({ id: net.id, name: net.name, family: net.family }));
-  tr.append(matchupTd, gameMarksCell(data, i), el('td', 'date crews-game-date', data.t.date[i]), netTd);
+  tr.append(matchupTd, gameMarksCell(data, i), scoreCell(data, i), el('td', 'date crews-game-date', data.t.date[i]), netTd);
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');
   tr.append(excitementCell(data.t.excitement[i]), viewers);

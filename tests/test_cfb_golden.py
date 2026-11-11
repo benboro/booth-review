@@ -94,6 +94,12 @@ Phase 27 adversarial review (2026-11-01): F10 adds an aa_person_ids column to th
 header-only review_crew_backup_disagreements.csv (old digest 9e2b349af80b... is the sha256
 of the old header line, the new one the sha256 of the new header line); no other digest
 moved, so no figure or crew changed.
+
+Crews score column (2026-11-11): contract 2.9.0 adds telecasts[_unrated].overtimes, and
+games.parquet an overtimes column (all null in the synthetic vault, which has no line scores).
+games.parquet with that column dropped hashes to the old digest (b91e1e6f2b96...), and
+site-data.json with it dropped and the version set back to 2.8.0 hashes to the old digest
+(3244f6b46d0c...), so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -184,7 +190,7 @@ _GOLDEN: dict[str, str] = {
     "interim/review_unresolved_teams.csv": (
         "74303693a54b1798cc38ec44a584a8d5ef81555f54b8b3477610ef413eab0976"
     ),
-    "processed/games.parquet": ("b91e1e6f2b96b149134b7829cb10fb7a58be092279482a7bddf621cac5e6bc00"),
+    "processed/games.parquet": ("3a147a021f63d62a2cdcabc9f172d76e21b5d0d5b638b728475421d81825f5d9"),
     "processed/listing_links.parquet": (
         "f6e733dabf1a11b7e54d93536d422763c53657aeb62836c90bca96ea5d1f2a7c"
     ),
@@ -192,7 +198,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "3244f6b46d0cab05317c40f00cd0da866eab99c66774f2f58505de37c87ba34a"
+        "384097fe024b589da1a0a6526076e43f62282f08d89d4dd6e16ded3993f6499d"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

@@ -9,6 +9,7 @@ Summit Bowl, `serve_round` swaps its round), 7 a bowl between two ranked teams.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Any
 
@@ -280,3 +281,114 @@ def test_chevron_sits_on_the_first_lines_baseline(
     page.wait_for_selector("#crews-panel tr.crews-row")
     for got in page.evaluate(_CARET_JS, "#crews-panel"):
         assert abs(got["bottom"] - got["baseline"]) <= TOL, got
+
+
+_SCORE_JS = """
+() => {
+  const list = document.querySelector('#crews-panel table.crews-games');
+  const heads = [...list.querySelectorAll('thead th')].map((th) => th.className);
+  const rows = [...list.querySelectorAll('tbody tr.crews-game')];
+  const box = (node) => node.getBoundingClientRect();
+  let widest = 0;
+  for (const tr of rows) {
+    const td = tr.querySelector('td.crews-game-matchup');
+    const range = document.createRange();
+    range.selectNodeContents(td);
+    widest = Math.max(widest, range.getBoundingClientRect().right);
+  }
+  const head = (cls) => box(list.querySelector(`thead th.${cls}`));
+  return {
+    heads,
+    scores: rows.map((tr) => tr.querySelector('td.crews-game-score').textContent),
+    widestMatchupRight: widest,
+    marksLeft: head('crews-gcol-marks').left,
+    scoreLeft: head('crews-gcol-score').left,
+    scoreRight: head('crews-gcol-score').right,
+    dateLeft: head('crews-gcol-date').left,
+  };
+}
+"""
+
+
+def test_cfb_game_list_scores_follow_the_marks_and_note_overtime(
+    guarded_page: Page, serve_crews: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    """Score sits after the marks and right before Date (away first, "OT" / "2OT" after an
+    overtime game), and the marks follow the widest matchup instead of waiting by the score."""
+    page = guarded_page
+    serve_crews(page)
+    open_app(page, "?view=crews&perseason=1")
+    _expand_first(page, "#crews-panel")
+    more = page.locator("#crews-panel .crews-games-more")
+    while more.count():
+        more.first.click()
+    got = page.evaluate(_SCORE_JS)
+    order = [next(c for c in h.split() if c.startswith("crews-gcol-")) for h in got["heads"]]
+    assert order[1:4] == ["crews-gcol-marks", "crews-gcol-score", "crews-gcol-date"]
+    assert got["scores"] and all(
+        re.fullmatch("\\d+\u2013\\d+( [2-9]?OT)?", s) for s in got["scores"]
+    )
+    assert any(s.endswith(" OT") for s in got["scores"]), "a one-overtime game reads OT"
+    assert any(s.endswith(" 2OT") for s in got["scores"]), "a double-overtime game reads 2OT"
+    assert abs(got["scoreRight"] - got["dateLeft"]) <= TOL, "the score ends where Date starts"
+    assert got["marksLeft"] < got["scoreLeft"] - 20, "the marks no longer wait by the score"
+    gap = got["marksLeft"] - got["widestMatchupRight"]
+    assert 0 <= gap <= 32, f"the marks sit just after the widest matchup ({gap}px)"
+
+
+def test_overtime_label_is_muted(
+    guarded_page: Page, serve_crews: Callable[[Page], None], open_app: Callable[[Page, str], None]
+) -> None:
+    page = guarded_page
+    serve_crews(page)
+    open_app(page, "?view=crews&perseason=1")
+    _expand_first(page, "#crews-panel")
+    more = page.locator("#crews-panel .crews-games-more")
+    while not page.locator("#crews-panel .crews-game-ot").count() and more.count():
+        more.first.click()
+    colors = page.locator("#crews-panel .crews-game-ot").first.evaluate(
+        "el => [getComputedStyle(el).color, getComputedStyle(el.parentElement).color]"
+    )
+    assert colors[0] != colors[1]
+
+
+_LAYOUT_JS = """
+async (fit) => {
+  const T = await import('./modules/crews-table.js');
+  const cols = [
+    { anchor: 'crew' },
+    { width: 72, hug: true },
+    { width: 88 },
+    { anchor: 'season', width: 104 },
+    { anchor: 'network' },
+  ];
+  const parent = new Map([
+    ['crew', { left: 0, right: 300 }],
+    ['season', { left: 500, right: 600 }],
+    ['network', { left: 600, right: 700 }],
+  ]);
+  const fitMap = fit == null ? undefined : new Map([[0, fit]]);
+  return T.layoutGameCols(cols, parent, fitMap);
+}
+"""
+
+
+@pytest.mark.parametrize(
+    ("fit", "marks_start"),
+    [
+        pytest.param(180, 180, id="hugs-the-widest-matchup"),
+        pytest.param(None, 340, id="unmeasured-waits-by-the-score"),
+        pytest.param(400, 340, id="too-wide-waits-by-the-score"),
+        pytest.param(340, 340, id="exactly-fills-the-gap"),
+    ],
+)
+def test_layout_hug_column_follows_the_widest_matchup(
+    guarded_page: Page, open_app: Callable[[Page, str], None], fit: int | None, marks_start: int
+) -> None:
+    """A `hug` column starts right after its neighbour's measured content and stretches to the
+    next column; unmeasured or too-wide content puts it in its fixed slot before the next one.
+    Score (88px) always ends where Date starts."""
+    open_app(guarded_page, "")
+    got = guarded_page.evaluate(_LAYOUT_JS, fit)
+    assert got["starts"][:4] == [0, marks_start, 412, 500]
+    assert got["ends"][:3] == [marks_start, 412, 500]

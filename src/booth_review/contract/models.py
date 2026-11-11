@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.8.0"
+SCHEMA_VERSION = "2.9.0"
 
 _S506_HOST = "506sports.com"
 
@@ -294,6 +294,8 @@ class TelecastColumns(BaseModel):
     neutral: list[bool]
     away_points: list[int | None]
     home_points: list[int | None]
+    # Overtime periods played (0 = regulation); null without a final score or full line scores
+    overtimes: list[int | None]
     away_rank: list[int | None]
     home_rank: list[int | None]
     network: list[int]
@@ -360,6 +362,8 @@ class UnratedColumns(BaseModel):
     neutral: list[bool]
     away_points: list[int | None]
     home_points: list[int | None]
+    # Overtime periods played (0 = regulation); null without a final score or full line scores
+    overtimes: list[int | None]
     away_rank: list[int | None]
     home_rank: list[int | None]
     network: list[int]
@@ -459,7 +463,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.8.0"]
+    schema_version: Literal["2.9.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups

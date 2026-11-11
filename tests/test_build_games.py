@@ -161,6 +161,21 @@ def test_zero_excitement_stays_zero_not_null() -> None:
     assert frame.row(0, named=True)["excitement"] == 0.0
 
 
+@pytest.mark.parametrize(
+    ("points", "overtimes", "expected"),
+    [((24, 21), 2, 2), ((24, 21), 0, 0), ((24, 21), None, None), ((None, None), 1, None)],
+)
+def test_overtimes_kept_only_with_a_final_score(
+    points: tuple[int | None, int | None], overtimes: int | None, expected: int | None
+) -> None:
+    home, away = points
+    game = _game(home_points=home, away_points=away, overtimes=overtimes)
+
+    frame = build_games_frame([_sources(games=[game])])
+
+    assert frame.row(0, named=True)["overtimes"] == expected
+
+
 def test_notes_are_carried_into_the_vault_frame() -> None:
     frame = build_games_frame(
         [

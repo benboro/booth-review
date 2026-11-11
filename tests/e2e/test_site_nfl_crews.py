@@ -1008,6 +1008,23 @@ def test_phone_booth_column_is_pinned_with_a_fill_and_heads_fit(
     assert widths[1] == 148  # Booth
 
 
+def test_phone_game_item_excitement_starts_its_line(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
+) -> None:
+    """NFL game items have no score cell, so excitement opens line 3 under the date (the CFB
+    score column's phone line must not reserve a score slot here)."""
+    page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    page.locator(f"{ROW} td.crews-name").first.click(position={"x": 20, "y": 12})
+    game = page.locator(f"{VIEW} tr.crews-game.has-exc:has(td.crews-game-exc:not(:empty))").first
+    game.wait_for()
+    date = game.locator("td.crews-game-date").bounding_box()
+    exc = game.locator("td.crews-game-exc").bounding_box()
+    assert date and exc
+    assert exc["y"] > date["y"] + 2
+    assert abs(exc["x"] - date["x"]) <= 2
+
+
 def test_no_console_errors(page: Page, nfl_site_url: str) -> None:
     errors: list[str] = []
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)

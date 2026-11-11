@@ -206,14 +206,18 @@ function buildRow(row, tc, firstRow) {
  * Lays a game list's columns under the row table's columns: a text column starts where its
  * anchor column starts (so Date sits under Season), a number column ends where its anchor ends
  * (so Viewers lines up with Avg viewers), and a column with no anchor present takes its fixed
- * `width` just before the next column. `cols[k].anchor` is a parent column key or a list of
+ * `width` just before the next column. A `hug` column instead starts right after the previous
+ * column's widest content (`fit`, px, measured by the caller), so it sits beside the text, and
+ * stretches to the next column; it falls back to its `width` before the next column when that
+ * content is too wide or not measured. `cols[k].anchor` is a parent column key or a list of
  * fallbacks. Positions are px from the holder's left edge.
  *
- * @param {Array<{anchor?: string|string[], num?: boolean, width?: number}>} cols
+ * @param {Array<{anchor?: string|string[], num?: boolean, width?: number, hug?: boolean}>} cols
  * @param {Map<string, {left: number, right: number}>} parent
+ * @param {Map<number, number>} [fit] - column index -> its widest content, padding included
  * @returns {{starts: number[], ends: number[]}|null} null when a column cannot be placed
  */
-export function layoutGameCols(cols, parent) {
+export function layoutGameCols(cols, parent, fit = new Map()) {
   const n = cols.length;
   const starts = new Array(n).fill(null);
   const ends = new Array(n).fill(null);
@@ -230,6 +234,9 @@ export function layoutGameCols(cols, parent) {
     if (anchors[k] != null || cols[k].num) continue;
     if (k + 1 >= n || starts[k + 1] == null || cols[k].width == null) return null;
     starts[k] = starts[k + 1] - cols[k].width;
+    if (cols[k].hug && k > 0 && starts[k - 1] != null && fit.has(k - 1)) {
+      starts[k] = Math.min(starts[k], starts[k - 1] + fit.get(k - 1));
+    }
   }
   for (let k = 0; k < n; k += 1) {
     if (cols[k].num) {
@@ -273,7 +280,7 @@ export function alignGameLists(table) {
     }
     const origin = holder.getBoundingClientRect().left;
     const parent = new Map([...heads].map(([k, v]) => [k, { left: v.left - origin, right: v.right - origin }]));
-    const placed = layoutGameCols(list.gameCols ?? [], parent);
+    const placed = layoutGameCols(list.gameCols ?? [], parent, fitWidths(list));
     if (!placed) {
       clear();
       continue;
@@ -286,6 +293,36 @@ export function alignGameLists(table) {
     list.style.width = `${ends[ends.length - 1] - starts[0]}px`;
     list.classList.add('is-aligned');
   }
+}
+
+/**
+ * The unwrapped content width (padding included) of each column that a `hug` column follows,
+ * as the widest of its body cells. Cells are measured on one line, so a matchup that wraps in
+ * the current layout still reports its full width.
+ * @param {HTMLTableElement} list
+ * @returns {Map<number, number>}
+ */
+function fitWidths(list) {
+  const fit = new Map();
+  const cols = list.gameCols ?? [];
+  const rows = list.querySelectorAll(':scope > tbody > tr');
+  list.classList.add('is-measuring');
+  cols.forEach((c, k) => {
+    if (!c.hug || k === 0) return;
+    let widest = 0;
+    for (const tr of rows) {
+      const td = tr.children[k - 1];
+      if (!td) continue;
+      const range = document.createRange();
+      range.selectNodeContents(td);
+      const style = getComputedStyle(td);
+      const pad = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      widest = Math.max(widest, range.getBoundingClientRect().width + pad);
+    }
+    if (widest > 0) fit.set(k - 1, Math.ceil(widest));
+  });
+  list.classList.remove('is-measuring');
+  return fit;
 }
 
 /** Aligns the game lists of the row table that holds `node`, once it is in the page. */

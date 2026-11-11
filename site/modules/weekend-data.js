@@ -98,6 +98,7 @@ export function scheduledFacade(data) {
     place: raw.place ?? nulls(),
     away_points: nulls(),
     home_points: nulls(),
+    overtimes: nulls(),
     excitement: nulls(),
     viewers: nulls(),
     home_spread: nulls(),

@@ -61,6 +61,7 @@ GAMES_SCHEMA: dict[str, pl.DataType] = {
     "away_classification": pl.Utf8(),
     "away_conference": pl.Utf8(),
     "away_points": pl.Int32(),
+    "overtimes": pl.Int32(),
     "excitement": pl.Float64(),
     "closing_spread": pl.Float64(),
     "spread_provider": pl.Utf8(),
@@ -248,6 +249,11 @@ def build_games_frame(sources: Sequence[SeasonSources]) -> pl.DataFrame:
                     "away_classification": game.away_classification,
                     "away_conference": game.away_conference,
                     "away_points": game.away_points,
+                    "overtimes": (
+                        game.overtimes
+                        if game.home_points is not None and game.away_points is not None
+                        else None
+                    ),
                     "excitement": game.excitement_index,
                     "closing_spread": spread,
                     "spread_provider": provider,

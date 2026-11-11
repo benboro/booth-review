@@ -495,6 +495,23 @@ export function matchupParts(data, i, options = {}) {
   };
 }
 
+/**
+ * The final score in matchup order (away first) and its overtime label: "OT" for one overtime,
+ * "2OT" and up for more. Null before a final score; `ot` is null for a regulation game and when
+ * the data does not say (a file from before contract 2.9.0 has no `overtimes`).
+ * @param {object} data - a `prepareData` result.
+ * @param {number} i - telecast index.
+ * @returns {{score: string, ot: string|null}|null} e.g. {score: "20\u201327", ot: "2OT"}.
+ */
+export function finalScore(data, i) {
+  const t = data.t;
+  const away = t.away_points[i];
+  const home = t.home_points[i];
+  if (away == null || home == null) return null;
+  const periods = t.overtimes?.[i] ?? 0;
+  return { score: `${away}\u2013${home}`, ot: periods > 1 ? `${periods}OT` : periods === 1 ? 'OT' : null };
+}
+
 const CREW_ROLE_ORDER = { pbp: 0, analyst: 1 };
 
 /**
