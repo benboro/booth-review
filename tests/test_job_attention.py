@@ -566,7 +566,9 @@ AA_POST = (
 
 
 def test_reminder_aa_cfb_points_at_the_schedules_page() -> None:
-    assert reminder_aa_cfb(2026, "10").line.endswith("https://awfulannouncing.com/schedules/")
+    assert reminder_aa_cfb(2026, "10").line.endswith(
+        "https://awfulannouncing.com/category/schedules"
+    )
 
 
 def test_reminder_aa_cfb_link_line() -> None:

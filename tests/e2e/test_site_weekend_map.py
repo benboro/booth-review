@@ -528,3 +528,69 @@ def test_view_day_and_week_changes_keep_the_scroll_position(wkmap: Wk) -> None:
         else:
             wait_drawn(page)
         assert page.evaluate("scrollY") == 250, wk_id
+
+
+_BOTTOM = "() => document.documentElement.scrollHeight - innerHeight"
+
+
+def _to_bottom(page: Page) -> int:
+    page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+    settle(page)
+    y: int = page.evaluate("scrollY")
+    assert y > 100 and y == page.evaluate(_BOTTOM)
+    return y
+
+
+def test_map_rebuilds_at_the_page_bottom_keep_the_scroll_position(wkmap: Wk) -> None:
+    # The shading caption showed only in the async draw, after the page hold lifted, so every
+    # rebuild left the page 29 px short for one layout and clamped the scroll at the bottom.
+    page = wkmap()
+    wait_drawn(page)
+    actions = {
+        "theme-dark": lambda: set_theme(page, "dark"),
+        "theme-light": lambda: set_theme(page, "light"),
+        "rerender": lambda: page.evaluate("window.__testHooks.setState({})"),
+        "resize": lambda: page.set_viewport_size({"width": 1300, "height": 900}),
+    }
+    for label, act in actions.items():
+        y = _to_bottom(page)
+        act()
+        page.wait_for_timeout(400)
+        wait_drawn(page)
+        assert page.evaluate("scrollY") == min(y, page.evaluate(_BOTTOM)), label
+
+
+def test_opening_a_dot_with_the_switch_off_screen_keeps_the_scroll_position(wkmap: Wk) -> None:
+    # The dot's opener is the Map segment above the map; focusing it without preventScroll
+    # scrolled the page up to it before the panel opened.
+    page = wkmap()
+    page.set_viewport_size({"width": 1440, "height": 600})
+    wait_drawn(page)
+    point(page, LEAD)
+    page.evaluate("window.scrollBy(0, 150)")
+    settle(page)
+    top = page.evaluate(
+        "document.querySelector('[data-wk-id=\"wview:map\"]').getBoundingClientRect().top"
+    )
+    assert top < 0
+    y = page.evaluate("scrollY")
+    at = page.evaluate(_POINT_IN_PLACE, LEAD)
+    page.mouse.move(at["x"], at["y"])
+    page.mouse.click(at["x"], at["y"])
+    page.wait_for_selector("dialog[open]", timeout=5000)
+    settle(page)
+    assert page.evaluate("scrollY") == y
+    page.keyboard.press("Escape")
+    settle(page)
+    assert page.evaluate("scrollY") == y
+
+
+_POINT_IN_PLACE = """(key) => {
+  const gd = document.querySelector('.wk-map-box');
+  const t = gd.data.find((d) => d.name === 'venue-hits');
+  const i = t.customdata.indexOf(key);
+  const r = gd.getBoundingClientRect();
+  const xa = gd._fullLayout.xaxis;
+  const ya = gd._fullLayout.yaxis;
+  return { x: r.left + xa._offset + xa.c2p(t.x[i]), y: r.top + ya._offset + ya.c2p(t.y[i]) };
+}"""

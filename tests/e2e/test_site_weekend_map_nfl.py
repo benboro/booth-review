@@ -398,3 +398,96 @@ def test_nfl_map_to_timeline_keeps_focus_on_the_timeline_segment(
     page.keyboard.press("Enter")
     page.wait_for_selector(".wk-map-box", state="detached", timeout=5000)
     assert page.evaluate("document.activeElement?.dataset?.wkId") == "wview:timeline"
+
+
+def _click_in_place(page: Page, selector: str) -> None:
+    """A real mouse click at the control's centre: locator.click() would scroll it into view."""
+    box = page.locator(selector).first.bounding_box()
+    assert box is not None, selector
+    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+
+_KEPT = "(y) => scrollY === Math.min(y, document.documentElement.scrollHeight - innerHeight)"
+
+
+def test_nfl_view_and_week_changes_keep_the_scroll_position(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # Map -> Timeline destroyed the map outside every height hold, so the page shrank for one
+    # layout and the browser clamped the scroll to the top (user report 2026-11-10). A page that
+    # really ends shorter (the fixture's week 4 timeline) may only settle at its own bottom.
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    steps = [
+        '[data-wk-id="wview:timeline"]',
+        '[data-wk-id="wview:map"]',
+        ".wk-step--prev",
+        ".wk-step--next",
+        '[data-wk-id="wview:timeline"]',
+        ".wk-step--prev",
+        ".wk-step--next",
+    ]
+    for selector in steps:
+        page.evaluate("window.scrollTo(0, 250)")
+        start = page.evaluate("scrollY")
+        assert start > 100, selector
+        _click_in_place(page, selector)
+        assert page.evaluate(_KEPT, start), selector
+        if page.locator(".wk-map-box").count():
+            _drawn(page)
+        else:
+            settle(page)
+        assert page.evaluate(_KEPT, start), selector
+
+
+_BOTTOM = "() => document.documentElement.scrollHeight - innerHeight"
+
+
+def test_nfl_map_rebuilds_at_the_page_bottom_keep_the_scroll_position(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    # The shading caption showed only in the async draw, after the page hold lifted (29 px).
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app)
+    actions = {
+        "theme-dark": lambda: set_theme(page, "dark"),
+        "theme-light": lambda: set_theme(page, "light"),
+        "rerender": lambda: page.evaluate("window.__nflTestHooks.setState({})"),
+        "resize": lambda: page.set_viewport_size({"width": 1300, "height": 900}),
+    }
+    for label, act in actions.items():
+        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        settle(page)
+        y = page.evaluate("scrollY")
+        assert y > 100, label
+        act()
+        page.wait_for_timeout(400)
+        _drawn(page)
+        assert page.evaluate("scrollY") == min(y, page.evaluate(_BOTTOM)), label
+
+
+def test_nfl_opening_a_dot_with_the_switch_off_screen_keeps_the_scroll_position(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 600})
+    _open(page, open_nfl_app)
+    _point(page, EARLY_A)
+    page.evaluate("window.scrollBy(0, 150)")
+    settle(page)
+    top = page.evaluate(
+        "document.querySelector('[data-wk-id=\"wview:map\"]').getBoundingClientRect().top"
+    )
+    assert top < 0
+    y = page.evaluate("scrollY")
+    at = page.evaluate(_POINT.replace("gd.scrollIntoView({ block: 'center' });", ""), EARLY_A)
+    page.mouse.move(at["x"], at["y"])
+    page.mouse.click(at["x"], at["y"])
+    page.wait_for_selector("dialog[open]", timeout=5000)
+    settle(page)
+    assert page.evaluate("scrollY") == y
+    page.keyboard.press("Escape")
+    settle(page)
+    assert page.evaluate("scrollY") == y

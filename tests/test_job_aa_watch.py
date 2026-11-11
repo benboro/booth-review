@@ -184,7 +184,7 @@ def test_no_match_at_last_poll_is_blind_and_marked(vault_paths: DataPaths) -> No
     server = _Server(EMPTY_FEED)
     items = make_aa_cfb_resolver(_runtime(vault_paths, server), commit=False)(2026, "10", T2230)
     assert items == [BLIND]
-    assert "https://awfulannouncing.com/schedules/" in items[0].line
+    assert "https://awfulannouncing.com/category/schedules" in items[0].line
     assert load_feed_state(vault_paths).blind_weeks == ["2026-10"]
 
 

@@ -337,7 +337,7 @@ def test_compose_lists_only_new_games_with_their_sources() -> None:
     assert aa_post in body
     assert "https://www.nbcsports.com/pressbox" in body
     assert "https://506sports.com/nfl.php?yr=2026&wk=9" in body
-    assert "https://awfulannouncing.com/nfl/" in body
+    assert "https://awfulannouncing.com/category/schedules" in body
     assert "https://www.foxsports.com/presspass" in body
     assert "https://www.paramountpressexpress.com/cbs-sports/" in body
     assert "- Michigan State at Michigan" in body
@@ -357,7 +357,7 @@ def test_compose_counts_earlier_games_without_listing_them() -> None:
 def test_compose_falls_back_to_aa_schedules_page() -> None:
     cfb = find_cfb_missing(_cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), NOW)
     _, body = compose(cfb, [], still_open=0, aa_weeks={"2026-10": "reminded"})
-    assert "Awful Announcing: https://awfulannouncing.com/schedules/" in body
+    assert "Awful Announcing: https://awfulannouncing.com/category/schedules" in body
 
 
 def test_compose_espn_cfb_links_the_commentators_page() -> None:

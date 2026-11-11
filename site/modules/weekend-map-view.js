@@ -461,6 +461,10 @@ function buildMapBody(z) {
     const model = dayModelFor(ctx, z, null);
     const placed = [...model.dots, ...model.markers];
     const { key, shading } = buildKey(ctx, placed);
+    // Settled here, inside the page hold, not first in draw(): draw runs after the hold lifts,
+    // and a caption shown only then left the page 29 px short for one layout, which clamped the
+    // scroll at the page bottom on every rebuild. draw() still corrects it if the answer changes.
+    shading.hidden = z.splatBroken || model.splatModel.venues.length === 0;
     z.shading = shading;
     const nodes = [
       buildStampLine(ctx),
