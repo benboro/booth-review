@@ -183,7 +183,7 @@ def test_nfl_crews_and_matched_games_heads_align_like_their_columns(
     open_nfl_app(page, "?sport=nfl&view=crews")
     page.wait_for_selector("#nfl-view-crews table.games-table tbody tr")
     _assert_aligned(_columns(page, "#nfl-view-crews"))
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_aligned(_columns(page, ".nfl-games"))
 
@@ -196,7 +196,7 @@ def test_mlb_apple_and_matched_games_heads_align_like_their_columns(
     open_mlb_app(page, "?sport=mlb&view=apple")
     page.wait_for_selector(".mlb-apple-table tbody tr")
     _assert_aligned(_columns(page, "#mlb-chart-area"))
-    page.locator(".crews-table.is-mlb tr.crews-row td.crews-name").first.click()
+    page.locator(".crews-table.is-mlb tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_aligned(_columns(page, ".nfl-games"))
 
@@ -282,7 +282,7 @@ def test_nfl_matchup_stays_on_one_line_at_1440(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_one_line_matchups(page, ".nfl-games")
 
@@ -293,7 +293,7 @@ def test_mlb_matchup_stays_on_one_line_at_1440(
     page = mlb_guarded_page
     page.set_viewport_size(DESKTOP)
     open_mlb_app(page, "?sport=mlb&view=apple")
-    page.locator(".crews-table.is-mlb tr.crews-row td.crews-name").first.click()
+    page.locator(".crews-table.is-mlb tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_one_line_matchups(page, ".nfl-games")
 
@@ -343,7 +343,7 @@ def test_nfl_matched_games_first_lines_share_a_top(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_first_lines_share_a_top(page, ".nfl-games")
 
@@ -353,7 +353,7 @@ def test_nfl_matched_games_first_lines_share_a_top_on_a_phone(
 ) -> None:
     page = nfl_mobile_page
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_first_lines_share_a_top(page, ".nfl-games")
 
@@ -443,7 +443,7 @@ def test_nfl_matched_games_second_lines_share_a_top(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_second_lines_share_a_top(page, ".nfl-games", expect_pair=True)
 
@@ -453,7 +453,7 @@ def test_nfl_matched_games_second_lines_share_a_top_on_a_phone(
 ) -> None:
     page = nfl_mobile_page
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_second_lines_share_a_top(page, ".nfl-games", expect_pair=True)
 
@@ -484,7 +484,7 @@ def test_nfl_category_line_is_muted_secondary_text(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     got = page.evaluate(
         """() => [...document.querySelectorAll('.nfl-games tbody tr')].map((tr) => {
@@ -595,7 +595,7 @@ def test_nfl_crew_separator_does_not_dangle_when_wrapped(
 ) -> None:
     page = nfl_mobile_page
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_no_dangling_separator(page, ".nfl-games", expect_wrap=True)
     _assert_wrapped_pills_do_not_touch(page, ".nfl-games")
@@ -607,7 +607,7 @@ def test_nfl_crew_separator_shows_between_people_on_one_line(
     page = nfl_guarded_page
     page.set_viewport_size(DESKTOP)
     open_nfl_app(page, "?sport=nfl&view=crews")
-    page.locator("#nfl-view-crews tr.crews-row td.crews-name").first.click()
+    page.locator("#nfl-view-crews tr.crews-row button.crews-pick").first.click()
     page.wait_for_selector(".nfl-games table.games-table tbody tr")
     _assert_no_dangling_separator(page, ".nfl-games", expect_wrap=False)
     text = page.locator(".nfl-games .crew-list").first.text_content() or ""

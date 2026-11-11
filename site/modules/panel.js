@@ -35,6 +35,7 @@ import {
 } from './format.js';
 import { conferenceMark } from './conf-logos.js';
 import { makeGameTypeIcon } from './icons.js';
+import { isTitleGame, titleGameMark } from './title-mark.js';
 import { currentTheme } from './pill.js';
 import {
   crewBox, externalLink, linksList, liveOpener, locationLine, markText, networksParagraph,
@@ -225,11 +226,11 @@ function buildLinksList(data, i, weekend = false) {
  * @param {string} label
  * @returns {HTMLParagraphElement}
  */
-function buildLabelLine(kind, label) {
+function buildLabelLine(kind, label, extra = null) {
   const p = document.createElement('p');
   p.className = 'panel-game-type';
   const icon = makeGameTypeIcon(kind);
-  p.replaceChildren(...(icon ? [icon] : []), document.createTextNode(label));
+  p.replaceChildren(...(icon ? [icon] : []), ...(extra ? [extra] : []), document.createTextNode(label));
   return p;
 }
 
@@ -421,7 +422,8 @@ export function renderPanel(bodyEl, titleEl, { data, i, state, view, unplayed = 
     namedBowlLine = true;
   }
   if (gameType != null && gameType.kind === 'playoff') {
-    typeLines.push(buildLabelLine('playoff', gameType.label));
+    // The title game keeps the trophy and adds the national championship emblem after it.
+    typeLines.push(buildLabelLine('playoff', gameType.label, isTitleGame(data, i) ? titleGameMark() : null));
   }
 
   // The venue sits right under the date; a named bowl line already says the game is neutral.

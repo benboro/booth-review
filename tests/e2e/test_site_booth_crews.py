@@ -199,7 +199,7 @@ def test_booth_filter_recounts_and_a_crew_pick_leaves_it_alone(crews: Page) -> N
     _set(crews, {"booth": ["a"]})
     expect(_rows(crews)).to_have_count(1)
     expect(_rows(crews).locator("td.num").first).to_have_text("4")
-    _rows(crews).first.click()
+    _rows(crews).first.locator("button.crews-pick").click()
     state = crews.evaluate("() => window.__testHooks.getState()")
     assert state["booth"] == ["a"]
     assert state["crew"] is not None

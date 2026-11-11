@@ -1,6 +1,7 @@
 /**
  * Shared Crews table mechanics (Phase 15 extraction of Phase 14's crews.js): sort state,
- * 25-row paging with "View more", the chevron and 10-at-a-time game list, the key map, the
+ * 25-row paging with "View more", the row click and chevron that open a row's 10-at-a-time
+ * game list (laid under the row table's columns), the filter button that picks a row, the key map, the
  * polite live-region seat and refocus after a rebuild. Sport modules (CFB crews.js, NFL
  * Crews) supply the columns, cells, game rows and pick behaviour and keep their own
  * `createTableState()` so one sport's paging never touches the other's (T-15-03).
@@ -114,6 +115,46 @@ export function announce(container, text) {
   if (seat) seat.textContent = text;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** A small funnel drawn in currentColor, so it follows the button's state colour. */
+function funnelIcon() {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', 'M2 3h12l-4.75 5.5V13l-2.5 1.25V8.5z');
+  path.setAttribute('fill', 'none');
+  path.setAttribute('stroke', 'currentColor');
+  path.setAttribute('stroke-width', '1.4');
+  path.setAttribute('stroke-linejoin', 'round');
+  svg.append(path);
+  return svg;
+}
+
+/**
+ * The filter button after a row's names: it picks the row (or clears the pick) while a click
+ * anywhere else on the row opens its games. Its state lives in `aria-pressed`.
+ */
+function pickButton(row, tr, tc, picked, firstRow) {
+  const b = el('button', 'crews-pick');
+  b.type = 'button';
+  b.tabIndex = firstRow ? 0 : -1;
+  b.setAttribute('aria-pressed', String(picked));
+  const label = tc.pickLabel?.(row, picked) ?? (picked ? 'Clear the crew filter' : 'Filter to this crew');
+  b.setAttribute('aria-label', `${label}: ${row.names}`);
+  b.title = label;
+  b.append(funnelIcon());
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    tc.onPick(row, tr);
+  });
+  return b;
+}
+
 function buildRow(row, tc, firstRow) {
   const { ts } = tc;
   const tr = el('tr', 'crews-row');
@@ -121,7 +162,6 @@ function buildRow(row, tc, firstRow) {
   tr.dataset.crewKey = tc.crewKeyOf(row);
   tr.tabIndex = firstRow ? 0 : -1;
   const picked = tc.isPicked(row);
-  tr.setAttribute('aria-pressed', String(picked));
   const open = ts.expanded.has(row.rowKey);
   tr.setAttribute('aria-expanded', String(open));
   tr.setAttribute('aria-label', row.names);
@@ -139,9 +179,119 @@ function buildRow(row, tc, firstRow) {
   });
   chevronCell.append(chevron);
   ts.rowOf.set(tr, row);
-  tr.append(chevronCell, ...tc.buildCells(row, tr));
-  tr.addEventListener('click', () => tc.onPick(row, tr));
+  const cells = tc.buildCells(row, tr);
+  // The names cell, not simply the first one: MLB's first cell is the booth position.
+  const names = cells.find((c) => c.classList.contains('crews-name')) ?? cells[0];
+  if (names && (tc.canPick?.(row) ?? true)) {
+    names.classList.add('has-pick');
+    // Right after the names: before a person row's "with ..." partner list, if it has one.
+    const button = pickButton(row, tr, tc, picked, firstRow);
+    const partners = names.querySelector(':scope > .crews-partners');
+    if (partners) partners.before(button);
+    else names.append(button);
+  }
+  tr.append(chevronCell, ...cells);
+  // Most readers click a name to see its games, so the whole row opens and closes; a link or
+  // the filter button inside it keeps its own action.
+  tr.addEventListener('click', (e) => {
+    if (e.target instanceof Element && e.target.closest('a, .crews-pick')) return;
+    // A drag that selected some of the names is a copy, not a request to open the row.
+    if (window.getSelection?.()?.isCollapsed === false) return;
+    setExpanded(tr, !ts.expanded.has(row.rowKey), tc);
+  });
   return tr;
+}
+
+/**
+ * Lays a game list's columns under the row table's columns: a text column starts where its
+ * anchor column starts (so Date sits under Season), a number column ends where its anchor ends
+ * (so Viewers lines up with Avg viewers), and a column with no anchor present takes its fixed
+ * `width` just before the next column. `cols[k].anchor` is a parent column key or a list of
+ * fallbacks. Positions are px from the holder's left edge.
+ *
+ * @param {Array<{anchor?: string|string[], num?: boolean, width?: number}>} cols
+ * @param {Map<string, {left: number, right: number}>} parent
+ * @returns {{starts: number[], ends: number[]}|null} null when a column cannot be placed
+ */
+export function layoutGameCols(cols, parent) {
+  const n = cols.length;
+  const starts = new Array(n).fill(null);
+  const ends = new Array(n).fill(null);
+  const anchorOf = (k) => [].concat(cols[k].anchor ?? []).find((key) => parent.has(key)) ?? null;
+  const anchors = cols.map((_, k) => anchorOf(k));
+  cols.forEach((c, k) => {
+    const a = anchors[k];
+    if (a == null) return;
+    if (c.num) ends[k] = parent.get(a).right;
+    else starts[k] = parent.get(a).left;
+  });
+  // A column with no anchor sits just before the next placed text column.
+  for (let k = n - 1; k >= 0; k -= 1) {
+    if (anchors[k] != null || cols[k].num) continue;
+    if (k + 1 >= n || starts[k + 1] == null || cols[k].width == null) return null;
+    starts[k] = starts[k + 1] - cols[k].width;
+  }
+  for (let k = 0; k < n; k += 1) {
+    if (cols[k].num) {
+      if (k === 0 || ends[k - 1] == null) return null;
+      starts[k] = ends[k - 1];
+    } else if (k + 1 < n && !cols[k + 1].num) {
+      ends[k] = starts[k + 1];
+    } else {
+      ends[k] = anchors[k] != null ? parent.get(anchors[k]).right : starts[k] + (cols[k].width ?? 0);
+    }
+  }
+  for (let k = 0; k < n; k += 1) if (!(ends[k] > starts[k])) return null;
+  return { starts, ends };
+}
+
+/**
+ * Sizes every aligned game list under `table` to its row table's columns. A phone's stacked
+ * game items (display: block) keep their own layout, so their sizes are cleared instead.
+ * @param {HTMLTableElement} table - a `table.crews-table`
+ */
+export function alignGameLists(table) {
+  const lists = table.querySelectorAll('table.crews-games[data-aligned]');
+  if (!lists.length) return;
+  const heads = new Map();
+  for (const th of table.querySelectorAll(':scope > thead th[data-col]')) {
+    const r = th.getBoundingClientRect();
+    heads.set(th.dataset.col, { left: r.left, right: r.right });
+  }
+  for (const list of lists) {
+    const cols = list.querySelectorAll(':scope > colgroup > col');
+    const clear = () => {
+      list.style.removeProperty('width');
+      list.style.removeProperty('margin-left');
+      list.classList.remove('is-aligned');
+      for (const col of cols) col.style.removeProperty('width');
+    };
+    const holder = list.parentElement;
+    if (!holder || getComputedStyle(list).display !== 'table') {
+      clear();
+      continue;
+    }
+    const origin = holder.getBoundingClientRect().left;
+    const parent = new Map([...heads].map(([k, v]) => [k, { left: v.left - origin, right: v.right - origin }]));
+    const placed = layoutGameCols(list.gameCols ?? [], parent);
+    if (!placed) {
+      clear();
+      continue;
+    }
+    const { starts, ends } = placed;
+    cols.forEach((col, k) => {
+      col.style.width = `${ends[k] - starts[k]}px`;
+    });
+    list.style.marginLeft = `${starts[0]}px`;
+    list.style.width = `${ends[ends.length - 1] - starts[0]}px`;
+    list.classList.add('is-aligned');
+  }
+}
+
+/** Aligns the game lists of the row table that holds `node`, once it is in the page. */
+function alignWithin(node) {
+  const table = node.isConnected ? node.closest('table.crews-table') : null;
+  if (table) alignGameLists(table);
 }
 
 /** Draws the game list and its "View 10 more" into `holder` for a row showing `count` games. */
@@ -150,11 +300,23 @@ function drawGames(holder, row, tc, count) {
   holder.replaceChildren();
   const shownGames = row.games.slice(0, count);
   const table = el('table', 'games-table crews-games');
+  // `gameCols` (label, anchor, numeric, hidden label) lines the list up under the row table;
+  // a sport that passes only `gameHeads` keeps the list's own column widths.
+  const cols = tc.gameCols ?? tc.gameHeads.map((head) => ({ head, num: head === 'Viewers' || head === 'Excitement' }));
   const head = el('tr');
-  for (const label of tc.gameHeads) {
-    const th = el('th', label === 'Viewers' || label === 'Excitement' ? 'num' : null, label);
+  for (const c of cols) {
+    const th = el('th', [c.num ? 'num' : null, c.cls].filter(Boolean).join(' ') || null);
+    if (c.srHead) th.append(el('span', 'visually-hidden', c.srHead));
+    else th.textContent = c.head;
     th.scope = 'col';
     head.append(th);
+  }
+  if (tc.gameCols) {
+    const group = el('colgroup');
+    for (const c of cols) group.append(el('col', c.cls ? `${c.cls}-col` : null));
+    table.append(group);
+    table.dataset.aligned = '';
+    table.gameCols = cols;
   }
   const thead = el('thead');
   thead.append(head);
@@ -162,6 +324,7 @@ function drawGames(holder, row, tc, count) {
   for (const i of shownGames) tbody.append(tc.gameRow(row, i));
   table.append(thead, tbody);
   holder.append(table);
+  alignWithin(holder);
   const left = row.games.length - shownGames.length;
   if (left > 0) {
     const step = Math.min(GAME_PAGE, left);
@@ -204,6 +367,7 @@ function setExpanded(tr, open, tc) {
   if (open) {
     ts.expanded.set(row.rowKey, GAME_PAGE);
     tr.after(buildSubRow(row, tc));
+    alignWithin(tr);
   } else {
     ts.expanded.delete(row.rowKey);
     sub?.remove();
@@ -212,13 +376,12 @@ function setExpanded(tr, open, tc) {
   tr.querySelector('.crews-chevron')?.setAttribute('aria-label', open ? 'Hide games' : 'Show games');
 }
 
-/** Moves the roving tab stop to `tr` (its chevron follows it). */
+/** Moves the roving tab stop to `tr` (its chevron and filter button follow it). */
 function setActive(tbody, tr) {
   for (const r of tbody.querySelectorAll(':scope > tr.crews-row')) {
     const on = r === tr;
     r.tabIndex = on ? 0 : -1;
-    const chev = r.querySelector('.crews-chevron');
-    if (chev) chev.tabIndex = on ? 0 : -1;
+    for (const b of r.querySelectorAll('.crews-chevron, .crews-pick')) b.tabIndex = on ? 0 : -1;
   }
 }
 
@@ -264,7 +427,9 @@ function bindKeys(tbody, tc) {
     else if (e.key === 'PageUp') target = all[Math.max(at - PAGE_JUMP, 0)];
     else if (e.key === 'ArrowRight') setExpanded(rowEl, true, tc);
     else if (e.key === 'ArrowLeft') setExpanded(rowEl, false, tc);
-    else if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) tc.onPick(ts.rowOf.get(rowEl), rowEl);
+    else if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) {
+      setExpanded(rowEl, rowEl.getAttribute('aria-expanded') !== 'true', tc);
+    }
     else return;
     e.preventDefault();
     if (target) {
@@ -292,9 +457,10 @@ function focusSelector(container) {
   if (a.hasAttribute('data-cmode')) return `button${key('data-cmode')}`;
   if (a.classList.contains('crews-perseason')) return 'input.crews-perseason';
   if (a.classList.contains('crews-row')) return `tr${key('data-row-key')}`;
-  if (a.classList.contains('crews-chevron')) {
+  for (const cls of ['crews-chevron', 'crews-pick']) {
+    if (!a.classList.contains(cls)) continue;
     const owner = a.closest('tr.crews-row');
-    return owner ? `tr[data-row-key="${CSS.escape(owner.dataset.rowKey)}"] .crews-chevron` : null;
+    return owner ? `tr[data-row-key="${CSS.escape(owner.dataset.rowKey)}"] .${cls}` : null;
   }
   return null;
 }
@@ -313,6 +479,7 @@ function buildTable(rows, tc) {
   for (const [key, label, numeric] of tc.columns) {
     const th = el('th', `crews-col-${key}${numeric ? ' num' : ''}`);
     th.scope = 'col';
+    th.dataset.col = key;
     th.setAttribute('aria-sort', ariaSort(state, key, perSeason, sortSpec));
     const b = el('button');
     b.type = 'button';
@@ -337,7 +504,10 @@ function buildTable(rows, tc) {
   wrap.append(table);
   // The expanded sub-row is as wide as the scroller's visible width, so it stays in view on a phone.
   if (typeof ResizeObserver === 'function') {
-    const ro = new ResizeObserver(() => wrap.style.setProperty('--crews-scroll-w', `${wrap.clientWidth}px`));
+    const ro = new ResizeObserver(() => {
+      wrap.style.setProperty('--crews-scroll-w', `${wrap.clientWidth}px`);
+      alignGameLists(table);
+    });
     ro.observe(wrap);
     ts.detachCues.push(() => ro.disconnect());
   }
@@ -361,7 +531,9 @@ function buildTable(rows, tc) {
  * @param {string} opts.modeKey - mode part of the announce key
  * @param {number} opts.colCount - columns incl. the chevron, for the sub-row colSpan
  * @param {string[]} [opts.tableClasses]
- * @param {string[]} opts.gameHeads - the expanded game list's column labels
+ * @param {string[]} [opts.gameHeads] - the expanded game list's column labels (unaligned)
+ * @param {Array<{head?: string, srHead?: string, cls?: string, anchor?: string|string[], num?: boolean, width?: number}>} [opts.gameCols]
+ *   - the game list's columns laid under the row table's (see `layoutGameCols`); wins over gameHeads
  * @param {() => HTMLElement} opts.buildTools
  * @param {() => HTMLElement|null} [opts.buildEmpty] - drawn instead of the table when `rows` is empty
  * @param {(container: HTMLElement) => void} [opts.footer]
@@ -371,7 +543,9 @@ function buildTable(rows, tc) {
  * @param {(row: object, tr: HTMLElement) => HTMLElement[]} opts.buildCells - cells after the chevron
  * @param {(row: object, i: number) => HTMLElement} opts.gameRow
  * @param {(row: object) => HTMLElement[]} [opts.subHead]
- * @param {(row: object, tr: HTMLElement) => void} opts.onPick
+ * @param {(row: object, tr: HTMLElement) => void} opts.onPick - the filter button's action
+ * @param {(row: object) => boolean} [opts.canPick] - false hides a row's filter button
+ * @param {(row: object, picked: boolean) => string} [opts.pickLabel] - the filter button's label
  * @param {(next: object|null) => void} opts.onSort
  * @param {(i: number) => void} [opts.openGame]
  * @param {() => void} opts.rerender - redraws the whole panel (View more)
@@ -398,7 +572,9 @@ export function renderCrewsTable(container, opts) {
   } else {
     const reveal = rows.findIndex((r) => opts.isPicked(r));
     const count = Math.min(rows.length, Math.max(ts.shown, reveal + 1));
-    container.append(buildTable(rows.slice(0, count), opts));
+    const wrap = buildTable(rows.slice(0, count), opts);
+    container.append(wrap);
+    alignGameLists(wrap.querySelector('table.crews-table'));
     const sortNow = activeSort(opts.state, opts.perSeason, opts.sortSpec);
     const sortKey = `${opts.modeKey}|${sortNow.key}|${sortNow.dir}`;
     if (ts.lastSortKey !== null && sortKey !== ts.lastSortKey) {

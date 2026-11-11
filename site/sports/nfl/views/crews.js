@@ -218,7 +218,6 @@ function gameRow(ctx, model, row, i) {
   tr.tabIndex = 0;
   tr.setAttribute('role', 'button');
   tr.setAttribute('aria-label', `Details for ${matchup}`);
-  tr.append(el('td', 'date crews-game-date', c.date[i]));
   const matchupTd = el('td', 'matchup crews-game-matchup', matchup);
   if (row.fillIn.has(i)) {
     const tag = el('span', 'crews-tag is-dashed', 'fill-in');
@@ -243,7 +242,7 @@ function gameRow(ctx, model, row, i) {
       viewers.append(tag);
     }
   }
-  tr.append(matchupTd, netTd, excitementCell(c.excitement[i]), viewers);
+  tr.append(matchupTd, el('td', 'date crews-game-date', c.date[i]), netTd, excitementCell(c.excitement[i]), viewers);
   tr.addEventListener('click', () => ctx.openGame?.(i, tr));
   return tr;
 }
@@ -364,7 +363,16 @@ export function render(ctx) {
     modeKey: built.mode,
     colCount: columns.length + 1,
     tableClasses: ['is-nfl', ...(built.perSeason ? ['has-season'] : [])],
-    gameHeads: ['Date', 'Matchup', 'Network', 'Excitement', 'Viewers'],
+    // Laid under the row table's columns (crews-table.js `layoutGameCols`): Matchup under
+    // Booth, Date under Season (or Rank by season), Network under Network, and the figures
+    // ending under their averages.
+    gameCols: [
+      { head: 'Matchup', cls: 'crews-gcol-matchup', anchor: 'booth' },
+      { head: 'Date', cls: 'crews-gcol-date', anchor: ['season', 'rank'] },
+      { head: 'Network', cls: 'crews-gcol-network', anchor: 'network' },
+      { head: 'Excitement', cls: 'crews-gcol-exc', anchor: 'exc', num: true },
+      { head: 'Viewers', cls: 'crews-gcol-viewers', anchor: 'viewers', num: true },
+    ],
     buildTools: () => document.createDocumentFragment(),
     buildEmpty: () => {
       const note = el('div', 'season-empty-note crews-empty nfl-crews-empty');
@@ -379,6 +387,8 @@ export function render(ctx) {
     onPick: (r) => {
       if (r.boothKey) ctx.pickBoothRow(r.boothKey);
     },
+    canPick: (r) => r.boothKey != null,
+    pickLabel: (r, picked) => (picked ? 'Clear the booth filter' : 'Filter to this booth'),
     onSort: (csort) => ctx.setState({ csort }),
     openGame: (i) => ctx.openGame(i),
     rerender: () => render(ctx),

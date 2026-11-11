@@ -1257,6 +1257,11 @@ def test_html_tooltip_cfp_game_at_a_bowl_shows_both_icons(
     assert icons.evaluate_all("els => els.map(e => e.getAttribute('aria-hidden'))") == [
         "true"
     ] * len(kinds)
+    # The title game keeps its trophy and adds the national championship emblem after it.
+    emblem = guarded_page.locator(
+        "#chart-tooltip .tooltip-game-type svg.game-type-icon + img.title-mark"
+    )
+    assert emblem.count() == (1 if round_ == "championship" else 0)
     marker = guarded_page.locator("#chart-tooltip .tooltip-game-type")
     assert marker.get_attribute("role") is None
     assert marker.get_attribute("aria-label") is None

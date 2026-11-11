@@ -20,6 +20,8 @@ pytestmark = pytest.mark.e2e
 
 BIG_CREW = "Big Pbp and Big Ana"
 BIG_PBP = "Big Pbp"
+# The marks column's header is a visually-hidden span; its text is still in inner_text.
+HIDDEN_MARKS_HEAD = "Game type"
 
 
 @pytest.fixture
@@ -132,20 +134,72 @@ def test_arrows_skip_the_game_rows_of_an_open_row(app: Page) -> None:
     expect(first).to_be_focused()
 
 
-def test_enter_and_space_toggle_the_pick(app: Page) -> None:
+def test_enter_and_space_on_the_pick_button_toggle_the_pick(app: Page) -> None:
     row = _row(app, BIG_CREW)
-    _focus(row)
+    pick = row.locator("button.crews-pick")
+    pick.focus()
+    expect(pick).to_be_focused()
     app.keyboard.press("Enter")
-    expect(_row(app, BIG_CREW)).to_have_attribute("aria-pressed", "true")
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    expect(_row(app, BIG_CREW)).to_have_class(re.compile("is-picked"))
     assert _state(app)["crew"]
-    expect(_row(app, BIG_CREW)).to_be_focused()
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_be_focused()
     app.keyboard.press("Enter")
-    expect(_row(app, BIG_CREW)).to_have_attribute("aria-pressed", "false")
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "false"
+    )
     assert not _state(app)["crew"]
     app.keyboard.press("Space")
-    expect(_row(app, BIG_CREW)).to_have_attribute("aria-pressed", "true")
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "true"
+    )
     app.keyboard.press("Space")
-    expect(_row(app, BIG_CREW)).to_have_attribute("aria-pressed", "false")
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "false"
+    )
+
+
+def test_enter_and_space_on_a_row_toggle_its_expansion_and_never_pick(app: Page) -> None:
+    row = _row(app, BIG_CREW)
+    _focus(row)
+    expect(row).to_have_attribute("aria-expanded", "false")
+    app.keyboard.press("Enter")
+    expect(row).to_have_attribute("aria-expanded", "true")
+    app.keyboard.press("Enter")
+    expect(row).to_have_attribute("aria-expanded", "false")
+    app.keyboard.press("Space")
+    expect(row).to_have_attribute("aria-expanded", "true")
+    app.keyboard.press("Space")
+    expect(row).to_have_attribute("aria-expanded", "false")
+    expect(row).to_be_focused()
+    assert not _state(app)["crew"]
+    expect(row.locator("button.crews-pick")).to_have_attribute("aria-pressed", "false")
+
+
+def test_a_row_click_expands_and_never_picks_and_the_pick_button_leaves_expansion(
+    app: Page,
+) -> None:
+    row = _row(app, BIG_CREW)
+    pick = row.locator("button.crews-pick")
+    row.locator("td.crews-name").click(position={"x": 2, "y": 2})
+    expect(row).to_have_attribute("aria-expanded", "true")
+    expect(pick).to_have_attribute("aria-pressed", "false")
+    expect(row).not_to_have_class(re.compile("is-picked"))
+    assert not _state(app)["crew"]
+    assert "crew=" not in app.url
+    pick.click()
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "true"
+    )
+    expect(_row(app, BIG_CREW)).to_have_attribute("aria-expanded", "true")
+    assert _state(app)["crew"]
+    _row(app, BIG_CREW).locator("button.crews-pick").click()
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "false"
+    )
+    expect(_row(app, BIG_CREW)).to_have_attribute("aria-expanded", "true")
 
 
 def test_right_and_left_expand_and_collapse(app: Page) -> None:
@@ -192,7 +246,7 @@ def test_chevron_toggles_by_click_enter_and_space_and_never_picks(app: Page) -> 
     app.keyboard.press("Space")
     expect(row).to_have_attribute("aria-expanded", "false")
     assert not _state(app)["crew"]
-    expect(row).to_have_attribute("aria-pressed", "false")
+    expect(row.locator("button.crews-pick")).to_have_attribute("aria-pressed", "false")
 
 
 def test_header_buttons_sort_on_enter_and_space_and_keep_focus(app: Page) -> None:
@@ -298,8 +352,10 @@ def test_game_list_view_more_names_a_short_remainder(app: Page) -> None:
 
 def test_expansion_survives_a_pick_and_resets_with_a_sort(app: Page) -> None:
     _expand(app, BIG_CREW)
-    _row(app, BIG_CREW).click()
-    expect(_row(app, BIG_CREW)).to_have_attribute("aria-pressed", "true")
+    _row(app, BIG_CREW).locator("button.crews-pick").click()
+    expect(_row(app, BIG_CREW).locator("button.crews-pick")).to_have_attribute(
+        "aria-pressed", "true"
+    )
     expect(_row(app, BIG_CREW)).to_have_attribute("aria-expanded", "true")
     expect(_games(app, BIG_CREW)).to_have_count(10)
     app.locator("#crews-panel thead button[data-sort-key='exc']").click()
@@ -331,7 +387,7 @@ def test_fill_in_tag_marks_the_fill_in_game_in_crew_mode(app: Page) -> None:
     expect(tags).to_have_attribute("title", "The regular analyst was absent")
 
 
-def test_person_mode_lists_partners_by_count_and_the_crew_column(app: Page) -> None:
+def test_person_mode_lists_partners_by_count_and_the_crew_in_the_matchup(app: Page) -> None:
     app.locator("#crews-panel .crews-mode button[data-cmode='pbp']").click()
     row = _row(app, BIG_PBP)
     row.locator("button.crews-chevron").click()
@@ -341,17 +397,22 @@ def test_person_mode_lists_partners_by_count_and_the_crew_column(app: Page) -> N
         f"Big Ana ({CASE_BIG['games']}), Big Ana2 ({CASE_BIG['other_games']})"
     )
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Date", "Matchup", "Network", "Crew", "Excitement", "Viewers"]
-    crews = {c.strip() for c in sub.locator("td.crews-game-crew").all_inner_texts()}
-    assert crews == {"Big Ana", "Big Ana2"} or crews <= {"Big Ana", "Big Ana2"}
+    assert heads == ["Matchup", HIDDEN_MARKS_HEAD, "Date", "Network", "Excitement", "Viewers"]
+    assert sub.locator("td.crews-game-crew").count() == 0
+    crews = {
+        c.strip().removeprefix("with ")
+        for c in sub.locator("td.crews-game-matchup span.crews-game-crew").all_inner_texts()
+    }
+    assert crews and crews <= {"Big Ana", "Big Ana2"}
     assert sub.locator("tr.crews-game .crews-tag").count() == 0
 
 
-def test_crew_mode_has_no_worked_with_and_no_crew_column(app: Page) -> None:
+def test_crew_mode_has_no_worked_with_and_no_crew_names(app: Page) -> None:
     sub = _expand(app, BIG_CREW)
     expect(sub.locator(".crews-worked-label")).to_have_count(0)
     heads = [h.strip() for h in sub.locator("thead th").all_inner_texts()]
-    assert heads == ["Date", "Matchup", "Network", "Excitement", "Viewers"]
+    assert heads == ["Matchup", HIDDEN_MARKS_HEAD, "Date", "Network", "Excitement", "Viewers"]
+    assert sub.locator("span.crews-game-crew").count() == 0
 
 
 def test_each_game_shows_its_excitement_to_one_decimal(app: Page) -> None:

@@ -15,6 +15,7 @@ import { crewEntries, figureSourceOf, formatAudienceTable, formatMatchup } from 
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
 import { createTableState, el, excitementCell, renderCrewsTable } from './crews-table.js';
+import { gameMarksCell } from './game-marks.js';
 
 /** This sport's table state: paging, open rows and announce memory (shared mechanics in crews-table.js). */
 const ts = createTableState();
@@ -165,7 +166,7 @@ function isHighlightedRow(row, mode, state, highlightedSet, view, data) {
 
 /** Sets the pick to this row, or clears it when this row is the pick. */
 function togglePick(tr, row, mode, setState) {
-  const picked = tr.getAttribute('aria-pressed') === 'true';
+  const picked = tr.classList.contains('is-picked');
   if (mode === 'crew') setState({ crew: picked ? null : row.crewKey });
   else setState({ people: picked ? [] : [row.personSlug] });
 }
@@ -202,6 +203,23 @@ function viewersCell(data, i) {
   return td;
 }
 
+/**
+ * The game list's columns, laid under the row table's (crews-table.js `layoutGameCols`):
+ * Matchup under the names, the marks just before Date, Date under Season (or Rank by season
+ * when rows are pooled; a fixed slot when neither shows), Network under Network, and the two
+ * figures ending under their averages.
+ */
+function gameColsFor(mode) {
+  return [
+    { head: 'Matchup', cls: 'crews-gcol-matchup', anchor: 'crew' },
+    { srHead: 'Game type', cls: 'crews-gcol-marks', width: 72 },
+    { head: 'Date', cls: 'crews-gcol-date', anchor: mode === 'crew' ? ['season', 'rank'] : ['season'], width: 104 },
+    { head: 'Network', cls: 'crews-gcol-network', anchor: 'network' },
+    { head: 'Excitement', cls: 'crews-gcol-exc', anchor: 'exc', num: true },
+    { head: 'Viewers', cls: 'crews-gcol-viewers', anchor: 'viewers', num: true },
+  ];
+}
+
 function gameRow(row, mode, ctx, i) {
   const { data } = ctx;
   const matchup = formatMatchup(data, i, {});
@@ -210,18 +228,22 @@ function gameRow(row, mode, ctx, i) {
   tr.tabIndex = 0;
   tr.setAttribute('role', 'button');
   tr.setAttribute('aria-label', `Details for ${matchup}`);
-  tr.append(el('td', 'date crews-game-date', data.t.date[i]));
   const matchupTd = el('td', 'matchup crews-game-matchup', matchup);
   if (mode === 'crew' && row.fillInGames.has(i)) {
     const tag = el('span', 'crews-tag is-dashed', 'fill-in');
     tag.title = 'The regular analyst was absent';
     matchupTd.append(tag);
   }
+  // A person row's game names the rest of that booth after the matchup, as the row itself
+  // lists partners after the name.
+  if (mode !== 'crew') {
+    const others = otherCrew(data, i, row.personSlug);
+    if (others) matchupTd.append(' ', el('span', 'crews-game-crew', `with ${others}`));
+  }
   const net = data.lookups.networks[data.t.network[i]];
   const netTd = el('td', 'crews-game-network');
   netTd.append(networkMark({ id: net.id, name: net.name, family: net.family }));
-  tr.append(matchupTd, netTd);
-  if (mode !== 'crew') tr.append(el('td', 'crews-game-crew', otherCrew(data, i, row.personSlug)));
+  tr.append(matchupTd, gameMarksCell(data, i), el('td', 'date crews-game-date', data.t.date[i]), netTd);
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');
   tr.append(excitementCell(data.t.excitement[i]), viewers);
@@ -295,7 +317,7 @@ export function renderCrewsPanel(container, model, ctx) {
     modeKey: mode,
     colCount: cols.length + 1,
     tableClasses: ['crews-table--' + mode, ...(model.perSeason ? ['has-season'] : [])],
-    gameHeads: ['Date', 'Matchup', 'Network', ...(mode === 'crew' ? [] : ['Crew']), 'Excitement', 'Viewers'],
+    gameCols: gameColsFor(mode),
     buildTools: () => buildTools(full),
     buildEmpty: () => {
       const note = el('div', 'season-empty-note crews-empty');
@@ -329,6 +351,10 @@ export function renderCrewsPanel(container, model, ctx) {
       return [el('p', 'crews-worked-label', 'Worked with'), list];
     },
     onPick: (row, tr) => togglePick(tr, row, mode, setState),
+    pickLabel: (row, picked) => {
+      if (mode === 'crew') return picked ? 'Clear the crew filter' : 'Filter to this crew';
+      return picked ? 'Clear the announcer filter' : 'Filter to this announcer';
+    },
     onSort: (next) => setState({ csort: next }),
     openGame: ctx.openGame,
     rerender: () => renderCrewsPanel(container, model, ctx),

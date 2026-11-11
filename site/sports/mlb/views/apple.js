@@ -297,8 +297,8 @@ function gameRow(ctx, model, row, i) {
     if (g.scope === 'window') viewers.append(' ', windowTag());
   } else viewers.append(el('span', 'caption', CAUSE_COPY[g.cause] ?? 'no Ratings Reference figure'));
   tr.append(
-    el('td', 'date crews-game-date', g.date),
     el('td', 'matchup crews-game-matchup', matchup),
+    el('td', 'date crews-game-date', g.date),
     crewTd,
     excitementCell(model.cols.wp_excitement[i]),
     viewers,
@@ -343,7 +343,16 @@ function renderTable(ctx, model, state) {
     modeKey: adjusted ? 'adjusted' : 'raw',
     colCount: COLUMNS.length + 1,
     tableClasses: ['is-mlb', 'mlb-apple-table'],
-    gameHeads: ['Date', 'Matchup', 'Crew', 'Excitement', 'Viewers'],
+    // Laid under the row table's columns (crews-table.js `layoutGameCols`): Matchup under
+    // Booth, Date in a fixed slot before Network, the crew under Network, and the figures
+    // ending under Excitement and the last column.
+    gameCols: [
+      { head: 'Matchup', cls: 'crews-gcol-matchup', anchor: 'booth' },
+      { head: 'Date', cls: 'crews-gcol-date', width: 112 },
+      { head: 'Crew', cls: 'crews-gcol-crew', anchor: 'network' },
+      { head: 'Excitement', cls: 'crews-gcol-exc', anchor: 'excitement', num: true },
+      { head: 'Viewers', cls: 'crews-gcol-viewers', anchor: 'prior', num: true },
+    ],
     buildTools: () => document.createDocumentFragment(),
     isPicked: picked,
     crewKeyOf: (r) => r.rowKey,

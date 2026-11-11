@@ -420,7 +420,7 @@ def test_game_list_ten_newest_first_with_tags(
     games = sub.locator("tr.crews-game")
     assert games.count() == 10
     heads = [h.strip() for h in sub.locator("table.crews-games thead th").all_inner_texts()]
-    assert heads == ["Date", "Matchup", "Network", "Excitement", "Viewers"]
+    assert heads == ["Matchup", "Date", "Network", "Excitement", "Viewers"]
     excitement = [c.strip() for c in sub.locator("td.crews-game-exc").all_inner_texts()]
     assert len(excitement) == 10
     assert all(re.fullmatch(r"\d+\.\d", c) for c in excitement), excitement
@@ -471,7 +471,7 @@ def test_enter_on_a_game_opens_the_panel_and_focus_returns(
 # ------------------------------------------------------------------ row pick
 
 
-def test_row_pick_narrows_to_the_booth_key_and_keeps_focus(
+def test_pick_button_narrows_to_the_booth_key_and_keeps_focus(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
     serve_nfl_crews: Callable[[Page], None],
@@ -485,7 +485,7 @@ def test_row_pick_narrows_to_the_booth_key_and_keeps_focus(
     key_b = f"fox:{CASE_TWO_ANALYSTS['pbp']}.synth-an-two-b"
     catalog = str(CASE_TWO_ANALYSTS["catalog_key"])
     row = _row(page, key_a)
-    row.focus()
+    row.locator("button.crews-pick").focus()
     page.keyboard.press("Enter")
     page.wait_for_function(
         f"JSON.stringify(window.__nflTestHooks.getState().booths) === '[\"{catalog}\"]'"
@@ -494,9 +494,12 @@ def test_row_pick_narrows_to_the_booth_key_and_keeps_focus(
     assert sorted(r["rowKey"] for r in vm["rows"]) == sorted([key_a, key_b])
     assert vm["totalRows"] == CASE_TWO_ANALYSTS["pooled_rows"]
     assert all(r["picked"] for r in vm["rows"])
-    pressed = page.eval_on_selector_all(ROW, "els => els.map(e => e.getAttribute('aria-pressed'))")
+    pressed = page.eval_on_selector_all(
+        f"{ROW} button.crews-pick", "els => els.map(e => e.getAttribute('aria-pressed'))"
+    )
     assert pressed == ["true", "true"]
-    assert page.evaluate("document.activeElement.dataset.rowKey") == key_a
+    assert page.evaluate("document.activeElement.classList.contains('crews-pick')")
+    assert page.evaluate("document.activeElement.closest('tr').dataset.rowKey") == key_a
     picked_class = page.eval_on_selector_all(
         ROW, "els => els.map(e => e.classList.contains('is-picked'))"
     )
@@ -505,11 +508,18 @@ def test_row_pick_narrows_to_the_booth_key_and_keeps_focus(
     page.keyboard.press("Enter")
     page.wait_for_function("window.__nflTestHooks.getState().booths.length === 0")
     assert _vm(page)["totalRows"] == total
-    pressed = page.eval_on_selector_all(ROW, "els => els.map(e => e.getAttribute('aria-pressed'))")
+    pressed = page.eval_on_selector_all(
+        f"{ROW} button.crews-pick", "els => els.map(e => e.getAttribute('aria-pressed'))"
+    )
     assert set(pressed) == {"false"}
+    # Enter on the row itself expands it and never picks.
+    _row(page, key_a).focus()
+    page.keyboard.press("Enter")
+    assert _row(page, key_a).get_attribute("aria-expanded") == "true"
+    assert page.evaluate("window.__nflTestHooks.getState().booths.length") == 0
 
 
-def test_row_click_picks_and_a_filter_bar_booths_pick_marks_the_same_rows(
+def test_pick_button_picks_and_a_filter_bar_booths_pick_marks_the_same_rows(
     nfl_guarded_page: Page,
     open_nfl_app: Callable[..., None],
     serve_nfl_crews: Callable[[Page], None],
@@ -519,7 +529,7 @@ def test_row_click_picks_and_a_filter_bar_booths_pick_marks_the_same_rows(
     _open(page, open_nfl_app, "&perseason=0")
     _vm(page)
     key_a = f"fox:{CASE_TWO_ANALYSTS['pbp']}.synth-an-two-a"
-    _row(page, key_a).locator("td.crews-name").click()
+    _row(page, key_a).locator("button.crews-pick").click()
     page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
     vm = _vm(page)
     assert len(vm["rows"]) == 2
