@@ -23,6 +23,7 @@ import * as crews from './views/crews.js';
 import * as viewership from './views/viewership.js';
 import * as scatter from './views/scatter.js';
 import * as weekend from './views/weekend.js';
+import { holdPage } from '../../modules/page-hold.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
@@ -373,7 +374,13 @@ function showActiveView({ resize }) {
   if (resize) views[state.view].mod.resize();
 }
 
-function renderAll({ resize = false } = {}) {
+/** Rebuilds the active view and the shared regions under the page hold (see page-hold.js), so
+ * the map's destroy on a Map to Timeline switch, or any emptied host, never clamps the scroll. */
+function renderAll(opts = {}) {
+  holdPage(() => renderAllNow(opts));
+}
+
+function renderAllNow({ resize = false } = {}) {
   if (!model || !views) return;
   showActiveView({ resize });
   views[state.view].mod.render(ctx);
@@ -545,7 +552,7 @@ function ensureShell(footerEl) {
 function attachMedia() {
   detachMedia();
   mqHandler = () => {
-    if (mounted && model && views) views[state.view].mod.render(ctx);
+    if (mounted && model && views) holdPage(() => views[state.view].mod.render(ctx));
   };
   for (const q of [PHONE_QUERY, '(hover: none)']) {
     const mql = window.matchMedia(q);

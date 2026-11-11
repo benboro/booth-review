@@ -240,10 +240,11 @@ def espnpr_week_unsaved(season: int, label: str) -> AttentionItem:
 
 # Phase 24 hand-save reminder links (fixed public pages; the job never fetches them).
 # The user approved these on 2026-10-26 and may change them later: each is one line.
-# The AA link is the Schedules category page (Phase 25 D-10, approved 2026-10-28).
+# The AA links are the Schedules category page (Phase 25 D-10, approved 2026-10-28; the user
+# moved both leagues to the /category/schedules form on 2026-11-10).
 REMINDER_ESPNPR_CFB_URL = "https://espnpressroom.com/press-release-category/college-football/"
-REMINDER_AA_CFB_URL = "https://awfulannouncing.com/schedules/"
-REMINDER_AA_NFL_URL = "https://awfulannouncing.com/nfl/"
+REMINDER_AA_CFB_URL = "https://awfulannouncing.com/category/schedules"
+REMINDER_AA_NFL_URL = "https://awfulannouncing.com/category/schedules"
 REMINDER_FOX_CFB_URL = "https://www.foxsports.com/presspass"
 # Path only: 506's week URL (nfl.php?yr=..&wk=..) holds "?", "=" and "&", which the
 # whitelist rejects, so the line names the week in text instead.

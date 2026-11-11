@@ -27,6 +27,7 @@ import { networkMark } from './network.js';
 import { safeHref } from './panel-parts.js';
 import { playedInText, venueCity } from './venue.js';
 import { attachScrollCue } from './scroll-cue.js';
+import { holdPage } from './page-hold.js';
 import { currentTheme, onThemeChange } from './theme.js';
 
 const FALLBACK_WIDTH = 1440;
@@ -714,27 +715,6 @@ function clockKey(ctx, kind) {
 }
 
 /**
- * Runs `fn` with `node` held at its current height, then restores whatever min-height it had
- * (so holds nest). A rebuild empties the host, or moves the map node out of it, and later reads
- * a size, which forces a layout while the page is briefly shorter; the browser clamps the scroll
- * there and the page jumps up on a view, day or week change. The hold is gone before the paint.
- * @template T
- * @param {HTMLElement} node
- * @param {() => T} fn
- * @returns {T}
- */
-export function holdHeight(node, fn) {
-  const prev = node.style.minHeight;
-  const h = node.offsetHeight;
-  if (h > 0) node.style.minHeight = `${h}px`;
-  try {
-    return fn();
-  } finally {
-    node.style.minHeight = prev;
-  }
-}
-
-/**
  * Mounts one weekend view in `host`, replacing any earlier mount there and keeping focus on the
  * same control or cell across the rebuild. The theme, the clock and the width rebuild it.
  * @param {HTMLElement} host
@@ -746,7 +726,7 @@ export function holdHeight(node, fn) {
  */
 export function mountWeekend(host, model, opts, buildBody, kind) {
   // Held across the previous mount's destroy, which empties the host.
-  return holdHeight(host, () => mountNow(host, model, opts, buildBody, kind));
+  return holdPage(() => mountNow(host, model, opts, buildBody, kind));
 }
 
 function mountNow(host, model, opts, buildBody, kind) {
@@ -783,7 +763,7 @@ function mountNow(host, model, opts, buildBody, kind) {
   }
 
   // A day pick, resize, theme or clock tick rebuilds here without passing through the app.
-  const render = () => holdHeight(host, renderNow);
+  const render = () => holdPage(renderNow);
 
   function renderNow() {
     focusId = forceFocus ?? activeId() ?? focusId;

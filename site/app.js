@@ -48,7 +48,8 @@ import {
 } from './modules/hover-ring.js';
 import { PHONE_QUERY } from './modules/breakpoints.js';
 import { etParts, etWallMinutes } from './modules/weekend.js';
-import { holdHeight, renderWeekend } from './modules/weekend-view.js';
+import { renderWeekend } from './modules/weekend-view.js';
+import { holdPage } from './modules/page-hold.js';
 import { renderWeekendList } from './modules/weekend-list.js';
 import { renderWeekendMap } from './modules/weekend-map-view.js';
 import { cfbWeekendPasses, isUnplayedGame } from './modules/weekend-data.js';
@@ -354,7 +355,8 @@ function renderWeekendPanel() {
     },
     onOpen(game, opener) {
       // The panel returns focus to the focused element on close: the Map segment, not the chart.
-      if (opener && typeof opener.focus === 'function') opener.focus();
+      // preventScroll: the segment can sit above the viewport, and focusing it must not jump.
+      if (opener && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
       const now = etParts(opts.now());
       const unplayed = isUnplayedGame(game, etWallMinutes(now.date, now.minutes));
       if (game.block === 'scheduled') {
@@ -381,8 +383,16 @@ function renderWeekendPanel() {
   return { matching, total: inDay.length };
 }
 
-/** Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every registered renderer. */
+/**
+ * Recomputes the view, re-renders the chart, syncs the axis UI and the URL, and runs every
+ * registered renderer. The whole pass runs under the page hold, so a destroy or an emptied host
+ * anywhere in it (the Map to Timeline switch, a week step) never clamps the scroll.
+ */
 function render() {
+  holdPage(renderNow);
+}
+
+function renderNow() {
   if (!cfbActive()) return;
   revision += 1;
   clearHover();
@@ -419,8 +429,7 @@ function render() {
     hideBandInfo();
     if (weekendPanelEl) {
       weekendPanelEl.hidden = false;
-      // Held across the Map to Timeline destroy too, which empties the panel before the remount.
-      weekendCounts = holdHeight(weekendPanelEl, renderWeekendPanel);
+      weekendCounts = renderWeekendPanel();
     }
     lastPanel = 'weekend';
   } else if (state.view === 'crews') {
