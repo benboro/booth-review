@@ -1794,7 +1794,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.10.0"
+    assert payload["schema_version"] == "2.9.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]
@@ -2631,7 +2631,7 @@ def test_scheduled_ships_current_and_past_weeks_not_later_ones(
 def test_scheduled_rivalry_meeting_is_tagged(
     small_tables: BuildTables, build_reference: Path, tmp_path: Path
 ) -> None:
-    """2.10.0: a scheduled game that is a rivalry's first meeting carries the rivalry, and
+    """2.9.0: a scheduled game that is a rivalry's first meeting carries the rivalry, and
     the rivalry ships in the lookup even with no telecast row behind it."""
     ref = _rivalry_reference(
         tmp_path, build_reference, "sched-cup,Sched Cup,the,Sched Home 102,Sched Away 102,,\n"

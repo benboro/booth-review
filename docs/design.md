@@ -382,7 +382,7 @@ records only where the site settles or applies them.
   sit under it in the same column, centred on the booth line. The item's accessible name ends
   with "Rivalry: <name>." (after "Both teams ranked." on a game with both), the mark is
   `aria-hidden`, and its title reads "Rivalry: <name>". Scheduled games carry the rivalry too
-  (contract 2.10.0 `telecasts_scheduled.rivalry`). The Time TBA strip shares the cell and row
+  (contract 2.9.0 `telecasts_scheduled.rivalry`). The Time TBA strip shares the cell and row
   builders and shows it too; the ESPN+ and regional table and NFL items do not.
 - Accessibility: where the element's accessible name already ends with "Both teams ranked."
   (timeline cells, phone rows, ESPN+ and regional rows, the modal title), the badge is

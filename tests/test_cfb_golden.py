@@ -95,7 +95,7 @@ header-only review_crew_backup_disagreements.csv (old digest 9e2b349af80b... is 
 of the old header line, the new one the sha256 of the new header line); no other digest
 moved, so no figure or crew changed.
 
-This weekend rivalry icon (2026-11-11): contract 2.10.0 adds telecasts_scheduled.rivalry
+This weekend rivalry icon (2026-11-11): contract 2.9.0 adds telecasts_scheduled.rivalry
 (null on every synthetic scheduled row); site-data.json with that column dropped and the
 version set back to 2.8.0 hashes to the earlier digest (3244f6b46d0c...), so no figure or
 crew changed.
@@ -197,7 +197,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "0a191d83c766ac89dfc1832fd6da15ec969926a03cb996e32b5cd30e92c7f5cf"
+        "3ce1d142ca89b7a8c08484ca4660c00eecc0b653eed840390ac1fcb232a21be2"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

@@ -22,7 +22,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from booth_review.sources.second_rows import SECOND_SOURCE_HOSTS, host_matches
 
-SCHEMA_VERSION = "2.10.0"
+SCHEMA_VERSION = "2.9.0"
 
 _S506_HOST = "506sports.com"
 
@@ -462,7 +462,7 @@ class CoverageRow(BaseModel):
 class SiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.10.0"]
+    schema_version: Literal["2.9.0"]
     generated_at: str
     freshness: Freshness
     lookups: Lookups

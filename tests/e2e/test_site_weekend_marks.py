@@ -127,7 +127,7 @@ def test_nfl_cells_never_show_the_rivalry_mark(wk_page: Page) -> None:  # noqa: 
 
 
 def test_scheduled_rivalry_game_shows_the_mark(wk: Callable[..., Page]) -> None:  # noqa: F811
-    """Contract 2.10.0: a scheduled game (no telecast row yet) carries its rivalry, and This
+    """Contract 2.9.0: a scheduled game (no telecast row yet) carries its rivalry, and This
     weekend marks it like any other."""
 
     def tweak(raw: dict[str, Any]) -> None:

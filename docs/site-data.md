@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.10.0"`). See
+- `schema_version` — the contract version (currently `"2.9.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -338,7 +338,7 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
   `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive);
   `2.7.0 -> 2.8.0` added coverage `matched_crew_aa` (Phase 27 AA crews, review WR-05); minor bump, additive;
-  `2.8.0 -> 2.10.0` added `telecasts_scheduled.rivalry` (This weekend rivalry icon), so a scheduled rivalry game is tagged like a telecast and `lookups.rivalries` counts scheduled games; minor bump, additive (2.9.0 is the Crews score change).
+  `2.8.0 -> 2.9.0` added `telecasts_scheduled.rivalry` (This weekend rivalry icon), so a scheduled rivalry game is tagged like a telecast and `lookups.rivalries` counts scheduled games; minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -378,7 +378,7 @@ As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
 
-As of v2.10.0 every fixture `telecasts_scheduled.rivalry` is null (no scheduled game is a rivalry meeting); the tagged case is exercised with synthetic games in tests.
+As of v2.9.0 every fixture `telecasts_scheduled.rivalry` is null (no scheduled game is a rivalry meeting); the tagged case is exercised with synthetic games in tests.
 
 As of v2.8.0 every fixture coverage row has `matched_crew_aa` 0.
 

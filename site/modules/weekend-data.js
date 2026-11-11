@@ -111,7 +111,7 @@ export function scheduledFacade(data) {
     s506_url: nulls(),
     playoff_round: nulls(),
     bowl: nulls(),
-    // 2.10.0: a scheduled rivalry meeting carries its rivalry (the This weekend rivalry icon);
+    // 2.9.0: a scheduled rivalry meeting carries its rivalry (the This weekend rivalry icon);
     // an older payload without the column reads as no rivalry.
     rivalry: raw.rivalry ?? nulls(),
     // A scheduled game is a current-season game with no figure yet, so a panel opened after
