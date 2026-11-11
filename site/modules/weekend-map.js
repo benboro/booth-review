@@ -246,8 +246,6 @@ function hoverLines(game, nowWall, venueLine, allDays = false) {
     ...lines,
     // The HTML card's badge and conference line (Phase 28); never part of the Plotly text.
     ranked: isRankedMatchup(game),
-    // Every CFB card keeps the badge's padding, ranked or not, so the same text wraps alike.
-    rankSlot: game.sport === 'cfb',
     conf: {
       away: game.awayConference ?? null,
       home: game.homeConference ?? null,

@@ -159,7 +159,8 @@ _CELL_SWEEP_JS = """([rankedSel, plainSel]) => {
   // text, one character longer each step, and compares where each line truncates: the text box
   // widths and whether the ellipsis shows.
   const cells = [document.querySelector(rankedSel), document.querySelector(plainSel)];
-  const full = '#20 Southern Mississippi Golden Eagles at #5 Louisiana-Monroe Warhawks';
+  const full = '#20 Southern Mississippi Golden Eagles of the Gulf Coast at '
+    + '#5 Louisiana-Monroe Warhawks of the Delta';
   const booth = 'Joe Fowler, Pat Herbstreit, Sam Sideline and Lee Reporter of the Lakeview Network';
   const out = [];
   for (let n = 1; n <= full.length; n += 1) {
@@ -178,29 +179,80 @@ _CELL_SWEEP_JS = """([rankedSel, plainSel]) => {
 }"""
 
 
-def test_cells_truncate_the_same_with_or_without_the_badge(wk_page: Page) -> None:  # noqa: F811
-    """User decision 2026-11-03 ("reserve badge space everywhere"): every CFB timeline cell keeps
-    the badge's 28px, so identical text truncates at the same place, ranked or not."""
+def test_cells_reserve_room_only_for_the_marks_they_show(wk_page: Page) -> None:  # noqa: F811
+    """User 2026-11-11 (reversing 2026-11-03's "reserve badge space everywhere"): a cell's text
+    truncates on what is visible. Every cell keeps its 8px padding; a line gives up 20px more
+    only for a mark drawn on it (the badge or swords on the matchup line, the swords on the
+    booth line under a badge)."""
     _mount(
         wk_page,
         [
             _known(key="r", awayRank=20, homeRank=5),
-            _known(key="o", awayRank=20, networkId="cbs", networkName="CBS", family="cbs"),
+            _known(
+                key="v",
+                rivalry="Lakeshore Rivalry",
+                networkId="cbs",
+                networkName="CBS",
+                family="cbs",
+            ),
+            _known(
+                key="b",
+                awayRank=20,
+                homeRank=5,
+                rivalry="Lakeshore Rivalry",
+                networkId="abc",
+                networkName="ABC",
+                family="disney",
+            ),
+            _known(key="o", awayRank=20, networkId="nbc", networkName="NBC", family="nbc"),
         ],
     )
-    pads = [
-        wk_page.locator(_cell(k)).evaluate("e => getComputedStyle(e).paddingRight")
-        for k in ("r", "o")
-    ]
-    assert pads == ["28px", "28px"]
-    got = wk_page.evaluate(_CELL_SWEEP_JS, [_cell("r"), _cell("o")])
-    assert got["width"][0] == got["width"][1]
-    differ = [r for r in got["out"] if r["ranked"] != r["plain"]]
-    assert differ == []
-    # The sweep reached lengths that cut both lines, so it crossed the truncation points.
-    assert any(r["plain"]["matchCut"] for r in got["out"])
-    assert any(r["plain"]["boothCut"] for r in got["out"])
-    assert not got["out"][0]["plain"]["matchCut"]
+    style = (
+        "e => [getComputedStyle(e).paddingRight,"
+        " getComputedStyle(e.querySelector('.wk-line1')).marginRight,"
+        " getComputedStyle(e.querySelector('.wk-line2')).marginRight]"
+    )
+    got = {k: wk_page.locator(_cell(k)).evaluate(style) for k in ("r", "v", "b", "o")}
+    assert got == {
+        "r": ["8px", "20px", "0px"],
+        "v": ["8px", "20px", "0px"],
+        "b": ["8px", "20px", "20px"],
+        "o": ["8px", "0px", "0px"],
+    }
+    sweep = wk_page.evaluate(_CELL_SWEEP_JS, [_cell("r"), _cell("o")])
+    assert sweep["width"][0] == sweep["width"][1]
+    rows = sweep["out"]
+    # The booth line has no mark on a ranked cell, so it truncates exactly as on a plain one.
+    assert all(
+        (r["ranked"]["booth"], r["ranked"]["boothCut"])
+        == (r["plain"]["booth"], r["plain"]["boothCut"])
+        for r in rows
+    )
+    assert all(r["ranked"]["h"] == r["plain"]["h"] for r in rows)
+    # Once both matchups truncate, the plain one shows exactly the badge's 20px more.
+    last = rows[-1]
+    assert last["ranked"]["matchCut"] and last["plain"]["matchCut"]
+    assert last["plain"]["match"] - last["ranked"]["match"] == 20
+    # Short text fits on both; somewhere only the ranked cell cuts (the plain one uses the room).
+    assert not rows[0]["ranked"]["matchCut"] and not rows[0]["plain"]["matchCut"]
+    assert any(r["ranked"]["matchCut"] and not r["plain"]["matchCut"] for r in rows)
+    assert not any(r["plain"]["matchCut"] and not r["ranked"]["matchCut"] for r in rows)
+
+
+def test_cell_marks_never_cover_the_text(wk_page: Page) -> None:  # noqa: F811
+    _mount(
+        wk_page,
+        [_known(key="b", awayRank=20, homeRank=5, rivalry="Lakeshore Rivalry")],
+    )
+    wk_page.evaluate(_CELL_SWEEP_JS, [_cell("b"), _cell("b")])  # leaves both lines cut
+    sel = _cell("b")
+    match = wk_page.locator(f"{sel} .wk-match").bounding_box()
+    booth = wk_page.locator(f"{sel} .wk-booth").bounding_box()
+    badge = _badge_box(wk_page, sel)
+    swords = wk_page.locator(f"{sel} .rv-mark").bounding_box()
+    assert match is not None and booth is not None and swords is not None
+    assert match["x"] + match["width"] <= badge["x"] - 3.5
+    assert booth["x"] + booth["width"] <= swords["x"] - 3.5
 
 
 def test_nfl_cells_keep_their_normal_padding(wk_page: Page) -> None:  # noqa: F811
@@ -267,27 +319,73 @@ _ROW_SWEEP_JS = """([rankedSel, plainSel]) => {
 }"""
 
 
-def test_phone_rows_wrap_the_same_with_or_without_the_badge(phone_page: Page) -> None:  # noqa: F811
-    """User decision 2026-11-03 ("reserve badge space everywhere"): every CFB phone row keeps
-    the badge's 28px, so identical text wraps and clamps identically, ranked or not, at 390px."""
+def test_phone_rows_reserve_room_only_for_the_marks_they_show(phone_page: Page) -> None:  # noqa: F811
+    """User 2026-11-11: a phone row's text wraps on what is visible. Every row keeps its 16px
+    padding; the matchup lines give up 12px more only for a mark on them, and the booth line
+    only for the swords under a badge."""
     _mount_phone(
         phone_page,
         [
             _known(key="r", awayRank=20, homeRank=5, home="R"),
+            _known(key="v", awayRank=20, home="V", rivalry="Lakeshore Rivalry"),
+            _known(key="b", awayRank=20, homeRank=5, home="B", rivalry="Lakeshore Rivalry"),
             _known(key="o", awayRank=20, homeRank=None, home="R"),
         ],
     )
     sel = '#wk-host .wk-item[data-wk-id="g:%s"]'
-    pads = [
-        phone_page.locator(sel % k).evaluate("e => getComputedStyle(e).paddingRight")
-        for k in ("r", "o")
-    ]
-    assert pads == ["28px", "28px"]
+    style = (
+        "e => [getComputedStyle(e).paddingRight,"
+        " getComputedStyle(e.querySelector('.wk-item-l1')).marginRight,"
+        " getComputedStyle(e.querySelector('.wk-item-l2')).marginRight]"
+    )
+    got = {k: phone_page.locator(sel % k).evaluate(style) for k in ("r", "v", "b", "o")}
+    assert got == {
+        "r": ["16px", "12px", "0px"],
+        "v": ["16px", "12px", "0px"],
+        "b": ["16px", "12px", "12px"],
+        "o": ["16px", "0px", "0px"],
+    }
     rows = phone_page.evaluate(_ROW_SWEEP_JS, [sel % "r", sel % "o"])
-    differ = [r for r in rows if r["ranked"] != r["plain"]]
-    assert differ == []
-    # The sweep crossed a wrap point, so it tested the lengths that end a line near the edge.
+    # The booth line has no mark on a ranked row, so it wraps exactly as on a plain one.
+    assert all(r["ranked"]["l2"] == r["plain"]["l2"] for r in rows)
+    # The plain matchup never needs more lines, and somewhere wraps later (uses the room).
+    assert all(r["plain"]["l1"] <= r["ranked"]["l1"] for r in rows)
+    assert any(r["plain"]["l1"] < r["ranked"]["l1"] for r in rows)
     assert len({r["plain"]["l1"] for r in rows}) >= 2
+
+
+def test_phone_row_marks_share_the_badge_slot(phone_page: Page) -> None:  # noqa: F811
+    """B2 (user 2026-11-11): the swords alone sit where the badge would; under a badge they
+    centre on the booth line, in the same column, 6px in from the row's edge."""
+    _mount_phone(
+        phone_page,
+        [
+            _known(key="r", awayRank=20, homeRank=5, home="R"),
+            _known(key="v", awayRank=20, home="V", rivalry="Lakeshore Rivalry"),
+            _known(key="b", awayRank=20, homeRank=5, home="B", rivalry="Lakeshore Rivalry"),
+        ],
+    )
+    sel = '#wk-host .wk-item[data-wk-id="g:%s"]'
+
+    def centre(selector: str) -> tuple[float, float]:
+        box = phone_page.locator(selector).bounding_box()
+        assert box is not None
+        return box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+
+    row = phone_page.locator(sel % "r").bounding_box()
+    assert row is not None
+    rx, _ = centre(f"{sel % 'r'} .rk-badge")
+    assert abs((row["x"] + row["width"] - rx) - 15) < 0.6  # 18px slot, 6px in
+    vx, _ = centre(f"{sel % 'v'} .rv-mark")
+    assert abs(vx - rx) < 0.6
+    bx, by = centre(f"{sel % 'b'} .rv-mark")
+    _, l2y = centre(f"{sel % 'b'} .wk-item-l2")
+    badge_box = phone_page.locator(f"{sel % 'b'} .rk-badge").bounding_box()
+    swords_box = phone_page.locator(f"{sel % 'b'} .rv-mark").bounding_box()
+    assert badge_box is not None and swords_box is not None
+    assert abs(bx - rx) < 0.6
+    assert abs(by - l2y) < 0.6
+    assert swords_box["y"] >= badge_box["y"] + badge_box["height"] - 0.5
 
 
 def test_nfl_phone_rows_keep_their_normal_padding(phone_page: Page) -> None:  # noqa: F811

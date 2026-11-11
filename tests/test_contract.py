@@ -862,7 +862,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.8.0"
+    data["schema_version"] = "2.9.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
@@ -1269,6 +1269,16 @@ def test_scheduled_network_null_validates_and_out_of_range_fails() -> None:
     validate_site_data(_sched(_load_fixture(), network=None))
     with pytest.raises(ValidationError, match=r"telecasts_scheduled\.network\[0\]"):
         validate_site_data(_sched(_load_fixture(), network=99))
+
+
+def test_scheduled_rivalry_validates_on_its_teams_only() -> None:
+    """2.9.0: a scheduled rivalry meeting carries its rivalry index; the teams must match."""
+    # Row 0 becomes Lakeview (1) at Northfield (0), the fixture's Lakeshore Rivalry (index 1).
+    validate_site_data(_sched(_load_fixture(), away_team=1, home_team=0, rivalry=1))
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.rivalry\[0\]: teams"):
+        validate_site_data(_sched(_load_fixture(), rivalry=1))
+    with pytest.raises(ValidationError, match=r"telecasts_scheduled\.rivalry\[0\]: rivalry index"):
+        validate_site_data(_sched(_load_fixture(), rivalry=99))
 
 
 def test_week_start_after_end_rejected() -> None:

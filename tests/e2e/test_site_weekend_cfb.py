@@ -81,6 +81,7 @@ def _weekend_raw(fixture_raw: dict[str, Any], *, extra_tba: int = 0) -> dict[str
             "away_conference": 3,
             "place": None,
             "week": "5",
+            "rivalry": None,
         }
         assert row.keys() == sched.keys()
         for key, value in row.items():

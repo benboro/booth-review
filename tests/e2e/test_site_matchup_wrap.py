@@ -480,7 +480,7 @@ _CARD_JS = """async ([sides, ranked]) => {
   t.showGameTooltip({ matchup, matchupSides: sides,
     booth: { star: false, text: 'Pat Rowan · Sam Delgado', weight: 600 },
     kickoff: '7:30 pm ET, Alpha Sports', venue: 'Stonebridge Stadium, Pasadena, CA',
-    family: 'disney', ranked, rankSlot: true, conf: null },
+    family: 'disney', ranked, conf: null },
     { theme: 'light', clientX: 200, clientY: 200 });
   return true;
 }"""

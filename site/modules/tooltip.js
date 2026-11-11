@@ -347,7 +347,7 @@ export function showTextTooltip(
     }
     return node;
   });
-  el.classList.remove('rk-has', 'rk-slot');
+  el.classList.remove('rk-has');
   el.replaceChildren(...children);
   el.style.borderColor = borderColor;
   delete el.dataset.family;
@@ -372,7 +372,7 @@ export function showTextTooltip(
  */
 export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selected }) {
   const el = ensureTooltipEl();
-  el.classList.remove('rk-has', 'rk-slot');
+  el.classList.remove('rk-has');
   renderTooltipContent(el, tooltipModel(data, i, { axis, y, selected }), theme);
   delete el.dataset.kind;
   delete el.dataset.hoverable;
@@ -386,7 +386,7 @@ export function showTooltip(data, i, { axis, y, theme, clientX, clientY, selecte
 export function hideTooltip() {
   if (!tooltipEl) return;
   tooltipEl.hidden = true;
-  tooltipEl.classList.remove('rk-has', 'rk-slot');
+  tooltipEl.classList.remove('rk-has');
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -494,7 +494,7 @@ export function showVenueTooltip(card, { theme, clientX, clientY, hint }) {
   }
   children.push(text('p', 'tooltip-hint', hint));
 
-  el.classList.remove('rk-has', 'rk-slot');
+  el.classList.remove('rk-has');
   el.replaceChildren(...children);
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.leader];
   delete el.dataset.family;
@@ -535,12 +535,11 @@ function cardConferenceLine(conf) {
  * above the tapped mark so it never covers it, kept inside `within` (the map box's client
  * rect) when given, so it never covers the controls above the map.
  * @param {{matchup: string, booth: {star: boolean, text: string, weight: number},
- *   kickoff: string, venue: string, family: string, ranked?: boolean, rankSlot?: boolean,
+ *   kickoff: string, venue: string, family: string, ranked?: boolean,
  *   conf?: {away: string|null, home: string|null, season: number|null},
  *   matchupSides?: {away: string, joiner: string, home: string}}} card
- *   `ranked` adds the badge at the top right (Phase 28, D-01); `rankSlot` (every CFB card)
- *   keeps the badge's padding even without it, so the same text wraps the same ranked or not;
- *   `conf` adds the conference line under the venue; `matchupSides` lets the matchup line
+ *   `ranked` adds the badge at the top right (Phase 28, D-01) and its padding; a card
+ *   without it reserves nothing (user 2026-11-11, text wraps on what is visible); `conf` adds the conference line under the venue; `matchupSides` lets the matchup line
  *   break before its joiner.
  * @param {{theme: "light"|"dark", clientX: number, clientY: number, phone?: boolean,
  *   onOpen?: () => void, within?: {top: number, bottom: number}}} opts
@@ -590,7 +589,6 @@ export function showGameTooltip(
 
   el.replaceChildren(...children);
   el.classList.toggle('rk-has', Boolean(card.ranked));
-  el.classList.toggle('rk-slot', Boolean(card.ranked || card.rankSlot));
   el.style.borderColor = MAP_FAMILY_COLORS[theme][card.family] ?? MAP_FAMILY_COLORS[theme].other;
   delete el.dataset.family;
   delete el.dataset.hoverable;

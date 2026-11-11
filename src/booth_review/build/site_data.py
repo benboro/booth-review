@@ -400,7 +400,7 @@ def build_site_data(
     rivalry_resolution = resolve_rivalry_games(tables.games, rivalries)
     tagged_ids = {
         rivalry_resolution.by_game[int(row["game_id"])]
-        for row in shipped_rows
+        for row in (*shipped_rows, *scheduled_rows)
         if int(row["game_id"]) in rivalry_resolution.by_game
     }
     used_rivalries = sorted(
@@ -854,6 +854,10 @@ def build_site_data(
             venue_index.get(int(venue_id)) if venue_id is not None else None
         )
         scheduled_columns["week"].append(_week_label(row))
+        sched_rivalry = rivalry_resolution.by_game.get(int(row["game_id"]))
+        scheduled_columns["rivalry"].append(
+            rivalry_index[sched_rivalry] if sched_rivalry is not None else None
+        )
 
     # -- coverage: publisher_counts per (season, network), and per-season totals ------------
     publisher_counts_by_key: dict[tuple[int, str], dict[str, int]] = {}
