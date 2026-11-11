@@ -32,7 +32,7 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Final
 
 import polars as pl
@@ -49,6 +49,7 @@ from booth_review.people.registry import PeopleRegistry
 from booth_review.people.roles import Role
 from booth_review.resolve.diagnose import UnmatchedRow, UnresolvedTeamRow
 from booth_review.resolve.games import GameIndex
+from booth_review.resolve.names import to_et_date
 from booth_review.resolve.networks import (
     NetworkTable,
     primary_network,
@@ -62,6 +63,7 @@ from booth_review.sources.aa.crews import (
     AaBooth,
     AaCrewsParseError,
     ParsedCrews,
+    kickoff_et,
     parse_crews,
 )
 from booth_review.sources.aa.index import on_host
@@ -108,6 +110,7 @@ _COUNT_KEYS: tuple[str, ...] = (
     "bad_url",
     "filled",
     "scheduled_filled",
+    "kickoff_filled",
     "kept_override",
     "agreements",
     "disagreements",
@@ -153,6 +156,9 @@ class CrewAaResult:
     unmatched_rows: list[UnmatchedRow] = field(default_factory=list)
     unresolved_rows: list[UnresolvedTeamRow] = field(default_factory=list)
     scheduled_crews: dict[int, ScheduledCrew] = field(default_factory=dict)
+    # CFBD game id -> AA's listed kickoff (ET ISO), for current-season games with no
+    # telecast whose schedule time is still TBA.
+    scheduled_kickoffs: dict[int, str] = field(default_factory=dict)
 
     @property
     def filled_ids(self) -> frozenset[str]:
@@ -354,6 +360,42 @@ def _pick_target(
         if hits:
             return (hits[0], rank) if len(hits) == 1 else None
     return None
+
+
+def _listed_kickoffs(
+    pages: Sequence[AaPage],
+    *,
+    resolver: TeamResolver,
+    index: GameIndex,
+    overrides: Mapping[tuple[str, int, str], GameOverride],
+) -> dict[int, tuple[date, str, int]]:
+    """CFBD game id -> (ET date, AA's listed ET kickoff, season) from every dated game
+    line, crewed or TBD. A line matched to a game on another ET date (a date-shift or
+    an override) is never read, so a kickoff never contradicts the game's date. A
+    newer page's time replaces an older one's."""
+    out: dict[int, tuple[date, str, int]] = {}
+    ordered = sorted(
+        pages, key=lambda p: (p.aa_time is not None, p.aa_time or datetime.min.replace(tzinfo=UTC))
+    )
+    for page in ordered:
+        for line in page.parsed.times:
+            game, _reason = match_row_to_game(
+                _SOURCE,
+                line.season,
+                line.date_et,
+                line.away_raw,
+                line.home_raw,
+                resolver=resolver,
+                index=index,
+                overrides=overrides,
+                pointer=line.pointer,
+            )
+            if game is None or to_et_date(game.start_date) != line.date_et:
+                continue
+            listed = kickoff_et(line.date_et, line.kickoff)
+            if listed is not None:
+                out[game.id] = (line.date_et, listed, game.season)
+    return out
 
 
 def apply_crew_aa(
@@ -566,6 +608,21 @@ def apply_crew_aa(
             continue
         scheduled_wins[game_id] = winner
 
+    # A telecast or scheduled game with no kickoff from 506 or CFBD takes the time AA
+    # lists for the game, whatever its crew or network: the time carries no credit, and
+    # 506 and CFBD still come first.
+    listed_times = _listed_kickoffs(page_list, resolver=resolver, index=index, overrides=overrides)
+    kickoff_fills: dict[str, str] = {}
+    for row in telecasts.filter(pl.col("kickoff_et").is_null()).iter_rows(named=True):
+        listed = listed_times.get(row["game_id"])
+        if listed is not None and listed[0] == row["date_et"]:
+            kickoff_fills[row["telecast_id"]] = listed[1]
+    scheduled_kickoffs = {
+        game_id: kickoff
+        for game_id, (_, kickoff, season) in sorted(listed_times.items())
+        if season == current_season
+    }
+
     # Unknown names in the winning booths become provisional persons.
     name_counts: Counter[str] = Counter()
     name_seasons: dict[str, tuple[int, int]] = {}
@@ -624,6 +681,7 @@ def apply_crew_aa(
                 entries, cand.booth.source_url, label=CREW_AA_LABEL
             )
     counts["scheduled_filled"] = len(scheduled_crews)
+    counts["kickoff_filled"] = len(kickoff_fills)
 
     won = sorted(wins)
     filled = sorted(tid for tid, (_, is_fill) in wins.items() if is_fill)
@@ -653,6 +711,12 @@ def apply_crew_aa(
         .then(pl.lit(CREW_AA_LABEL, dtype=pl.Utf8))
         .otherwise(pl.col("crew_source_label"))
         .alias("crew_source_label"),
+        pl.when(pl.col("kickoff_et").is_null())
+        .then(
+            pl.col("telecast_id").replace_strict(kickoff_fills, default=None, return_dtype=pl.Utf8)
+        )
+        .otherwise(pl.col("kickoff_et"))
+        .alias("kickoff_et"),
     )
 
     people_out = people
@@ -685,4 +749,5 @@ def apply_crew_aa(
         unmatched_rows=unmatched_rows,
         unresolved_rows=unresolved_rows,
         scheduled_crews=scheduled_crews,
+        scheduled_kickoffs=scheduled_kickoffs,
     )

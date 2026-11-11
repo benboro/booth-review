@@ -1,7 +1,10 @@
 """Tests for job/catchup.py: ET schedule, job state, and D-13 catch-up.
 
 Verified calendar facts used below: 2026-10-04, 2026-10-11, 2026-11-01 are
-Sundays; 2026-10-07, 2026-10-14, 2026-10-28, 2026-11-04 are Wednesdays.
+Sundays; 2026-10-05, 2026-10-12, 2026-10-26 are Mondays; 2026-10-07, 2026-10-28
+are Wednesdays. The main slots are Sunday 18:00 and Monday-Wednesday 20:00 ET:
+Sun 18:00 EDT is 22:00Z, a 20:00 EDT slot is the next day's 00:00Z, Sun 18:00
+EST is 23:00Z.
 America/New_York is UTC-4 (EDT) through 2026-11-01 02:00 local, then UTC-5
 (EST). 2026-10-30 and 2026-11-06 are Fridays, 2026-10-31 and 2026-11-07 are
 Saturdays: Fri 18:00 EDT is 22:00Z, Sat 08:00 EDT is 12:00Z, Fri 18:00 EST is
@@ -58,14 +61,14 @@ def test_scheduled_slots_dst_transition_pair() -> None:
     start = datetime(2026, 10, 25, 0, 0, tzinfo=UTC)
     end = datetime(2026, 11, 2, 0, 0, tzinfo=UTC)
     slots = scheduled_slots(start, end)
-    # Wed 2026-10-28 20:00 ET, still EDT (UTC-4)
-    assert datetime(2026, 10, 29, 0, 0, tzinfo=UTC) in slots
-    # Sun 2026-11-01 10:00 ET, now EST (UTC-5)
-    assert datetime(2026, 11, 1, 15, 0, tzinfo=UTC) in slots
+    # Mon 2026-10-26 20:00 ET, still EDT (UTC-4)
+    assert datetime(2026, 10, 27, 0, 0, tzinfo=UTC) in slots
+    # Sun 2026-11-01 18:00 ET, now EST (UTC-5)
+    assert datetime(2026, 11, 1, 23, 0, tzinfo=UTC) in slots
 
 
 def test_scheduled_slots_is_half_open_start_exclusive_end_inclusive() -> None:
-    slot = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
+    slot = datetime(2026, 11, 1, 23, 0, tzinfo=UTC)
     # start == the slot itself: excluded (start exclusive), and end == start
     # means an empty window regardless.
     assert scheduled_slots(slot, slot) == []
@@ -101,19 +104,20 @@ def test_scheduled_slots_rejects_naive_datetimes() -> None:
 
 
 def test_missed_slots_schedule_trigger_excludes_own_slot() -> None:
-    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
-    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
-    assert missed_slots(last_success, now, "schedule") == 2
+    last_success = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
+    now = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
+    # Mon 10-05, Tue 10-06, Wed 10-07, Sun 10-11 and Mon 10-12 (its own slot).
+    assert missed_slots(last_success, now, "schedule") == 4
 
 
 def test_missed_slots_manual_trigger_counts_every_slot() -> None:
-    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
-    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
-    assert missed_slots(last_success, now, "manual") == 3
+    last_success = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
+    now = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
+    assert missed_slots(last_success, now, "manual") == 5
 
 
 def test_missed_slots_first_run_is_zero() -> None:
-    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
+    now = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
     assert missed_slots(None, now, "schedule") == 0
     assert missed_slots(None, now, "manual") == 0
 
@@ -148,7 +152,7 @@ def test_catchup_window_first_run_starts_at_season_july_first_et() -> None:
 
 
 def test_catchup_window_with_prior_success_starts_there() -> None:
-    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    last_success = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     state = JobState(
         season=2026,
         last_success_at=last_success,
@@ -156,12 +160,12 @@ def test_catchup_window_with_prior_success_starts_there() -> None:
         last_status="ok",
         last_window_start=None,
     )
-    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
+    now = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
     window = catchup_window(state, now, 2026, "schedule")
     assert window.first_run is False
     assert window.start == last_success
     assert window.end == now
-    assert window.missed_slots == 2
+    assert window.missed_slots == 4
 
 
 def test_catchup_window_rejects_naive_now() -> None:
@@ -284,25 +288,25 @@ def test_is_due_schedule_trigger_false_with_no_main_slot_since_last_success() ->
 
 
 def test_is_due_schedule_trigger_true_with_a_main_slot_since_last_success() -> None:
-    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
-    now = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
+    last_success = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
+    now = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
     state = _state_with_last_success(last_success)
     assert is_due(state, now, "schedule") is True
 
 
 def test_is_due_across_dst_boundary_false_before_the_next_main_slot() -> None:
     # Wed 2026-10-28 20:00 ET (still EDT, UTC-4) == 2026-10-29T00:00Z; the next
-    # main slot is Sun 2026-11-01 10:00 ET (now EST, UTC-5) == 2026-11-01T15:00Z.
+    # main slot is Sun 2026-11-01 18:00 ET (now EST, UTC-5) == 2026-11-01T23:00Z.
     last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
     state = _state_with_last_success(last_success)
-    just_before_next_slot = datetime(2026, 11, 1, 14, 59, tzinfo=UTC)
+    just_before_next_slot = datetime(2026, 11, 1, 22, 59, tzinfo=UTC)
     assert is_due(state, just_before_next_slot, "schedule") is False
 
 
 def test_is_due_across_dst_boundary_true_at_the_next_main_slot() -> None:
     last_success = datetime(2026, 10, 29, 0, 0, tzinfo=UTC)
     state = _state_with_last_success(last_success)
-    at_next_slot = datetime(2026, 11, 1, 15, 0, tzinfo=UTC)
+    at_next_slot = datetime(2026, 11, 1, 23, 0, tzinfo=UTC)
     assert is_due(state, at_next_slot, "schedule") is True
 
 
@@ -317,64 +321,64 @@ def _state_failed_attempt(last_success: datetime | None, last_attempt: datetime)
 
 
 def test_is_due_failed_attempt_after_the_main_slot_makes_backup_slots_no_ops() -> None:
-    # Sun 2026-10-04 10:00 ET main slot (14:00Z) ran at 14:05Z and a step failed:
-    # last_success_at stays at the previous Wednesday. The Sunday backup slots
-    # that follow must not re-run the whole job.
-    last_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
-    failed_attempt = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    # Sun 2026-10-04 18:00 ET main slot (22:00Z) ran at 22:05Z and a step failed:
+    # last_success_at stays at the previous Monday. The backup slots that follow
+    # must not re-run the whole job.
+    last_success = datetime(2026, 9, 29, 0, 5, tzinfo=UTC)
+    failed_attempt = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     state = _state_failed_attempt(last_success, failed_attempt)
     for backup in (
-        datetime(2026, 10, 4, 16, 0, tzinfo=UTC),
-        datetime(2026, 10, 4, 22, 0, tzinfo=UTC),
-        datetime(2026, 10, 7, 12, 0, tzinfo=UTC),  # Wednesday morning, before 20:00 ET
+        datetime(2026, 10, 5, 0, 0, tzinfo=UTC),  # Sunday 20:00 ET
+        datetime(2026, 10, 5, 2, 0, tzinfo=UTC),  # Sunday 22:00 ET
+        datetime(2026, 10, 5, 12, 0, tzinfo=UTC),  # Monday morning, before 20:00 ET
     ):
         assert is_due(state, backup, "schedule") is False
 
 
 def test_is_due_failed_attempt_is_retried_at_the_next_main_slot() -> None:
-    last_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
-    failed_attempt = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    last_success = datetime(2026, 9, 29, 0, 5, tzinfo=UTC)
+    failed_attempt = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     state = _state_failed_attempt(last_success, failed_attempt)
-    next_main_slot = datetime(2026, 10, 8, 0, 0, tzinfo=UTC)  # Wed 2026-10-07 20:00 ET
+    next_main_slot = datetime(2026, 10, 6, 0, 0, tzinfo=UTC)  # Mon 2026-10-05 20:00 ET
     assert is_due(state, next_main_slot, "schedule") is True
 
 
 def test_is_due_failed_attempt_never_blocks_a_manual_run() -> None:
     state = _state_failed_attempt(
-        datetime(2026, 10, 1, 0, 5, tzinfo=UTC), datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+        datetime(2026, 9, 29, 0, 5, tzinfo=UTC), datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     )
     assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "manual") is True
 
 
 def test_is_due_failed_first_attempt_with_no_success_waits_for_the_next_main_slot() -> None:
-    state = _state_failed_attempt(None, datetime(2026, 10, 4, 14, 5, tzinfo=UTC))
-    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is False
-    assert is_due(state, datetime(2026, 10, 8, 0, 0, tzinfo=UTC), "schedule") is True
+    state = _state_failed_attempt(None, datetime(2026, 10, 4, 22, 5, tzinfo=UTC))
+    assert is_due(state, datetime(2026, 10, 5, 0, 0, tzinfo=UTC), "schedule") is False
+    assert is_due(state, datetime(2026, 10, 6, 0, 0, tzinfo=UTC), "schedule") is True
 
 
 def test_is_due_dropped_main_slot_is_still_caught_by_a_backup_slot() -> None:
-    # The last attempt (a success) was the previous Wednesday; the Sunday main
+    # The last attempt (a success) was the previous Monday; the Sunday main
     # slot was dropped by GitHub's scheduler, so the Sunday backup slot runs.
-    last = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)
+    last = datetime(2026, 9, 29, 0, 5, tzinfo=UTC)
     state = _state_with_last_success(last)
-    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is True
+    assert is_due(state, datetime(2026, 10, 5, 0, 0, tzinfo=UTC), "schedule") is True
 
 
 # -- retry_pending: a transient CFBD failure is retried at backup slots ----------------
 
 
 def test_is_due_retry_pending_makes_a_backup_slot_due() -> None:
-    # Sun 2026-10-04 10:00 ET main slot's CFBD step hit a 502; the backup
-    # slots that follow retry it instead of waiting for Wednesday.
+    # Sun 2026-10-04 18:00 ET main slot's CFBD step hit a 502; the backup
+    # slots that follow retry it instead of waiting for Monday.
     state = JobState(
         season=2026,
-        last_success_at=datetime(2026, 10, 1, 0, 5, tzinfo=UTC),
-        last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+        last_success_at=datetime(2026, 9, 29, 0, 5, tzinfo=UTC),
+        last_attempt_at=datetime(2026, 10, 4, 22, 5, tzinfo=UTC),
         last_status="attention",
         last_window_start=None,
         retry_pending=True,
     )
-    assert is_due(state, datetime(2026, 10, 4, 16, 0, tzinfo=UTC), "schedule") is True
+    assert is_due(state, datetime(2026, 10, 5, 0, 0, tzinfo=UTC), "schedule") is True
 
 
 def test_load_state_without_retry_pending_defaults_false(tmp_path: Path) -> None:
@@ -400,7 +404,7 @@ def test_save_state_round_trips_retry_pending(tmp_path: Path) -> None:
     state = JobState(
         season=2026,
         last_success_at=None,
-        last_attempt_at=datetime(2026, 10, 4, 14, 5, tzinfo=UTC),
+        last_attempt_at=datetime(2026, 10, 4, 22, 5, tzinfo=UTC),
         last_status="attention",
         last_window_start=None,
         retry_pending=True,
@@ -467,8 +471,8 @@ def _state(success: datetime, attempt: datetime) -> JobState:
 
 
 def test_missed_counts_from_last_attempt_when_attempt_equals_success() -> None:
-    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
-    now = datetime(2026, 10, 8, 9, 0, tzinfo=EASTERN)
+    sunday = datetime(2026, 10, 4, 18, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 6, 9, 0, tzinfo=EASTERN)
     window = catchup_window(_state(sunday, sunday), now, 2026, "manual")
     assert window.missed_slots == 1
     assert window.failed_slots == 0
@@ -476,18 +480,18 @@ def test_missed_counts_from_last_attempt_when_attempt_equals_success() -> None:
 
 
 def test_failed_attempt_slot_counts_as_failed_not_missed() -> None:
-    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
-    wednesday = datetime(2026, 10, 7, 20, 30, tzinfo=EASTERN)
-    now = datetime(2026, 10, 8, 9, 0, tzinfo=EASTERN)
-    window = catchup_window(_state(sunday, wednesday), now, 2026, "manual")
+    sunday = datetime(2026, 10, 4, 18, 30, tzinfo=EASTERN)
+    monday = datetime(2026, 10, 5, 20, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 6, 9, 0, tzinfo=EASTERN)
+    window = catchup_window(_state(sunday, monday), now, 2026, "manual")
     assert window.missed_slots == 0
     assert window.failed_slots == 1
     assert window.start == sunday
 
 
 def test_schedule_trigger_excludes_its_own_slot() -> None:
-    sunday = datetime(2026, 10, 4, 10, 30, tzinfo=EASTERN)
-    now = datetime(2026, 10, 7, 20, 5, tzinfo=EASTERN)
+    sunday = datetime(2026, 10, 4, 18, 30, tzinfo=EASTERN)
+    now = datetime(2026, 10, 5, 20, 5, tzinfo=EASTERN)
     window = catchup_window(_state(sunday, sunday), now, 2026, "schedule")
     assert window.missed_slots == 0
 
@@ -521,7 +525,7 @@ def test_schedule_only_slots_never_count_as_main_slots() -> None:
 
 
 def _sunday_run() -> JobState:
-    # Last full run: Wed 2026-10-28 20:00 EDT (the Sunday/Wednesday main slots).
+    # Last full run: Wed 2026-10-28 20:00 EDT, the week's last main slot.
     return _state_with_last_success(datetime(2026, 10, 29, 0, 5, tzinfo=UTC))
 
 
@@ -531,7 +535,7 @@ def test_resolve_mode_friday_slot_is_schedule_only() -> None:
 
 
 def test_resolve_mode_main_slot_wins_over_schedule_only() -> None:
-    now = datetime(2026, 11, 1, 15, 5, tzinfo=UTC)
+    now = datetime(2026, 11, 1, 23, 5, tzinfo=UTC)
     assert resolve_mode(_sunday_run(), now, "schedule", None) == "full"
 
 
@@ -567,3 +571,14 @@ def test_last_schedule_at_round_trips_and_defaults(tmp_path: Path) -> None:
     save_state(path, replace(_sunday_run(), last_schedule_at=stamp))
     assert load_state(path).last_schedule_at == stamp
     assert '"version": 1' in path.read_text(encoding="utf-8")
+
+
+def test_main_slots_are_sunday_18_and_monday_to_wednesday_20_et() -> None:
+    start = datetime(2026, 11, 8, 0, 0, tzinfo=EASTERN)
+    end = datetime(2026, 11, 14, 23, 59, tzinfo=EASTERN)
+    assert [s.astimezone(EASTERN).strftime("%a %H:%M") for s in scheduled_slots(start, end)] == [
+        "Sun 18:00",
+        "Mon 20:00",
+        "Tue 20:00",
+        "Wed 20:00",
+    ]

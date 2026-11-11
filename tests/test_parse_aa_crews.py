@@ -16,6 +16,7 @@ from booth_review.sources.aa.crews import (
     AaCrewsParseError,
     ParsedCrews,
     crews_cache_path,
+    kickoff_et,
     parse_crews,
 )
 
@@ -312,3 +313,34 @@ def test_booth_without_a_real_play_by_play_counts_as_tbd(crew: str) -> None:
     parsed = _parse(_one_game(crew))
     assert parsed.booths == []
     assert (parsed.tbd, parsed.no_pbp, parsed.unparsed) == (1, 0, 0)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("7:30 p.m.", "2026-11-14T19:30:00-05:00"),
+        ("12 p.m.", "2026-11-14T12:00:00-05:00"),
+        ("Noon", "2026-11-14T12:00:00-05:00"),
+        ("9 p.m. ET", "2026-11-14T21:00:00-05:00"),
+        ("Noon ET", "2026-11-14T12:00:00-05:00"),
+        ("8 p.m. EDT", "2026-11-14T20:00:00-05:00"),
+        ("7 p.m. CT", None),
+        ("11 a.m.", "2026-11-14T11:00:00-05:00"),
+        ("10:15", None),
+        ("TBA", None),
+        ("1 a.m.", None),
+        ("12 a.m.", None),
+        ("13 p.m.", None),
+        (None, None),
+    ],
+)
+def test_kickoff_et_reads_only_a_clear_et_time(text: str | None, expected: str | None) -> None:
+    assert kickoff_et(date(2026, 11, 14), text) == expected
+
+
+def test_every_dated_game_line_keeps_its_time_crewed_or_not() -> None:
+    parsed = _parse(_HTML)
+    assert len(parsed.times) >= len(parsed.booths) + parsed.tbd + parsed.no_pbp
+    booth_lines = {(b.date_et, b.away_raw, b.home_raw, b.kickoff, b.pointer) for b in parsed.booths}
+    time_lines = {(t.date_et, t.away_raw, t.home_raw, t.kickoff, t.pointer) for t in parsed.times}
+    assert booth_lines <= time_lines

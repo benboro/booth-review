@@ -518,6 +518,7 @@ def assemble_tables(
     schedule = replace(
         schedule,
         crews={**backup.scheduled_crews, **aa.scheduled_crews},
+        kickoffs=aa.scheduled_kickoffs,
         stamps=restrict_espnpr_stamps(schedule.stamps, backup_labels),
     )
     telecasts = backup.telecasts

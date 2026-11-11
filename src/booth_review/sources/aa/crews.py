@@ -33,9 +33,10 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from booth_review.config import DataPaths
 from booth_review.people.roles import Role
@@ -93,6 +94,47 @@ def _is_placeholder(text: str) -> bool:
     return re.sub(r"[^a-z]", "", text.lower()) in _PLACEHOLDERS
 
 
+_EASTERN = ZoneInfo("America/New_York")
+# AA's game-line times, all ET: "7:30 p.m.", "12 p.m.", "Noon". A time with no
+# a.m./p.m. ("10:15") is ambiguous and never read.
+_KICKOFF_RE = re.compile(
+    r"^(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?\s*(?P<half>a\.?m\.?|p\.?m\.?)$"
+)
+# AA sometimes adds the zone; only an Eastern one is stripped, any other is never read.
+_TZ_SUFFIX_RE = re.compile(r"\s+e[sd]?t\.?$")
+# An a.m. time this early belongs to the next calendar day (a late West Coast
+# kickoff), so its date would not be the header's; never read.
+_EARLIEST_AM_HOUR = 6
+
+
+def kickoff_et(day: date, text: str | None) -> str | None:
+    """AA's listed kickoff on `day` as an aware ET ISO string, or None.
+
+    Only a clear clock time is read; a placeholder, a bare "10:15" or an
+    after-midnight a.m. time gives None.
+    """
+    if text is None:
+        return None
+    cleaned = _TZ_SUFFIX_RE.sub("", text.strip().lower())
+    if cleaned == "noon":
+        hour, minute = 12, 0
+    else:
+        match = _KICKOFF_RE.match(cleaned)
+        if match is None:
+            return None
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute") or 0)
+        if not 1 <= hour <= 12 or minute > 59:
+            return None
+        if match.group("half").startswith("a"):
+            if hour == 12 or hour < _EARLIEST_AM_HOUR:
+                return None
+        elif hour != 12:
+            hour += 12
+    moment = datetime(day.year, day.month, day.day, hour, minute, tzinfo=_EASTERN)
+    return moment.isoformat()
+
+
 class AaCrewsParseError(ValueError):
     """A crews post that can't be parsed safely; the message is count-only."""
 
@@ -111,6 +153,18 @@ class AaBooth:
 
 
 @dataclass(frozen=True)
+class AaGameTime:
+    """One dated game line's listed time, whatever its crew says (TBD included)."""
+
+    season: int
+    date_et: date
+    kickoff: str | None
+    away_raw: str
+    home_raw: str
+    pointer: str
+
+
+@dataclass(frozen=True)
 class ParsedCrews:
     url: str
     modified: datetime | None
@@ -119,6 +173,8 @@ class ParsedCrews:
     unparsed: int
     tbd: int
     no_pbp: int
+    # Every dated game line, crewed or not: the kickoff fallback's input.
+    times: list[AaGameTime] = field(default_factory=list)
 
 
 class _CrewsParser(_PostParser):
@@ -264,6 +320,7 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
     published = _aware(parser.published_meta) or _ld_time(parser.ld_blobs, "datePublished")
 
     booths: list[AaBooth] = []
+    times: list[AaGameTime] = []
     unparsed = tbd = no_pbp = 0
     day: date | None = None
     seen_header = False
@@ -295,6 +352,16 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
         if teams is None or day is None:
             unparsed += 1
             continue
+        times.append(
+            AaGameTime(
+                season=season,
+                date_et=day,
+                kickoff=game.group("time").strip() or None,
+                away_raw=teams[0],
+                home_raw=teams[1],
+                pointer=f"{slug}:{line}",
+            )
+        )
         crew_text = game.group("crew").strip()
         if _is_placeholder(crew_text):
             tbd += 1
@@ -337,6 +404,7 @@ def parse_crews(html: str, *, season: int) -> ParsedCrews:
         unparsed=unparsed,
         tbd=tbd,
         no_pbp=no_pbp,
+        times=times,
     )
 
 

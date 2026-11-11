@@ -50,6 +50,9 @@ class ScheduleInputs:
     stamps: dict[str, WeekendStamps] = field(default_factory=dict)
     # CFBD game id -> ESPN Press Room booth for a game with no telecast (18-13 F7).
     crews: dict[int, ScheduledCrew] = field(default_factory=dict)
+    # CFBD game id -> Awful Announcing's listed kickoff (ET ISO) for a game with no
+    # telecast whose CFBD time is still TBA; CFBD's own time always wins.
+    kickoffs: dict[int, str] = field(default_factory=dict)
 
 
 def _fbs_regular(games: Iterable[CfbdGame], season: int) -> list[CfbdGame]:

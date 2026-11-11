@@ -116,7 +116,7 @@ FIRST_SEASON = 2014
 # WR-04: a record whose last refresh fetch failed (a 4xx) at the same sitemap
 # lastmod it still has is held back this long, then retried after every other
 # qualifying record. 6 days means about one retry a week at the job's
-# Sunday/Wednesday cadence. A new lastmod clears the hold at once.
+# Sunday-to-Wednesday cadence. A new lastmod clears the hold at once.
 FAILED_RETRY_AFTER = timedelta(days=6)
 
 
