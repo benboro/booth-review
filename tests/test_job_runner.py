@@ -222,7 +222,7 @@ def test_scheduled_job_catchup_from_backdated_state_sends_expected_requests(
     paths = git_vault
     _seed_required_state(paths, cfbd_month="2026-10")
 
-    last_success = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    last_success = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     save_state(
         paths.job_state,
         JobState(
@@ -234,7 +234,7 @@ def test_scheduled_job_catchup_from_backdated_state_sends_expected_requests(
         ),
     )
 
-    now_value = datetime(2026, 10, 15, 0, 10, tzinfo=UTC)
+    now_value = datetime(2026, 10, 13, 0, 10, tzinfo=UTC)
     _precache_cfbd_season(paths, 2026)
 
     slugs = [f"cfb-new-team-{i:02d}-2026-09-{10 + i:02d}" for i in range(6)]
@@ -270,7 +270,7 @@ def test_scheduled_job_catchup_from_backdated_state_sends_expected_requests(
     assert all("506sports.com" not in r.url for r in handle.requests)
 
     assert result.window is not None
-    assert result.window.missed_slots == 2
+    assert result.window.missed_slots == 4
 
     saved_state = load_state(paths.job_state)
     assert saved_state.last_success_at == now_value
@@ -697,7 +697,7 @@ def test_scheduled_job_cfbd_502_sets_retry_pending_and_next_backup_slot_retries(
 ) -> None:
     paths = git_vault
     _seed_required_state(paths, cfbd_month="2026-10")
-    prior_success = datetime(2026, 10, 1, 0, 5, tzinfo=UTC)  # Wed 2026-09-30 20:05 ET
+    prior_success = datetime(2026, 9, 29, 0, 5, tzinfo=UTC)  # Mon 2026-09-28 20:05 ET
     save_state(
         paths.job_state,
         JobState(
@@ -709,8 +709,8 @@ def test_scheduled_job_cfbd_502_sets_retry_pending_and_next_backup_slot_retries(
         ),
     )
 
-    # Sunday 10:00 ET main slot: CFBD's gateway answers 502 on every attempt.
-    main_slot = datetime(2026, 10, 4, 14, 5, tzinfo=UTC)
+    # Sunday 18:00 ET main slot: CFBD's gateway answers 502 on every attempt.
+    main_slot = datetime(2026, 10, 4, 22, 5, tzinfo=UTC)
     down = _cfbd_ok_responses(2026)
     games_url = "https://api.collegefootballdata.com/games?seasonType=both&year=2026"
     down[games_url] = (502, b"<html>Bad Gateway</html>", {})
@@ -730,8 +730,8 @@ def test_scheduled_job_cfbd_502_sets_retry_pending_and_next_backup_slot_retries(
     assert state.retry_pending is True
     assert state.last_success_at == prior_success
 
-    # The 16:00 ET backup slot is due again and, with CFBD back, clears the flag.
-    backup_slot = datetime(2026, 10, 4, 20, 0, tzinfo=UTC)
+    # The 20:00 ET backup slot is due again and, with CFBD back, clears the flag.
+    backup_slot = datetime(2026, 10, 5, 0, 0, tzinfo=UTC)
     up = _cfbd_ok_responses(2026)
     up["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
     up[SITEMAP_URL] = (200, _empty_sitemap_xml(), {})
@@ -749,7 +749,7 @@ def test_scheduled_job_cfbd_502_sets_retry_pending_and_next_backup_slot_retries(
     assert state.last_success_at == backup_slot
 
     # With the flag cleared, the next backup slot is a no-op again.
-    later = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
+    later = datetime(2026, 10, 5, 2, 0, tzinfo=UTC)
     handle = mock_transport_factory({})
     runtime = _runtime(paths, handle, now=lambda: later, fake_clock=fake_clock)
     result = ScheduledJob(runtime, token="test-token", now=lambda: later, trigger="schedule").run()
@@ -2481,7 +2481,8 @@ def _comment_only_tue(paths, handle, fake_clock, when, *, dry_run=False):
 
 
 def _seeded_reminder_vault(paths, *, weeks: dict[str, str] | None = None) -> None:
-    _reminder_vault(paths, last_attempt=datetime(2026, 10, 12, 12, 0, tzinfo=UTC))
+    # Tue 2026-10-13 20:05 EDT: the Tuesday 20:00 main slot already ran.
+    _reminder_vault(paths, last_attempt=datetime(2026, 10, 14, 0, 5, tzinfo=UTC))
     _seed_aa_ready(paths, weeks=weeks)
     _git(paths, "add", "-A")
     _git(paths, "commit", "-q", "-m", "test: aa ready")

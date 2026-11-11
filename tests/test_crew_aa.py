@@ -4,6 +4,7 @@ Synthetic data only: invented teams, people and posts."""
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,7 @@ from booth_review.people.roles import Role
 from booth_review.resolve.games import GameIndex
 from booth_review.resolve.networks import NetworkRow, NetworkTable
 from booth_review.resolve.teams import TeamResolver
-from booth_review.sources.aa.crews import AaBooth, ParsedCrews, parse_crews
+from booth_review.sources.aa.crews import AaBooth, AaGameTime, ParsedCrews, parse_crews
 from booth_review.sources.cfbd.parser import CfbdGame
 from booth_review.sources.espnpr.parser import EspnPrBooth
 
@@ -796,3 +797,77 @@ def test_espn_backup_row_on_an_aa_crew_says_aa_not_506() -> None:
     assert row["s506_person_ids"] == ""
     assert row["aa_person_ids"] == "avery-lane|morgan-pike"
     assert row["backup_person_ids"] == "blair-tolley|quinn-harrow"
+
+
+# -- Kickoff fallback ------------------------------------------------------------------------
+
+
+def _time(
+    kickoff: str | None,
+    *,
+    day: date = date(SEASON, 11, 7),
+    away: str = "Silverlake",
+    home: str = "Northfield",
+    pointer: str = "invented:1",
+) -> AaGameTime:
+    return AaGameTime(
+        season=SEASON, date_et=day, kickoff=kickoff, away_raw=away, home_raw=home, pointer=pointer
+    )
+
+
+def _timed_page(times: list[AaGameTime], booths: list[AaBooth] | None = None) -> AaPage:
+    page = _page(booths or [])
+    return replace(page, parsed=replace(page.parsed, times=times))
+
+
+def test_a_telecast_with_no_kickoff_takes_aas_listed_time() -> None:
+    """CFBD and 506 still list the game at TBA; AA's time fills it, whoever keeps the crew."""
+    tels = [_tel(crew_matched=True, kickoff_et=None)]
+    tp = [_tp("100-espn", "avery-lane", 0), _tp("100-espn", "morgan-pike", 1)]
+    page = _timed_page([_time("7:30 p.m.")], [_booth(PBP_ANALYST)])
+    result = _run(tels, [page], tp)
+    assert result.statuses == {"100-espn": "agrees"}
+    assert result.telecasts.to_dicts()[0]["kickoff_et"] == "2026-11-07T19:30:00-05:00"
+    assert result.counts["kickoff_filled"] == 1
+
+
+def test_a_tbd_crew_still_gives_its_time() -> None:
+    # No booth at all (AA lists the crew as TBD), only the game line's time.
+    result = _run([_tel(kickoff_et=None)], [_timed_page([_time("Noon ET")])])
+    assert result.statuses == {}
+    assert result.telecasts.to_dicts()[0]["kickoff_et"] == "2026-11-07T12:00:00-05:00"
+
+
+def test_a_known_kickoff_is_never_replaced_by_aas() -> None:
+    tels = [_tel(kickoff_et="2026-11-07T15:30:00-05:00")]
+    result = _run(tels, [_timed_page([_time("7:30 p.m.")])])
+    assert result.telecasts.to_dicts()[0]["kickoff_et"] == "2026-11-07T15:30:00-05:00"
+    assert result.counts["kickoff_filled"] == 0
+
+
+def test_a_time_matched_on_another_day_is_never_read() -> None:
+    """A date-shift match (AA lists the game a day off CFBD's) would put the kickoff on
+    another calendar day than the game's date, on both paths."""
+    page = _timed_page([_time("9 p.m.", day=date(SEASON, 11, 8))])
+    result = _run([_tel(kickoff_et=None)], [page], scheduled_networks={101: "espn"})
+    assert result.telecasts.to_dicts()[0]["kickoff_et"] is None
+    scheduled = _run([], [page], scheduled_networks={100: "espn"})
+    assert scheduled.scheduled_kickoffs == {}
+
+
+def test_a_scheduled_game_gets_aas_time_whatever_its_network() -> None:
+    times = [
+        _time("9 p.m."),
+        _time("10:15", away="Riverbend", home="Lakeshore", pointer="invented:2"),
+    ]
+    for networks in ({100: "espn", 101: "espn"}, {100: None}, {}):
+        result = _run([], [_timed_page(times)], scheduled_networks=networks)
+        assert result.scheduled_kickoffs == {100: "2026-11-07T21:00:00-05:00"}
+
+
+def test_a_newer_pages_time_wins() -> None:
+    older = replace(_timed_page([_time("3:30 p.m.")]), aa_time=T_OLD)
+    newer = replace(_timed_page([_time("7 p.m.")]), aa_time=T_NEW)
+    for pages in ([older, newer], [newer, older]):
+        result = _run([], pages, scheduled_networks={})
+        assert result.scheduled_kickoffs == {100: "2026-11-07T19:00:00-05:00"}

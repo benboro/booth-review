@@ -1,6 +1,6 @@
 """ET schedule, vault-held job state, and the D-13 catch-up calculator.
 
-The scheduled job fires Sunday 10:00 and Wednesday 20:00 America/New_York
+The scheduled job fires Sunday 18:00 and Monday-Wednesday 20:00 America/New_York
 (D-11), a schedule that must stay correct across the fall DST change. State
 (`ledger/job_state.json`, D-13/discretion item) lives in the vault, never in
 Actions cache or artifacts; a missing file means "first run", and a corrupt
@@ -27,9 +27,12 @@ from booth_review.transport.cache import atomic_write_json
 EASTERN = ZoneInfo("America/New_York")
 
 # (weekday, hour) pairs in America/New_York local time, using Python's
-# date.weekday() numbering (Monday=0 .. Sunday=6): Sunday 10:00 and
-# Wednesday 20:00 (D-11).
-SCHEDULE: tuple[tuple[int, int], ...] = ((6, 10), (2, 20))
+# date.weekday() numbering (Monday=0 .. Sunday=6): Sunday 18:00, Monday 20:00,
+# Tuesday 20:00 and Wednesday 20:00. The 2026-11-11 change (from Sunday 10:00 and
+# Wednesday 20:00) runs Sunday after the polls are out and adds Monday and Tuesday so
+# kickoff times the conferences set early in the week reach the weekend view sooner;
+# Wednesday stays the viewership run (Ratings Reference posts mostly Tue-Wed).
+SCHEDULE: tuple[tuple[int, int], ...] = ((6, 18), (0, 20), (1, 20), (2, 20))
 
 # Schedule-only slots (Phase 18 D-17): Friday 18:00 and Saturday 08:00 ET, after
 # typical Thursday/Friday imports and before the first Saturday noon kickoff.
@@ -92,7 +95,7 @@ class JobState:
     """Set by a schedule-only run that pulled and built cleanly (D-17, 18-13 F11); a
     failed pull or a rebuild never moves it, so the next backup slot still pulls.
     Those runs never move `last_success_at` or `last_attempt_at`, so the
-    Sunday/Wednesday slot logic is unchanged; this field only stops a backup cron
+    main-slot logic is unchanged; this field only stops a backup cron
     repeating a clean schedule-only run."""
     build_held_since: datetime | None = None
     """When the regression guard first blocked the CFB build that is still blocked;
@@ -284,7 +287,7 @@ def is_due(state: JobState, now: datetime, trigger: Trigger) -> bool:
     A `trigger="manual"` run is always due, and so is a run with no prior
     attempt or success at all (first run) -- there is nothing to measure a
     gap from yet. A `trigger="schedule"` run is due only when at least one
-    main slot (Sunday 10:00 / Wednesday 20:00 ET, D-11) has occurred since
+    main slot (Sunday 18:00, Monday-Wednesday 20:00 ET) has occurred since
     the last *attempt* (`last_attempt_at`, falling back to
     `last_success_at` for state written before attempts were recorded);
     otherwise the scheduler fired a backup slot with nothing new to
@@ -319,7 +322,7 @@ def resolve_mode(
     """The mode a run should take, or None for a backup-slot no-op (D-17).
 
     A manual run takes `requested` (default "full"). A scheduled run is "full"
-    when a main slot (Sunday/Wednesday) is due (`is_due`), "schedule" when only a
+    when a main slot (Sunday-Wednesday) is due (`is_due`), "schedule" when only a
     Friday/Saturday schedule-only slot passed since the later of
     `last_schedule_at` and the last attempt, else None. Schedule and rebuild
     runs never move `last_success_at` or `last_attempt_at`.

@@ -264,7 +264,7 @@ The per-person table (`telecast_people`) is what makes filtering work across net
 | 4. Descriptive view | Scatter plot for Question A | Working filter and hover |
 | 5. Model | Section 7.2 model plus event studies around conference moves | Crew effects with intervals; residuals feeding the y-axis toggle |
 | 6. Toggle prep | Repeat Phase 0 for NFL and MLB | Go or no-go per sport; NFL decided October 9, 2026: go for both questions (Section 12); MLB decided October 10, 2026: go for the top crew vs. other crews (Apple TV+) and postseason booth assignment (Section 12) |
-| 7. In-season updates | Scheduled job that fetches only the current season (506 week pages, new Ratings Reference records, CFBD data for the week), adds it to the earlier seasons, rebuilds the site data, and publishes it. Runs Sunday for crews, scores, and excitement, and Wednesday for viewership. Can start once Phase 4 works; it doesn't need Phase 5 | A weekend's games appear on the site by Sunday night and their viewership by Wednesday, with no re-fetch of earlier seasons and CFBD use well under the monthly limit |
+| 7. In-season updates | Scheduled job that fetches only the current season (506 week pages, new Ratings Reference records, CFBD data for the week), adds it to the earlier seasons, rebuilds the site data, and publishes it. Runs Sunday evening for crews, scores, excitement and polls, Monday and Tuesday evenings for the coming weekend's kickoff times, and Wednesday for viewership. Can start once Phase 4 works; it doesn't need Phase 5 | A weekend's games appear on the site by Sunday night and their viewership by Wednesday, with no re-fetch of earlier seasons and CFBD use well under the monthly limit |
 
 **Phase 7 notes:**
 

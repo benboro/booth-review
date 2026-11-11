@@ -23,6 +23,7 @@ import yaml
 
 import booth_review
 from booth_review.errors import VaultCommitError
+from booth_review.job.catchup import SCHEDULE
 from booth_review.vault import VaultRepo, batch_message
 
 WORKFLOW_PATH = Path("ops/vault/collect.yml")
@@ -66,24 +67,24 @@ def test_version_matches_pyproject_and_lock() -> None:
     lock = tomllib.loads(Path("uv.lock").read_text(encoding="utf-8"))
     locked = next(pkg for pkg in lock["package"] if pkg["name"] == "booth-review")
     assert booth_review.__version__ == pyproject["project"]["version"] == locked["version"]
-    assert booth_review.__version__ == "0.21.4"
+    assert booth_review.__version__ == "0.21.5"
 
 
 # -- collect.yml: schedule / triggers ----------------------------------------------------------
 
 
-def test_workflow_has_thirteen_america_new_york_timezone_entries() -> None:
+def test_workflow_has_fourteen_america_new_york_timezone_entries() -> None:
     # 2 main slots (D-11) + 3 backup-slot groups (D-12: Sun afternoon/evening,
     # Wed late, Thu daytime) + the 4 Phase 18 schedule-only entries (Fri/Sat
     # main and backup) + the 4 Phase 24 reminder entries -- every schedule
     # entry uses the same timezone.
-    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 13
+    assert WORKFLOW_TEXT.count('timezone: "America/New_York"') == 14
 
 
-def test_workflow_schedule_has_exactly_thirteen_entries_all_america_new_york() -> None:
+def test_workflow_schedule_has_exactly_fourteen_entries_all_america_new_york() -> None:
     workflow = yaml.safe_load(WORKFLOW_TEXT)
     entries = workflow[True]["schedule"]
-    assert len(entries) == 13
+    assert len(entries) == 14
     assert all(entry["timezone"] == "America/New_York" for entry in entries)
 
 
@@ -97,15 +98,48 @@ def test_workflow_has_the_phase_24_reminder_crons() -> None:
     assert len(crons) == len(set(crons))
 
 
-def test_workflow_has_sunday_and_wednesday_main_slot_cron_entries() -> None:
-    assert '"0 10 * * 0"' in WORKFLOW_TEXT
-    assert '"0 20 * * 3"' in WORKFLOW_TEXT
+def _cron_times(cron: str) -> set[tuple[int, int]]:
+    """(cron weekday, hour) pairs a plain `0 <hours> * * <days>` entry fires at."""
+
+    def _expand(field: str) -> set[int]:
+        values: set[int] = set()
+        for part in field.split(","):
+            span, _, step = part.partition("/")
+            lo, _, hi = span.partition("-")
+            values.update(range(int(lo), int(hi or lo) + 1, int(step or 1)))
+        return values
+
+    minute, hours, _, _, days = cron.split()
+    assert minute == "0"
+    return {(day, hour) for day in _expand(days) for hour in _expand(hours)}
+
+
+def _workflow_crons() -> list[str]:
+    return [entry["cron"] for entry in yaml.safe_load(WORKFLOW_TEXT)[True]["schedule"]]
+
+
+def test_workflow_has_the_sunday_to_wednesday_main_slot_cron_entries() -> None:
+    crons = _workflow_crons()
+    assert "0 18 * * 0" in crons
+    assert "0 20 * * 1-3" in crons
+    # The Sunday 10:00 main slot moved to 18:00 on 2026-11-11.
+    assert "0 10 * * 0" not in crons
 
 
 def test_workflow_has_backup_slot_cron_entries() -> None:
-    assert '"0 12-22/2 * * 0"' in WORKFLOW_TEXT  # Sunday backup slots
-    assert '"0 22 * * 3"' in WORKFLOW_TEXT  # Wednesday backup slot
-    assert '"0 6-16/2 * * 4"' in WORKFLOW_TEXT  # Thursday backup slots
+    crons = _workflow_crons()
+    assert "0 20,22 * * 0" in crons  # Sunday backup slots
+    assert "0 6-16/2 * * 1" in crons  # Monday morning backups for Sunday
+    assert "0 22 * * 1-3" in crons  # Monday-Wednesday backup slots
+    assert "0 6-16/2 * * 4" in crons  # Thursday backup slots
+
+
+def test_workflow_main_slot_crons_match_the_job_slots() -> None:
+    """Every main slot in job.catchup.SCHEDULE has a cron firing at that ET time."""
+    fired = set().union(*(_cron_times(c) for c in _workflow_crons() if c.startswith("0 ")))
+    for weekday, hour in SCHEDULE:
+        cron_day = (weekday + 1) % 7  # Python Monday=0 -> cron Monday=1, Sunday=0
+        assert (cron_day, hour) in fired
 
 
 def test_workflow_has_workflow_dispatch() -> None:

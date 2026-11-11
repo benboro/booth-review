@@ -108,14 +108,16 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   kickoff (nulls last), home team, away team.
 - Rollover: the weekend advances on the first build whose inputs postdate the last
   game's kickoff plus 4 hours. In the job that is the first build after a games refresh
-  following that time (the Sunday 10:00 full run's `/games` refresh), so the next
+  following that time (the Sunday 18:00 full run's `/games` refresh), so the next
   week's grid appears with no user action.
 - `network` is an index into `lookups.networks` or null. Null means Network TBA, and the
   client puts the game in the Time TBA strip. The network comes from the CFBD media rows
   whose `mediaType` is `tv` or `web` only, never radio or mobile; a
   `data/reference/primary_network_overrides.csv` row for the game wins, as it does for
   telecasts.
-- `kickoff` and `time_slot` are null together: a game with no time yet.
+- `kickoff` and `time_slot` are null together: a game with no time yet. When CFBD still
+  lists a game at TBA but the week's Awful Announcing announcing-schedule post gives a
+  clear ET time for it, that time fills `kickoff`; CFBD's own time always wins.
 - `week` is never null here: every row is a numbered regular-season week's game.
 - `crew` is empty unless the user has imported an ESPN Press Room page whose booth names
   this game on the game's own CFBD network, in the ESPN family (18-13 F7). Then it lists
@@ -152,7 +154,7 @@ describes when the value is `null` instead of coerced to a placeholder like
 |---|---|---|---|
 | `season` | int | never null | SITE-06 |
 | `date` | str, ET calendar date, `YYYY-MM-DD` | never null | SITE-04, SITE-06 |
-| `kickoff` | str \| null, ET ISO datetime with UTC offset | null when kickoff time is unknown | SITE-04 |
+| `kickoff` | str \| null, ET ISO datetime with UTC offset | 506's listed time, else CFBD's, else Awful Announcing's; null when kickoff time is unknown | SITE-04 |
 | `time_slot` | `"noon"` \| `"afternoon"` \| `"prime"` \| `"late"` \| null | null exactly when `kickoff` is null | SITE-11 |
 | `away_team` | int, index into `lookups.teams` | never null | SITE-01, SITE-09 |
 | `home_team` | int, index into `lookups.teams` | never null | SITE-01, SITE-09 |

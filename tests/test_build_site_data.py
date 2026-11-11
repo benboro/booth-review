@@ -2555,6 +2555,7 @@ def _scheduled_site(
     generated_at: datetime = _GENERATED_AT,
     extra_telecasts: list[dict[str, object]] | None = None,
     crews: dict[int, ScheduledCrew] | None = None,
+    kickoffs: dict[int, str] | None = None,
 ) -> dict[str, Any]:
     rows = [_sched_row(g, **(row_overrides or {}).get(g.id, {})) for g in cfbd_games]
     frame = pl.concat([base.games, _games_frame(rows)], how="vertical_relaxed")
@@ -2573,6 +2574,7 @@ def _scheduled_site(
         networks=networks,
         network_unmapped=1,
         crews=crews or {},
+        kickoffs=kickoffs or {},
         stamps={
             "5": {
                 "schedule_updated_at": "2026-09-26T10:00:00Z",
@@ -2643,6 +2645,25 @@ def test_scheduled_tbd_kickoff_and_radio_only_network_are_null(
     assert block["network"][names.index("Sched Home 104")] is None
     net_a = block["network"][names.index("Sched Home 102")]
     assert payload["lookups"]["networks"][net_a]["id"] == "net-a"
+
+
+def test_scheduled_tba_kickoff_takes_aas_time_but_never_overrides_cfbd(
+    small_tables: BuildTables, build_reference: Path
+) -> None:
+    payload = _scheduled_site(
+        small_tables,
+        _weeks_four_to_six(),
+        {},
+        build_reference,
+        kickoffs={103: "2026-10-03T19:30:00-04:00", 104: "2026-10-03T21:00:00-04:00"},
+    )
+    block = payload["telecasts_scheduled"]
+    names = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    assert block["kickoff"][names.index("Sched Home 103")] == "2026-10-03T19:30:00-04:00"
+    assert block["time_slot"][names.index("Sched Home 103")] == "prime"
+    # CFBD already has 104's time; AA's never replaces it.
+    assert block["kickoff"][names.index("Sched Home 104")] == "2026-10-03T20:00:00-04:00"
+    assert names.index("Sched Home 103") < names.index("Sched Home 104")
 
 
 def test_scheduled_excludes_games_already_shipped(

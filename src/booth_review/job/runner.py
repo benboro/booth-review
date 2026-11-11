@@ -21,7 +21,7 @@ A VaultStateError raised while committing (the vault lock or check) still
 propagates, as the CLI's exit 3.
 
 GitHub's own scheduler is lossy, so the workflow template also fires backup
-cron slots between the two main slots (Sunday 10:00 / Wednesday 20:00 ET,
+cron slots after the main slots (Sunday 18:00, Monday-Wednesday 20:00 ET,
 D-11). `EXIT_NOTHING_DUE = 5` is returned by a `trigger="schedule"` run that
 finds no main slot has occurred since its last attempt (`job.catchup.is_due`):
 it exits before any CFBD, RR, or 506 step, any vault commit, or the
@@ -732,7 +732,7 @@ class ScheduledJob:
         Both then build and deploy under the same gates as a full run. Neither
         calls Ratings Reference, 506, ESPN Press Room, Wikipedia, the gap or
         freeze steps. The saved state moves only `last_schedule_at` (a clean
-        schedule run only) and `last_build_at`, so the Sunday/Wednesday slot
+        schedule run only) and `last_build_at`, so the main-slot
         logic is untouched."""
         items: list[AttentionItem] = []
         counts: dict[str, int] = {}

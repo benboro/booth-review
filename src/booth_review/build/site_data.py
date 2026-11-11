@@ -150,7 +150,8 @@ def _scheduled_game_rows(
 
     FBS-involving regular-season games of the schedule's season whose week label is
     numbered and no later than the current weekend's, and that no shipped telecast
-    row (rated or unrated) already covers. Sorted for byte stability: date, kickoff
+    row (rated or unrated) already covers. A game CFBD still lists at TBA takes the
+    kickoff Awful Announcing lists, when it has one. Sorted for byte stability: date, kickoff
     (null last), home team, away team.
     """
     schedule = tables.schedule
@@ -171,7 +172,8 @@ def _scheduled_game_rows(
         if (game["date_et"], game["away_team"], game["home_team"]) in shipped_keys:
             continue
         network, outlets = schedule.networks.get(int(game["game_id"]), (None, []))
-        rows.append({**game, "network_id": network, "outlets": outlets})
+        kickoff = game["kickoff_et"] or schedule.kickoffs.get(int(game["game_id"]))
+        rows.append({**game, "kickoff_et": kickoff, "network_id": network, "outlets": outlets})
     rows.sort(
         key=lambda r: (
             r["date_et"],
@@ -276,7 +278,7 @@ def build_site_data(
     unrated_frame, duplicates_dropped = select_unrated_shipped(tables.telecasts, sort_keys)
     schedule = tables.schedule
     # generated_at is the input stamp in the job (pipeline.run_build), so the weekend rolls
-    # over on the first build whose inputs postdate the last game: the Sunday 10:00 full run's
+    # over on the first build whose inputs postdate the last game: the Sunday 18:00 full run's
     # /games refresh (D-18). No wall clock is read here.
     weekend_label = (
         current_label(schedule.games, schedule.season, generated_at) if schedule.games else None
