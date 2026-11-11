@@ -286,8 +286,11 @@ def test_desktop_hover_shows_venue_tooltip(guarded_page: Page, open_app: OpenApp
     px, py = _venue_pixel(guarded_page, nassau["x"], nassau["y"])
     guarded_page.mouse.move(px - 80, py - 80)
     guarded_page.mouse.move(px, py, steps=5)
+    # Wait for Nassau's card itself: the pointer can cross another marker on its way in, and
+    # that marker's card would satisfy a wait for "any tooltip shown".
     guarded_page.wait_for_function(
-        "() => { const e = document.getElementById('chart-tooltip'); return !!e && !e.hidden; }"
+        """() => { const e = document.getElementById('chart-tooltip');
+          return !!e && !e.hidden && e.firstElementChild?.textContent === 'Nassau'; }"""
     )
     lines = _tooltip_lines(guarded_page)
     assert lines[0] == "Nassau"
@@ -619,7 +622,8 @@ def test_phone_second_tap_filters_the_table(mobile_page: Page, open_app: OpenApp
     mobile_page.wait_for_function("() => document.querySelector('#venue-chips .chip')")
     assert mobile_page.locator("#chart-tooltip").is_hidden()
     # A tap outside the map after only the first tap hides the card and sets nothing.
-    mobile_page.evaluate("() => window.__testHooks.setState({ venue: null })")
+    # Wait for the redraw the cleared venue triggers, or the tap can land mid-redraw.
+    _set(mobile_page, {"venue": None})
     mobile_page.evaluate("() => document.getElementById('map-chart').scrollIntoView()")
     mobile_page.wait_for_timeout(450)
     px, py = _venue_pixel(mobile_page, dot["x"], dot["y"])
