@@ -154,6 +154,9 @@ records only where the site settles or applies them.
   trimmed spanner rules over "Solo slots" and "Sunday windows" (Silver Bulletin is the
   reference). Every other table keeps booktabs rules (Phase 17.1).
 - A header with a tooltip gets a dotted underline in `--muted` and no icon (Phase 17.1).
+- The CFB chart tooltip shows the primary network only; the other outlets are listed in the
+  panel's "Also on" line, which never lists ESPN Radio, since a game with a primary network
+  always has another broadcast (user 2026-11-09, superseding the 2026-10-24 every-outlet row).
 
 ## Chart marks
 
@@ -210,7 +213,13 @@ records only where the site settles or applies them.
   narrower than the module (the 120 cap, or floor rounding) stretches its lane to the
   module edge and runs the hour ticks on to the lane's end or midnight, so the rules never
   stop mid-module; a longer day keeps its scroll width (v2.1 polish, 18-UI-REVIEW 9, 11).
-- A day tab always shows a count: the day's games with no pick, its matches under a pick
+- The NFL This weekend is one page per week (user 2026-11-09): no day tabs; the timeline runs
+  one shared time axis with each day's network rows under a day heading (`.wk-dayband`, the
+  phone group title's semibold sans, sticky left), in date order, so Thursday sits above
+  Sunday above Monday; the Now line runs through today's rows only. The map shows every game
+  of the week, and the phone list titles each kickoff group with its day ("Thu. Nov. 12,
+  8:15 pm"). An old `day=` link is dropped. CFB keeps its day tabs.
+- A CFB day tab always shows a count: the day's games with no pick, its matches under a pick
   (Phase 24 sign-off). The count box keeps a min-width of one ch per character of the day's
   full count, so a pick's count never widens the tab or moves the next one. The legend chip row
   and the Matched games section hide under This weekend, as on Crews and the NFL page, and

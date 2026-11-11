@@ -8,7 +8,6 @@
 
 import { lowNThreshold } from './mode.js';
 import { computePicks } from './picks.js';
-import { dayToken, defaultDay } from '../../modules/weekend.js';
 
 export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter', 'weekend']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
@@ -170,17 +169,14 @@ export function weekendDays(model, week) {
 }
 
 /**
- * Allowlist a week and day pair: defaults (the current week, the Sunday) collapse to null. The
- * day is a weekday token (`thu`), kept only when the week has a game that day (18-13 F23).
+ * Allowlist a week: the current week collapses to null. The day is always null: This weekend
+ * shows the whole week on one page (user 2026-11-09), so an old link's `day=` is dropped.
  */
-function cleanWeekend(model, week, day) {
+function cleanWeekend(model, week) {
   const weeks = weekendWeeks(model);
   const current = weekendCurrentWeek(model);
   const w = Number.isInteger(week) && weeks.includes(week) && week !== current ? week : null;
-  const days = weekendDays(model, w ?? current);
-  const iso = typeof day === 'string' ? days.find((dd) => dayToken(dd) === day) : undefined;
-  const d = iso != null && iso !== defaultDay(days, 'nfl') ? day : null;
-  return { week: w, day: d };
+  return { week: w, day: null };
 }
 
 /**
@@ -203,7 +199,7 @@ export function canonicalNflState(state, model) {
   const csort = cso && typeof cso === 'object'
     && NFL_CSORT_KEYS.includes(cso.key) && (cso.dir === 'asc' || cso.dir === 'desc')
     ? { key: cso.key, dir: cso.dir } : null;
-  const wk = cleanWeekend(model, Number(s.week), s.day);
+  const wk = cleanWeekend(model, Number(s.week));
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),

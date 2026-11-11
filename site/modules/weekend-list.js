@@ -18,7 +18,7 @@ import { fillWrappingMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
 import { FAMILY_COLORS, familyKey } from './palette.js';
 import {
-  boothLine, cellState, matchupSides, stripCollapsedByDefault,
+  boothLine, cellState, dayLabel, matchupSides, stripCollapsedByDefault, weekdayLabel,
 } from './weekend.js';
 
 function item(game, ctx, { showTime = false } = {}) {
@@ -44,7 +44,9 @@ function item(game, ctx, { showTime = false } = {}) {
     mark.append(el('span', 'wk-item-nonet', 'Network TBA'));
   }
   const text = el('span', 'wk-item-text');
-  const when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
+  let when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
+  // A whole-week page names the day outside its day-and-kickoff groups (the strip).
+  if (ctx.allDays && game.date != null) when = `${weekdayLabel(game.date)} ${when}`;
   const l1 = el('span', 'wk-item-l1');
   const sides = matchupSides(game);
   fillWrappingMatchup(l1, showTime ? { ...sides, away: `${when} ${sides.away}` } : sides);
@@ -81,18 +83,26 @@ function kickoffGroups(ctx) {
   const rowIndex = new Map(ctx.dayModel.rows.map((r, k) => [r.id, k]));
   const games = [];
   for (const row of ctx.dayModel.rows) for (const c of row.cells) games.push({ g: c.game, row: row.id });
+  // A whole-week page (the NFL) groups by date and kickoff, so Thursday's and Monday's night
+  // games never share a group, and names the day in each title.
+  const keyOf = (g) => (ctx.allDays ? `${g.date ?? '9999'}|${String(g.kickoffMin).padStart(4, '0')}` : g.kickoffMin);
   const byTime = new Map();
   for (const { g, row } of games) {
-    if (!byTime.has(g.kickoffMin)) byTime.set(g.kickoffMin, []);
-    byTime.get(g.kickoffMin).push({ g, k: rowIndex.get(row) });
+    const key = keyOf(g);
+    if (!byTime.has(key)) byTime.set(key, { date: g.date, min: g.kickoffMin, list: [] });
+    byTime.get(key).list.push({ g, k: rowIndex.get(row) });
   }
   const rank = (g) => (g.boothRank == null ? Infinity : g.boothRank);
-  return [...byTime.keys()].sort((a, b) => a - b).map((min) => {
-    const list = byTime.get(min).sort((a, b) => a.k - b.k || rank(a.g) - rank(b.g)
+  const order = (a, b) => (ctx.allDays ? (a < b ? -1 : Number(a > b)) : a - b);
+  return [...byTime.keys()].sort(order).map((key) => {
+    const { date, min, list: entries } = byTime.get(key);
+    const list = entries.sort((a, b) => a.k - b.k || rank(a.g) - rank(b.g)
       || a.g.home.localeCompare(b.g.home));
     const section = el('section', 'wk-group');
     section.dataset.time = String(min);
-    section.append(groupTitle(clock12(min)));
+    if (ctx.allDays && date != null) section.dataset.date = date;
+    const title = ctx.allDays && date != null ? `${dayLabel(date)}, ${clock12(min)}` : clock12(min);
+    section.append(groupTitle(title));
     for (const { g } of list) section.append(item(g, ctx));
     return section;
   });

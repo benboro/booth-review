@@ -9,7 +9,9 @@ import { venueTitle } from './map-model.js';
 import { sortNetworks } from './network.js';
 import { FAMILY_ORDER, WEEKEND_MAP_DOT, familyKey } from './palette.js';
 import { isRankedMatchup } from './rank-badge.js';
-import { boothLine, cellState, clock12, matchupSides, matchupText } from './weekend.js';
+import {
+  boothLine, cellState, clock12, matchupSides, matchupText, weekdayLabel,
+} from './weekend.js';
 
 // ---------------------------------------------------------------- window shape (D-03)
 
@@ -114,9 +116,11 @@ export const NUDGE_PITCH_PAD_PX = 2;
 
 const nullsLast = (n) => (n == null ? Infinity : n);
 
+/** Date (a whole-week map holds several), then kickoff; a one-day map has one date. */
 function byKickoff(a, b) {
   return (
-    nullsLast(a.kickoffMin) - nullsLast(b.kickoffMin)
+    String(a.date ?? '9999').localeCompare(String(b.date ?? '9999'))
+    || nullsLast(a.kickoffMin) - nullsLast(b.kickoffMin)
     || String(a.key ?? '').localeCompare(String(b.key ?? ''))
     || a.i - b.i
   );
@@ -223,10 +227,12 @@ function hasPoint(venue) {
 }
 
 /** The hover lines of a game (raw text; the figure escapes it), plus the card's badge and conference fields. */
-function hoverLines(game, nowWall, venueLine) {
+function hoverLines(game, nowWall, venueLine, allDays = false) {
   const state = cellState(game, nowWall);
   const booth = boothLine(game, state);
-  const time = game.kickoffMin == null ? 'Time TBA' : `${clock12(game.kickoffMin)} ET`;
+  let time = game.kickoffMin == null ? 'Time TBA' : `${clock12(game.kickoffMin)} ET`;
+  // A whole-week map (the NFL) names each game's day: `Thu. 8:15 pm ET`.
+  if (allDays && game.date != null) time = `${weekdayLabel(game.date)} ${time}`;
   const lines = {
     matchup: matchupText(game),
     // The card's matchup line breaks before the joiner (2026-11-03); the Plotly text keeps
@@ -259,7 +265,8 @@ function notOnMapOrder(games) {
   const net = (g) => (g.networkId == null ? Infinity : (rank.get(g.networkId) ?? Infinity));
   const known = (g) => (g.kickoffMin == null ? 1 : 0);
   return [...games].sort(
-    (a, b) => known(a) - known(b)
+    (a, b) => String(a.date ?? '9999').localeCompare(String(b.date ?? '9999'))
+      || known(a) - known(b)
       || nullsLast(a.kickoffMin) - nullsLast(b.kickoffMin)
       || net(a) - net(b)
       || String(a.home).localeCompare(String(b.home)),
@@ -282,6 +289,7 @@ function layer(d) {
  * @param {boolean} [env.mobile]
  * @param {{w: number, h: number}} [env.plot] - the plot box in CSS px.
  * @param {number} [env.nowWall] - ET wall minutes, for the booth line.
+ * @param {boolean} [env.allDays] - a whole-week map: cards name each game's day.
  * @returns {{dots: object[], markers: object[], notOnMap: object[], splatModel: object,
  *   counts: object, day: (string|undefined)}}
  */
@@ -296,6 +304,7 @@ export function buildWeekendMapModel(env) {
     return {
       key: game.key,
       game,
+      date: game.date ?? null,
       kickoffMin: game.kickoffMin ?? null,
       symbol,
       size: sizes[symbol],
@@ -328,14 +337,14 @@ export function buildWeekendMapModel(env) {
         y: at.y,
         side: at.side ?? 'left',
         label,
-        hoverLines: hoverLines(game, env.nowWall, label),
+        hoverLines: hoverLines(game, env.nowWall, label, Boolean(env.allDays)),
       });
     } else {
       onMap.push({
         ...base(game, symbol),
         x: at.x,
         y: at.y,
-        hoverLines: hoverLines(game, env.nowWall, venueTitle(venue)),
+        hoverLines: hoverLines(game, env.nowWall, venueTitle(venue), Boolean(env.allDays)),
       });
     }
   }

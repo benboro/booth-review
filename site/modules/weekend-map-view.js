@@ -49,8 +49,10 @@ import {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SPLAT_CAPTION = 'Shading shows which network has the most games nearby.';
-const NONE_PLACED = "None of this day's games has a venue yet. They are listed below.";
-const DRAW_FAILED = "The map could not be drawn. Switch to Timeline to see this day's games.";
+/** The span the map shows: one day, or the whole week on an all-days page (the NFL). */
+const span = (ctx) => (ctx.allDays ? 'week' : 'day');
+const nonePlaced = (ctx) => `None of this ${span(ctx)}'s games has a venue yet. They are listed below.`;
+const drawFailed = (ctx) => `The map could not be drawn. Switch to Timeline to see this ${span(ctx)}'s games.`;
 const NOT_ON_MAP_NOTE = 'No venue is listed for these games yet.';
 
 /** One closure per host, so the graph node survives the shell's rebuilds. */
@@ -169,7 +171,7 @@ function buildKey(ctx, placed) {
 // ---- Not on the map ----
 
 function notOnMapCell(game, ctx) {
-  const cell = buildCell(game, ctx, { tail: game.networkName ?? 'Network TBA' });
+  const cell = buildCell(game, ctx, { tail: game.networkName ?? 'Network TBA', withDay: true });
   applyPick(cell, game, ctx, ctx.rowFaded([game]));
   return cell;
 }
@@ -352,6 +354,7 @@ function dayModelFor(ctx, z, plot) {
   return buildWeekendMapModel({
     games: ctx.inDay,
     day: ctx.day,
+    allDays: ctx.allDays,
     passes: ctx.passes,
     networksPicked: ctx.networksPicked,
     theme: ctx.theme,
@@ -378,7 +381,7 @@ async function draw(z, ctx) {
     geometry = z.geometry ?? (await loadGeometry());
   } catch (err) {
     console.warn('booth-review: weekend map geometry could not be loaded', err);
-    if (live()) z.setOverlay(DRAW_FAILED, true);
+    if (live()) z.setOverlay(drawFailed(ctx), true);
     return;
   }
   z.geometry = geometry;
@@ -389,10 +392,12 @@ async function draw(z, ctx) {
   const model = dayModelFor(ctx, z, plot);
   z.byKey = new Map([...model.dots, ...model.markers].map((d) => [d.key, d]));
   const placed = model.dots.length + model.markers.length;
-  const when = ctx.day != null ? `on ${dayLabel(ctx.day)}` : 'with no listed date';
+  let when = 'with no listed date';
+  if (ctx.allDays) when = `in ${ctx.model.weekLabel}`;
+  else if (ctx.day != null) when = `on ${dayLabel(ctx.day)}`;
   gd.setAttribute('aria-label', `Map of ${placed} ${placed === 1 ? 'game' : 'games'} ${when}, `
     + 'colored by network. Switch to Timeline to read every game with the keyboard.');
-  z.setOverlay(placed === 0 && ctx.inDay.length > 0 ? NONE_PLACED : null, false);
+  z.setOverlay(placed === 0 && ctx.inDay.length > 0 ? nonePlaced(ctx) : null, false);
 
   const wantSplat = !z.splatBroken && model.splatModel.venues.length > 0;
   const sig = signatureOf(ctx, model, plot, wantSplat);
@@ -445,7 +450,7 @@ async function draw(z, ctx) {
   } catch (err) {
     // Plotly can reject (a zero-width container, say): say so and keep the switch usable.
     console.warn('booth-review: weekend map could not be drawn', err);
-    if (live()) z.setOverlay(DRAW_FAILED, true);
+    if (live()) z.setOverlay(drawFailed(ctx), true);
   }
 }
 

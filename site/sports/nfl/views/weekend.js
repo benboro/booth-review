@@ -5,15 +5,17 @@
  * are not used here, D-20, D-21). Credits: nflverse and 506 Sports, plus Wikipedia (CC BY-SA
  * 4.0) only when a slot-basis network shows; the NFL page never credits a CFB data source.
  *
- * Everything is built with createElement/textContent. State: `week` and `day` live in the NFL
- * state (null means the current week and the default day) and round-trip through the URL.
+ * One page per week (user 2026-11-09): no day tabs; the timeline stacks each day's rows in date
+ * order (Thursday above Sunday above Monday) on one time axis, and the map shows every game of
+ * the week.
+ *
+ * Everything is built with createElement/textContent. State: `week` lives in the NFL state
+ * (null means the current week) and round-trips through the URL.
  */
 import { renderWeekend } from '../../../modules/weekend-view.js';
 import { renderWeekendList } from '../../../modules/weekend-list.js';
 import { renderWeekendMap } from '../../../modules/weekend-map-view.js';
-import {
-  dayLabel, dayTabs, dayToken, defaultDay, etParts, etWallMinutes, isUnplayedGame,
-} from '../../../modules/weekend.js';
+import { dayTabs, etParts, etWallMinutes, isUnplayedGame } from '../../../modules/weekend.js';
 import { PHONE_QUERY } from '../../../modules/breakpoints.js';
 import { nflWeekendGames, nflWeekendPasses } from '../weekend-data.js';
 import { weekendCurrentWeek, weekendWeeks } from '../state.js';
@@ -31,27 +33,23 @@ function hasPick(state) {
   return state.teams.length > 0 || state.people.length > 0 || state.booths.length > 0;
 }
 
-/** The weekend week to show and the effective day. */
+/** The weekend week to show; every day of it shows. */
 function resolve(model, state) {
   const weeks = weekendWeeks(model);
   const currentWeek = weekendCurrentWeek(model);
   const week = state.week ?? currentWeek;
   const games = week == null ? [] : nflWeekendGames(model, week);
-  const days = dayTabs(games);
-  // state.day is a weekday token; the week's own date for it, else the default day.
-  const day = days.find((d) => state.day != null && dayToken(d) === state.day)
-    ?? defaultDay(days, 'nfl');
-  return { weeks, currentWeek, week, games, days, day };
+  return { weeks, currentWeek, week, games, days: dayTabs(games) };
 }
 
 function buildModel(ctx, r) {
   const { model } = ctx;
   const season = model.upcomingRaw?.season?.[0] ?? model.freshness?.season ?? model.seasons[1];
-  // Wikipedia is credited only when a slot-basis network shows on the shown day (RT-03). The
+  // Wikipedia is credited only when a slot-basis network shows in the shown week (RT-03). The
   // article is rebuilt from the season; tests/test_nfl_slot_credit.py pins this pattern to every
   // source_url in data/reference/nfl_slot_networks.csv, since the contract ships no slot URL
   // (18-REVIEW IN-04).
-  const slotShown = r.games.some((g) => g.networkBasis === 'slot' && (g.date === r.day || g.date == null));
+  const slotShown = r.games.some((g) => g.networkBasis === 'slot');
   const links = slotShown ? { wikipedia: `https://en.wikipedia.org/wiki/${season}_NFL_season` } : {};
   return {
     sport: 'nfl',
@@ -60,7 +58,8 @@ function buildModel(ctx, r) {
     weeks: r.weeks.map((n) => ({ label: `Week ${n}`, number: n })),
     isLatestWeek: r.week === r.currentWeek,
     games: r.games,
-    day: r.day,
+    day: null,
+    allDays: true,
     // Without a weekend stamp the tab shows the latest played week: a past week (18-13 F17).
     past: r.week != null
       && (model.weekend == null || (r.currentWeek != null && r.week < r.currentWeek)),
@@ -71,10 +70,8 @@ function buildModel(ctx, r) {
 }
 
 function setSubtitle(ctx, r) {
-  const parts = [r.week == null ? 'No week' : `Week ${r.week}`];
-  if (r.day) parts.push(dayLabel(r.day));
-  parts.push('all times ET');
-  ctx.setSubtitle([document.createTextNode(parts.join(', '))]);
+  const week = r.week == null ? 'No week' : `Week ${r.week}`;
+  ctx.setSubtitle([document.createTextNode(`${week}, all times ET`)]);
 }
 
 export function mount(container, ctx) {
@@ -102,12 +99,10 @@ export function render(ctx) {
     wview: state.wview,
     onView: (v) => ctx.setState({ wview: v === 'map' ? 'map' : null }),
     passes: (g) => (hasPick(state) ? nflWeekendPasses(model, state, g) : null),
-    onDay: (day) => ctx.setState({ day: dayToken(day) }),
-    // The weekday carries over; canonicalNflState drops it when the new week has no such day.
     onWeek: (delta) => {
       const at = r.weeks.indexOf(r.week);
       const to = r.weeks[at + delta];
-      if (to != null) ctx.setState({ week: to, day: r.day ? dayToken(r.day) : null });
+      if (to != null) ctx.setState({ week: to, day: null });
     },
     onOpen: (game, opener) => {
       if (game.block !== 'upcoming') {
@@ -130,13 +125,11 @@ export function render(ctx) {
     ? renderWeekendMap(refs.host, wk, opts)
     : (phone ? renderWeekendList : renderWeekend)(refs.host, wk, opts);
   refs.kind = kind;
-  // The selection bar's summary counts the shown day's games, as the CFB host does
-  // (18-UI-REVIEW item 6): every game dated that day or undated (so in every strip).
-  const inDay = r.games.filter((g) => g.date === r.day || g.date == null);
-  const matching = hasPick(state) ? inDay.filter((g) => opts.passes(g) === true).length : inDay.length;
+  // The selection bar's summary counts the week's games (18-UI-REVIEW item 6, now the whole week).
+  const matching = hasPick(state) ? r.games.filter((g) => opts.passes(g) === true).length : r.games.length;
   current = {
-    week: r.week, day: r.day, days: r.days, games: r.games.length,
-    slotCredit: Boolean(wk.links.wikipedia), counts: { matching, total: inDay.length },
+    week: r.week, day: null, days: r.days, games: r.games.length,
+    slotCredit: Boolean(wk.links.wikipedia), counts: { matching, total: r.games.length },
   };
 }
 
@@ -146,7 +139,7 @@ export function testModel() {
   return { view: 'weekend', ...(current ?? { week: null, day: null, days: [], games: 0, slotCredit: false }) };
 }
 
-/** The shown day's `{ matching, total }` for the host's summary line, or null before a render. */
+/** The shown week's `{ matching, total }` for the host's summary line, or null before a render. */
 export function summaryCounts() {
   return current ? current.counts : null;
 }

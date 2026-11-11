@@ -270,7 +270,7 @@ export function naBand(data, axis, plotPx) {
  * "core, round" -- as its own line of plain text (notes-2 #6), since this mode can't draw the HTML
  * tooltip's icons -- and emoji glyphs vary by OS; the time-slot label is
  * panel-only, notes-4 A1),
- * slash-delimited networks (primary first, each colored by its own family --
+ * the primary network only (user 2026-11-09), colored by its family --
  * the stand-in for a filled pill in this text-only mode, since Plotly's
  * hover renderer can't draw one, SITE-26), one "Position: Name" line per
  * main-feed crew member, viewers, the active axis value, and a closing
@@ -296,9 +296,9 @@ export function hoverText(data, i, { axis, y, theme }) {
   lines.push(escapeHover(model.dateText));
   if (model.gameType) lines.push(escapeHover(model.gameType.text));
 
-  // Slash-delimited, primary first, no spaces around '/' (D-25); each name
-  // is colored by its own family, standing in for a filled pill (SITE-26).
-  // The color comes only from the FAMILY_COLORS constant, never from data.
+  // The primary network only (user 2026-11-09), colored by its family,
+  // standing in for a filled pill (SITE-26). The color comes only from the
+  // FAMILY_COLORS constant, never from data.
   const networkSpans = model.networks.map((net) => {
     const name = escapeHover(net.name);
     const color = FAMILY_COLORS[theme][familyKey(net.family)];

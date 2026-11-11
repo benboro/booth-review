@@ -30,7 +30,7 @@ import {
   stripNetworkNote,
 } from './format.js';
 import { makeGameTypeIcon } from './icons.js';
-import { networkMark, networkMarks, sortNetworks } from './network.js';
+import { broadcastNetworks, networkMark, networkMarks } from './network.js';
 import { conferenceMark } from './conf-logos.js';
 import { crewBox } from './panel-parts.js';
 import { rankBadge } from './rank-badge.js';
@@ -66,8 +66,8 @@ const EDGE_MARGIN = 8;
  * UI-SPEC's minimal line order -- matchup+score, date+kickoff (a named
  * only; a named game's icons plus its name -- rivalry, bowl core name, or CFP
  * round, from `format.js#namedGameInfo`, 04.10 D-10 -- sit on their own line
- * under it, notes-2 #6; the time-slot label is panel-only), slash-delimited networks (primary first,
- * each already stripped of any nested methodology parenthetical), one
+ * under it, notes-2 #6; the time-slot label is panel-only), the primary network only (stripped
+ * of any nested methodology parenthetical; the other outlets are panel-only, user 2026-11-09), one
  * "Position: Name" line per main-feed crew member, viewers, the active axis
  * value. Conferences, the time
  * slot, the full outlet list, the measurement-type badge, era/event flags,
@@ -89,12 +89,13 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const dateText = apKickoff(t.date[i], t.kickoff[i], 'kickoff time not recorded', { year: true });
   const gameType = namedGameInfo(data, i);
 
-  const primaryNetwork = data.lookups.networks[t.network[i]];
-  // The other outlets read in network precedence (U7); the primary stays first.
-  const otherOutlets = sortNetworks(t.outlets[i]
-    .filter((idx) => idx !== t.network[i])
-    .map((idx) => data.lookups.networks[idx]));
-  const networks = [primaryNetwork, ...otherOutlets].map((net) => ({
+  // The primary broadcast only (user, 2026-11-09): the other outlets are panel-only, and a
+  // radio primary gives way to another outlet when there is one.
+  const { primary: primaryNetwork } = broadcastNetworks(
+    data.lookups.networks[t.network[i]],
+    t.outlets[i].filter((idx) => idx !== t.network[i]).map((idx) => data.lookups.networks[idx]),
+  );
+  const networks = [primaryNetwork].map((net) => ({
     id: net.id,
     name: stripNetworkNote(net.name),
     family: net.family,

@@ -294,7 +294,7 @@ function renderSelectionBar() {
   );
   clearBtn.hidden = !state.selection;
   if (state.view === 'weekend') {
-    // The weekend view counts the shown day's games (grid and strip), like the CFB summary.
+    // The weekend view counts the shown week's games (grid and strip; the CFB summary counts its day).
     const c = weekend.summaryCounts();
     summary.textContent = c ? matchSummary(c.matching, c.total) : '';
     return;
