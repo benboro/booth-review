@@ -80,6 +80,33 @@ export const NETWORK_PRECEDENCE = Object.freeze([
   'directv-college-sports', 'hawaii-ppv', 'oklahoma-ppv', 'other-unclassified',
 ]);
 
+/** Radio outlets: listed only when a game has no other broadcast (user, 2026-11-09). */
+const RADIO_IDS = new Set(['espn-radio']);
+
+/**
+ * Whether a network id is a radio outlet.
+ * @param {string|null|undefined} id
+ * @returns {boolean}
+ */
+export function isRadio(id) {
+  return RADIO_IDS.has(String(id));
+}
+
+/**
+ * The networks to show for a telecast: radio is listed only when nothing else carries the game
+ * (user, 2026-11-09). A radio primary with another outlet gives way to the top non-radio outlet
+ * in network precedence; the other outlets follow in precedence, radio dropped.
+ * @template {{id?: string}} T
+ * @param {T} primary
+ * @param {T[]} others - the outlets other than the primary.
+ * @returns {{primary: T, others: T[]}}
+ */
+export function broadcastNetworks(primary, others) {
+  const rest = sortNetworks(others.filter((net) => !isRadio(net?.id)));
+  if (isRadio(primary?.id) && rest.length > 0) return { primary: rest[0], others: rest.slice(1) };
+  return { primary, others: rest };
+}
+
 const PRECEDENCE_RANK = new Map(NETWORK_PRECEDENCE.map((id, k) => [id, k]));
 
 /**

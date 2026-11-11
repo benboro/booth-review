@@ -138,11 +138,56 @@ def test_map_mode_url_and_switch_state(nfl_guarded_page: Page, open_nfl_app: Ope
     _drawn(page)
     search = page.evaluate("location.search")
     assert "view=weekend" in search
-    assert page.locator(".wk-day[aria-selected=true]").inner_text().startswith("Sun. Oct. 11")
+    assert page.locator(".wk-day").count() == 0
+    assert page.locator(".wk-week").inner_text() == "Week 5"
     page.click('[data-wk-id="wview:timeline"]')
     page.wait_for_function("!location.search.includes('wview')")
     page.wait_for_selector(".wk-grid")
     assert page.locator(".wk-map-box").count() == 0
+
+
+def test_map_shows_every_day_of_the_week(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+    """User 2026-11-09: the map is not split by day; week 1's Thursday and Sunday games are
+    on one map (or in its Not on the map list)."""
+    page = nfl_guarded_page
+    page.set_viewport_size({"width": 1440, "height": 900})
+    _open(page, open_nfl_app, query="&week=1")
+    page.wait_for_selector(".wk-grid")
+    by_date = page.evaluate(
+        """() => {
+          const out = {};
+          for (const g of document.querySelectorAll('.wk-dayrows[data-date]')) {
+            out[g.dataset.date] = [...g.querySelectorAll('.wk-cell')]
+              .map((c) => c.dataset.wkId.slice(2));
+          }
+          return out;
+        }"""
+    )
+    assert sorted(by_date) == ["2026-09-10", "2026-09-13"]
+    page.click('[data-wk-id="wview:map"]')
+    page.wait_for_function("location.search.includes('wview=map')")
+    _drawn(page)
+    shown = set(_symbols(page))
+    listed = set(
+        page.locator(".wk-notmap .wk-cell").evaluate_all(
+            "(ns) => ns.map((n) => (n.dataset.wkId || '').slice(2))"
+        )
+    )
+    for keys in by_date.values():
+        assert keys
+        assert set(keys) <= shown | listed
+    assert any(set(keys) & shown for keys in by_date.values())
+    # Every card names its game's day, so Thursday's and Sunday's night games never read alike.
+    checked = 0
+    for date, day in (("2026-09-10", "Thu. "), ("2026-09-13", "Sun. ")):
+        key = next((k for k in by_date[date] if k in shown), None)
+        if key is None:
+            continue
+        _hover(page, key)
+        kickoff = page.locator("#chart-tooltip .tooltip-game-kickoff").inner_text()
+        assert kickoff.startswith(day), kickoff
+        checked += 1
+    assert checked >= 1
 
 
 @pytest.mark.parametrize("theme", THEMES)

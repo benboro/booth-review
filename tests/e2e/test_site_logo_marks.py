@@ -251,32 +251,23 @@ def test_panel_network_and_also_on_lines_use_marks(
 
 
 @pytest.mark.parametrize(
-    ("ids", "outlets", "want"),
+    ("ids", "outlets"),
     [
-        # An ESPN game also streamed on ESPN+, listed streaming-first in the data.
-        ({0: "espn", 4: "espn-plus"}, [4, 0], ["espn", "espn-plus"]),
-        # NBC simulcast on Peacock, and CBS on Paramount+ (no Paramount+ logo: its name shows).
-        ({0: "nbc", 4: "peacock"}, [4, 0], ["nbc", "peacock"]),
-        ({0: "cbs", 4: "paramount-plus"}, [4, 0], ["cbs", "paramount-plus"]),
-        # Several outlets after the primary follow NETWORK_PRECEDENCE: ABC, ESPN2, then ESPN+.
-        (
-            {0: "espn", 1: "espn2", 2: "abc", 4: "espn-plus"},
-            [4, 1, 0, 2],
-            ["espn", "abc", "espn2", "espn-plus"],
-        ),
+        # An ESPN game also streamed on ESPN+ and on ESPN Radio, listed streaming-first.
+        ({0: "espn", 4: "espn-plus", 1: "espn-radio"}, [4, 1, 0]),
+        # NBC simulcast on Peacock.
+        ({0: "nbc", 4: "peacock"}, [4, 0]),
     ],
 )
-def test_tooltip_shows_every_outlet_in_network_precedence(
+def test_tooltip_shows_only_the_primary_network(
     guarded_page: Page,
     open_app: OpenApp,
     fixture_raw: dict[str, Any],
     ids: dict[int, str],
     outlets: list[int],
-    want: list[str],
 ) -> None:
-    """User report 2026-10-24: a game on ESPN and ESPN+ must show both logos. The tooltip
-    shows the primary network first, then every other outlet in NETWORK_PRECEDENCE, the
-    same order as the panel's "Also on" list; a network with a vendored logo shows it."""
+    """User, 2026-11-09: the tooltip shows the primary broadcast only; the other outlets
+    are listed in the panel's "Also on" line."""
     raw = copy.deepcopy(fixture_raw)
     for index, logo_id in ids.items():
         raw["lookups"]["networks"][index]["id"] = logo_id
@@ -285,22 +276,53 @@ def test_tooltip_shows_every_outlet_in_network_precedence(
     _serve(guarded_page, raw)
     open_app(guarded_page, "")
     guarded_page.evaluate(_SHOW_TOOLTIP_JS, 0)
-    row = "#chart-tooltip .tooltip-networks .net-mark"
     shown = guarded_page.evaluate(
         """(sel) => [...document.querySelectorAll(sel)].map((m) => {
           const img = m.querySelector('img');
           return img ? img.getAttribute('src') : 'name:' + m.textContent;
         })""",
-        row,
+        "#chart-tooltip .tooltip-networks .net-mark",
     )
-    logos = guarded_page.evaluate(
-        "async () => (await import(new URL('./modules/logos.js', location.href).href))"
-        ".logoFor('paramount-plus')"
-    )
-    assert logos is None  # no vendored Paramount+ mark: it falls back to its name
-    names = {n["id"]: n["name"] for n in raw["lookups"]["networks"]}
-    expected = [f"logos/{i}.svg" if i != "paramount-plus" else f"name:{names[i]}" for i in want]
-    assert shown == expected
+    assert shown == [f"logos/{ids[0]}.svg"]
+
+
+def test_radio_primary_gives_way_to_another_outlet(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """User, 2026-11-09: ESPN Radio is never shown when another broadcast exists, even as the
+    data's primary; the top other outlet takes its place in the tooltip and the panel."""
+    raw = _with_logo_ids(fixture_raw)
+    raw["lookups"]["networks"][0]["id"] = "espn-radio"
+    raw["lookups"]["networks"][0]["name"] = "ESPN Radio"
+    raw["telecasts"]["network"][0] = 0
+    raw["telecasts"]["outlets"][0] = [0, 2]  # primary ESPN Radio, also net-c
+    _serve(guarded_page, raw)
+    open_app(guarded_page, "")
+    guarded_page.evaluate(_SHOW_TOOLTIP_JS, 0)
+    tip = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
+    assert "ESPN Radio" not in tip
+    assert "Conference Network" in tip
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    line = guarded_page.locator("#panel-body .panel-networks")
+    assert "ESPN Radio" not in line.inner_text()
+    assert line.locator(".net-mark").count() == 1
+
+
+def test_panel_also_on_drops_espn_radio(
+    guarded_page: Page, open_app: OpenApp, fixture_raw: dict[str, Any]
+) -> None:
+    """User, 2026-11-09: ESPN Radio is not listed as a broadcast when the game has another
+    one; the panel keeps the other outlets."""
+    raw = _with_logo_ids(fixture_raw)
+    raw["lookups"]["networks"][1]["id"] = "espn-radio"
+    raw["lookups"]["networks"][1]["name"] = "ESPN Radio"
+    raw["telecasts"]["outlets"][0] = [0, 1, 2]  # primary net-a, also ESPN Radio and net-c
+    _serve(guarded_page, raw)
+    open_app(guarded_page, "")
+    guarded_page.evaluate("window.__testHooks.openPanel(0)")
+    line = guarded_page.locator("#panel-body .panel-networks")
+    assert "ESPN Radio" not in line.inner_text()
+    assert line.locator(".net-mark").count() == 2
 
 
 def test_footer_carries_the_logo_trademark_line(guarded_page: Page, open_app: OpenApp) -> None:

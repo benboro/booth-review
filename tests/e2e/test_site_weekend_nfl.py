@@ -55,14 +55,83 @@ def test_flag_off_build_has_no_nfl_weekend(guarded_page: Page, open_app: OpenNfl
     assert guarded_page.locator("#nfl-view-weekend").count() == 0
 
 
-def test_sunday_is_default_day_and_subtitle(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+def test_one_page_per_week_with_no_day_tabs(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
+    """User 2026-11-09: the NFL weekend is one page per week, not split by day."""
     _open(nfl_guarded_page, open_nfl_app)
-    day = nfl_guarded_page.locator(".wk-day[aria-selected=true]")
-    assert day.inner_text().startswith("Sun. Oct. 11")
-    assert nfl_guarded_page.locator("#nfl-chart-subtitle").inner_text() == (
-        "Week 5, Sun. Oct. 11, all times ET"
-    )
+    assert nfl_guarded_page.locator(".wk-day").count() == 0
+    assert nfl_guarded_page.locator("#nfl-chart-subtitle").inner_text() == "Week 5, all times ET"
+    bands = nfl_guarded_page.locator(".wk-dayband-label").all_inner_texts()
+    assert bands == ["Sun. Oct. 11"]
     assert nfl_guarded_page.locator("#nfl-matched-games").is_hidden()
+
+
+def _week1_with_monday(nfl_fixture_raw: dict[str, Any]) -> dict[str, Any]:
+    """Week 1 of the fixture (a Thursday and a Sunday) plus a week-2 game moved to its Monday."""
+    raw = copy.deepcopy(nfl_fixture_raw)
+    games = raw["games"]
+    k = next(
+        i
+        for i, (s, w, d) in enumerate(
+            zip(games["season"], games["week"], games["date"], strict=True)
+        )
+        if s == 2026 and w == 2 and d == "2026-09-20"
+    )
+    games["week"][k] = 1
+    games["date"][k] = "2026-09-14"
+    games["kickoff"][k] = "2026-09-14T20:15:00-04:00"
+    return raw
+
+
+def test_whole_week_stacks_thursday_above_sunday_above_monday(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """User 2026-11-09: one timeline for the week, each day's rows under its own heading in
+    date order, on one shared time axis."""
+    page = nfl_guarded_page
+    raw = _week1_with_monday(nfl_fixture_raw)
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
+    _open(page, open_nfl_app, "&week=1")
+    assert page.locator(".wk-dayband-label").all_inner_texts() == [
+        "Thu. Sept. 10",
+        "Sun. Sept. 13",
+        "Mon. Sept. 14",
+    ]
+    assert page.locator(".wk-axis").count() == 1
+    dates = page.evaluate(
+        "() => [...document.querySelectorAll('.wk-row')].map((r) => r.dataset.date)"
+    )
+    assert dates == sorted(dates)
+    assert dates[0] == "2026-09-10"
+    assert dates[-1] == "2026-09-14"
+    # Every game of the week is on the one page, and the summary counts them all.
+    cells = page.locator(".wk-cell").count()
+    assert page.locator("#nfl-summary").inner_text() == f"{cells} of {cells} games match"
+    # The band labels stay put while the lane scrolls sideways.
+    position = page.locator(".wk-dayband-label").first.evaluate(
+        "(n) => getComputedStyle(n).position"
+    )
+    assert position == "sticky"
+
+
+def test_phone_list_names_the_day_in_each_kickoff_group(
+    nfl_mobile_page: Page, nfl_site_url: str, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """On a phone, the week's games group by day and kickoff, so Thursday's and Monday's night
+    games never share a group."""
+    page = nfl_mobile_page
+    raw = _week1_with_monday(nfl_fixture_raw)
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
+    page.add_init_script(f"window.__nflWeekendNow = '{NOW}'")
+    page.goto(f"{nfl_site_url}/index.html?sport=nfl&view=weekend&week=1")
+    page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
+    page.wait_for_selector(".wk-root--list")
+    titles = page.locator(".wk-group[data-date] .wk-group-title").all_inner_texts()
+    assert titles[0].startswith("Thu. Sept. 10, ")
+    assert titles[-1] == "Mon. Sept. 14, 8:15 pm"
+    dates = page.evaluate(
+        "() => [...document.querySelectorAll('.wk-group[data-date]')].map((g) => g.dataset.date)"
+    )
+    assert dates == sorted(dates)
 
 
 def test_cbs_window_is_four_sub_rows_by_booth_rank(
@@ -120,6 +189,13 @@ def test_time_and_network_tba_strip(nfl_guarded_page: Page, open_nfl_app: OpenNf
     assert "Time TBA" in text
     assert "Network TBA" in text
     assert "Mesa Comets @ Harbor City Gulls" in text
+    # The whole-week page names each strip game's day (it sits outside the day groups), and
+    # every cell's accessible name carries its date.
+    times = body.locator(".wk-time").all_inner_texts()
+    assert times
+    assert all(t.startswith("Sun. ") for t in times), times
+    grid_label = nfl_guarded_page.locator(".wk-row .wk-cell").first.get_attribute("aria-label")
+    assert (grid_label or "").startswith("Sun. Oct. 11, ")
 
 
 def test_team_pick_fades_cells_and_carries_to_crews(
@@ -222,9 +298,7 @@ def test_escape_returns_focus_after_the_grid_rebuilds_under_the_panel(
     page.wait_for_function("(id) => document.activeElement?.dataset?.wkId === id", arg=wk_id)
 
 
-def test_week_and_day_round_trip_and_invalid_dropped(
-    nfl_guarded_page: Page, open_nfl_app: OpenNfl
-) -> None:
+def test_week_round_trip_and_invalid_dropped(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
     page = nfl_guarded_page
     _open(page, open_nfl_app)
     assert "week=" not in page.url
@@ -235,46 +309,18 @@ def test_week_and_day_round_trip_and_invalid_dropped(
     page.reload()
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert page.locator(".wk-week").inner_text() == "Week 4"
-    # Week 1 has a Thursday and a Sunday; the Sunday default is omitted, Thursday is kept as the
-    # weekday token both sports use (18-UI-SPEC; 18-13 F23).
+    # An old link's day is dropped: the page shows the whole week (user 2026-11-09).
     page.goto(page.url.split("?")[0] + "?sport=nfl&view=weekend&week=1&day=thu")
     page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
     assert "week=1" in page.url
-    assert "day=thu" in page.url
-    assert page.locator(".wk-day[aria-selected=true]").inner_text().startswith("Thu.")
-    page.click(".wk-day >> nth=1")
     assert "day=" not in page.url
+    assert page.locator(".wk-dayband-label").count() == 2
     for bad in ("week=99", "week=abc", "week=6", "day=nope", "day=2026-09-10", "day=mon"):
         page.goto(page.url.split("?")[0] + f"?sport=nfl&view=weekend&{bad}")
         page.wait_for_function("window.__nflTestHooks && window.__nflTestHooks.ready === true")
         key = bad.split("=")[0]
         assert f"{key}=" not in page.url
         assert page.locator(".wk-week").inner_text() == "Week 5"
-
-
-def test_week_step_keeps_the_weekday_when_the_next_week_has_it(
-    nfl_guarded_page: Page, open_nfl_app: OpenNfl, nfl_fixture_raw: dict[str, Any]
-) -> None:
-    # 18-13 F22: stepping weeks keeps the selected weekday when the destination week has it.
-    raw = copy.deepcopy(nfl_fixture_raw)
-    games = raw["games"]
-    k = next(
-        i
-        for i, (s, w) in enumerate(zip(games["season"], games["week"], strict=True))
-        if s == 2026 and w == 2
-    )
-    games["date"][k] = "2026-09-17"  # a week-2 Thursday game
-    page = nfl_guarded_page
-    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
-    _open(page, open_nfl_app, "&week=1&day=thu")
-    assert "day=thu" in page.url
-    page.click(".wk-step--next")
-    assert "week=2" in page.url
-    assert "day=thu" in page.url
-    assert page.locator(".wk-day[aria-selected=true]").inner_text().startswith("Thu. Sept. 17")
-    page.click(".wk-step--next")
-    assert "week=3" in page.url
-    assert "day=" not in page.url
 
 
 def test_reopening_the_tab_lands_on_the_current_weekend(
@@ -386,9 +432,7 @@ def test_keyboard_reaches_a_cell(nfl_guarded_page: Page, open_nfl_app: OpenNfl) 
 # ---- v2.1 polish (18-UI-REVIEW items 6 and 8) ----
 
 
-def test_summary_counts_the_days_games_like_cfb(
-    nfl_guarded_page: Page, open_nfl_app: OpenNfl
-) -> None:
+def test_summary_counts_the_weeks_games(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
     # 18-UI-REVIEW item 6: the NFL summary was blank on This weekend, leaving a 60px band and
     # no "n of total games match" feedback under a pick.
     page = nfl_guarded_page
@@ -424,13 +468,13 @@ def test_weekend_panel_uses_the_ap_kickoff(nfl_guarded_page: Page, open_nfl_app:
 
 
 def test_map_switch_round_trip(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
-    """Phase 24-09: the Map segment mounts the weekend map, sets wview=map and keeps the day;
+    """Phase 24-09: the Map segment mounts the weekend map, sets wview=map and keeps the week;
     Timeline unmounts it and drops wview."""
     _open(nfl_guarded_page, open_nfl_app)
-    day = nfl_guarded_page.locator(".wk-day[aria-selected=true]").inner_text()
+    week = nfl_guarded_page.locator(".wk-week").inner_text()
     nfl_guarded_page.click('[data-wk-id="wview:map"]')
     nfl_guarded_page.wait_for_function("location.search.includes('wview=map')")
-    assert nfl_guarded_page.locator(".wk-day[aria-selected=true]").inner_text() == day
+    assert nfl_guarded_page.locator(".wk-week").inner_text() == week
     nfl_guarded_page.click('[data-wk-id="wview:timeline"]')
     nfl_guarded_page.wait_for_function("!location.search.includes('wview=map')")
     nfl_guarded_page.wait_for_selector(".wk-row")

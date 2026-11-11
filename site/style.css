@@ -6885,6 +6885,36 @@ tr.is-matched > :first-child {
   border-top: 1px solid var(--rule);
 }
 
+/* A whole-week page (NFL): a day heading above each day's rows, on one shared axis. The label
+   holds the left edge while the lane scrolls sideways, like the row heads. */
+.wk-dayband {
+  height: var(--space-xl);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  background: var(--bg);
+  border-bottom: 1px solid var(--rule);
+}
+
+.wk-dayrows + .wk-dayband {
+  border-top: 1px solid var(--rule-strong);
+}
+
+.wk-dayband-label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  padding: 0 var(--space-sm);
+  font: var(--font-body);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wk-dayrows {
+  position: relative;
+}
+
 .wk-rowhead {
   position: sticky;
   left: 0;

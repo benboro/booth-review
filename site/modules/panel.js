@@ -39,7 +39,7 @@ import { currentTheme } from './pill.js';
 import {
   crewBox, externalLink, linksList, liveOpener, locationLine, markText, networksParagraph,
 } from './panel-parts.js';
-import { sortNetworks } from './network.js';
+import { broadcastNetworks } from './network.js';
 import { bothRanked, rankBadge } from './rank-badge.js';
 import { joinerBreakNodes, syncBadgeWrap, watchBadgeWrap } from './matchup-wrap.js';
 import { personOnGame } from './select.js';
@@ -72,15 +72,18 @@ function dateLine(data, i, unplayed = false, weekend = false) {
   return showsTimeSlot(data, i) ? `${line}; ${SLOT_LABELS[t.time_slot[i]]}` : line;
 }
 
-/** Networks paragraph for a CFB telecast: primary network first, then the other
- * outlets. Full names and any parenthetical notes are kept (SITE-26). */
+/** Networks paragraph for a CFB telecast: primary network first, then the other outlets in
+ * network precedence (U7). Radio shows only when nothing else carries the game (user,
+ * 2026-11-09; `broadcastNetworks`). Full names and any parenthetical notes are kept (SITE-26). */
 function buildNetworksParagraph(data, i, theme) {
   const t = data.t;
-  const others = t.outlets[i].filter((idx) => idx !== t.network[i]);
+  const { primary, others } = broadcastNetworks(
+    data.lookups.networks[t.network[i]],
+    t.outlets[i].filter((idx) => idx !== t.network[i]).map((idx) => data.lookups.networks[idx]),
+  );
   return networksParagraph({
-    primary: data.lookups.networks[t.network[i]],
-    // The other outlets read in network precedence (U7); the primary stays first.
-    others: sortNetworks(others.map((idx) => data.lookups.networks[idx])),
+    primary,
+    others,
     theme,
   });
 }

@@ -461,3 +461,68 @@ def test_ap_kickoff_year_option(weekend_page: Page) -> None:
         "Sat. Nov. 21, 2020, kickoff time not recorded",
         "Sat. Oct. 31, 12:00 pm ET",
     ]
+
+
+def test_whole_week_day_model_orders_rows_by_date_with_undated_last(weekend_page: Page) -> None:
+    """User 2026-11-09: a whole-week page (day null) keys rows by date and network, runs them
+    in date order with each day's first row marked, and puts an undated row after every day."""
+    games = [
+        _game(
+            key="mon",
+            sport="nfl",
+            date="2026-11-16",
+            kickoffMin=1215,
+            networkId="espn",
+            networkName="ESPN",
+            family="disney",
+        ),
+        _game(
+            key="none",
+            sport="nfl",
+            date=None,
+            kickoffMin=780,
+            networkId="cbs",
+            networkName="CBS",
+            family="cbs",
+        ),
+        _game(
+            key="sun",
+            sport="nfl",
+            date="2026-11-15",
+            kickoffMin=780,
+            networkId="cbs",
+            networkName="CBS",
+            family="cbs",
+        ),
+        _game(
+            key="thu",
+            sport="nfl",
+            date="2026-11-12",
+            kickoffMin=1215,
+            networkId="prime",
+            networkName="Prime Video",
+            family="other",
+        ),
+        _game(
+            key="sun2",
+            sport="nfl",
+            date="2026-11-15",
+            kickoffMin=1220,
+            networkId="nbc",
+            networkName="NBC",
+            family="nbc",
+        ),
+    ]
+    rows = _run(
+        weekend_page,
+        "return W.buildDayModel(arg, {sport: 'nfl', day: null, width: 1440}).rows"
+        ".map((r) => [r.date, r.network, r.dayStart]);",
+        games,
+    )
+    assert rows == [
+        ["2026-11-12", "prime", True],
+        ["2026-11-15", "nbc", True],
+        ["2026-11-15", "cbs", False],
+        ["2026-11-16", "espn", True],
+        [None, "cbs", True],
+    ]

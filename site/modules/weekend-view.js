@@ -18,7 +18,7 @@
 import {
   WEEKEND_FADED_OPACITY, boothLine, buildDayModel, cellColors, cellState, clock12,
   dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupSides, matchupText,
-  stripCollapsedByDefault,
+  stripCollapsedByDefault, weekdayLabel,
 } from './weekend.js';
 import { makeCaretIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
@@ -81,14 +81,19 @@ export function makeContext(model, opts, state) {
   const passes = opts.passes ?? (() => null);
   const networksPicked = opts.networksPicked ?? (() => null);
   const days = dayTabs(model.games);
-  const day = state.day != null && days.includes(state.day) ? state.day : defaultDay(days, model.sport);
-  const inDay = model.games.filter((g) => g.date === day || g.date == null);
+  // `allDays` (the NFL, user 2026-11-09): one page for the whole week, no day tabs.
+  const allDays = Boolean(model.allDays);
+  let day = null;
+  if (!allDays) {
+    day = state.day != null && days.includes(state.day) ? state.day : defaultDay(days, model.sport);
+  }
+  const inDay = allDays ? model.games : model.games.filter((g) => g.date === day || g.date == null);
   const dayModel = buildDayModel(model.games, { sport: model.sport, day, width: state.width });
   const anyPick = model.games.some((g) => passes(g) !== null);
   const open = opts.onOpen ?? (() => {});
   return {
     model, opts, state, theme, nowDate, nowParts: np, nowWall, passes, networksPicked, days, day,
-    inDay, dayModel, anyPick, open,
+    allDays, inDay, dayModel, anyPick, open,
     countFor(d) {
       return model.games.filter((g) => (g.date === d || g.date == null) && passes(g) === true).length;
     },
@@ -126,8 +131,9 @@ function neutralPlayedIn(game) {
   return game.neutral ? playedInText(game.venue) : null;
 }
 
-export function accessibleName(game, state, line) {
-  const time = game.kickoffMin == null ? 'Time to be announced' : clock12(game.kickoffMin);
+export function accessibleName(game, state, line, { withDay = false } = {}) {
+  let time = game.kickoffMin == null ? 'Time to be announced' : clock12(game.kickoffMin);
+  if (withDay && game.date != null) time = `${dayLabel(game.date)}, ${time}`;
   const match = matchupText(game).replace(' @ ', ' at ');
   const net = game.networkName ?? 'Network to be announced';
   const parts = [`${time}, ${match}, ${net}.`];
@@ -144,10 +150,12 @@ export function accessibleName(game, state, line) {
  * Shared by the grid and the Time TBA strip.
  * @param {object} game
  * @param {object} ctx
- * @param {{service?: boolean, tail?: string|null}} [opts] - `service`: network name right of
- *   line 1 (the Streaming row); `tail`: text right of line 1 (the strip).
+ * @param {{service?: boolean, tail?: string|null, withDay?: boolean}} [opts] - `service`:
+ *   network name right of line 1 (the Streaming row); `tail`: text right of line 1 (the strip);
+ *   `withDay`: the weekday before the time, for a whole-week page's lists outside the day
+ *   groups (the strip and Not on the map).
  */
-export function buildCell(game, ctx, { tail = null } = {}) {
+export function buildCell(game, ctx, { tail = null, withDay = false } = {}) {
   const state = cellState(game, ctx.nowWall);
   const line = boothLine(game, state);
   const matchup = matchupText(game);
@@ -157,9 +165,12 @@ export function buildCell(game, ctx, { tail = null } = {}) {
   btn.dataset.wkState = state;
   // The four CFB lead booths (one A booth per network family) get a thin outline.
   if (line.star && game.sport === 'cfb') btn.classList.add('wk-cell--lead');
-  btn.setAttribute('aria-label', accessibleName(game, state, line));
+  // On a whole-week page every cell's name carries its day; the day heading is visual only.
+  btn.setAttribute('aria-label', accessibleName(game, state, line, { withDay: ctx.allDays }));
+  const showDay = withDay && ctx.allDays && game.date != null;
+  const day = showDay ? `${weekdayLabel(game.date)} ` : '';
   const when = game.kickoffMin == null ? 'Time TBA' : clock12(game.kickoffMin);
-  btn.title = `${when}, ${matchup}, ${line.text}`;
+  btn.title = `${day}${when}, ${matchup}, ${line.text}`;
 
   const l1 = el('span', 'wk-line wk-line1');
   const matchEl = el('span', 'wk-match', matchup);
@@ -168,7 +179,7 @@ export function buildCell(game, ctx, { tail = null } = {}) {
   const playedIn = neutralPlayedIn(game);
   if (playedIn) matchEl.title = playedIn;
   l1.append(
-    el('span', 'wk-time', game.kickoffMin == null ? 'Time TBA' : clockText(game.kickoffMin)),
+    el('span', 'wk-time', `${day}${game.kickoffMin == null ? 'Time TBA' : clockText(game.kickoffMin)}`),
     matchEl,
   );
   if (tail) l1.append(el('span', 'wk-tail', tail));
@@ -297,7 +308,7 @@ export function buildControls(ctx, api) {
     stepButton('next', next ? `Next week, ${next.label}` : 'Next week', latest,
       latest ? 'Latest week' : null, () => ctx.opts.onWeek?.(1), 'step:next'),
   );
-  const lead = days.length ? tabs : el('div', 'wk-days');
+  const lead = days.length && !ctx.allDays ? tabs : el('div', 'wk-days');
   // Phase 24: the Timeline | Map switch shows only when the host opts in with onView (MLB never
   // does), left of the week stepper.
   if (typeof ctx.opts.onView === 'function') {
@@ -322,7 +333,7 @@ export function buildStampLine(ctx) {
   if (ctx.anyPick && ctx.inDay.length > 0 && !ctx.inDay.some((g) => ctx.passes(g) === true)) {
     p.classList.add('wk-stamp--picks');
     p.textContent = `No games match your picks${ctx.day != null ? ` on ${dayLabel(ctx.day)}` : ''}. `
-      + 'Try another day or clear a filter.';
+      + `Try another ${ctx.allDays ? 'week' : 'day'} or clear a filter.`;
     return p;
   }
   if (model.past) {
@@ -351,7 +362,7 @@ export function buildStampLine(ctx) {
 
 /** One strip cell: the shared two-line cell with the network (or Network TBA) at the right. */
 function stripCell(game, ctx) {
-  const cell = buildCell(game, ctx, { tail: game.networkName ?? 'Network TBA' });
+  const cell = buildCell(game, ctx, { tail: game.networkName ?? 'Network TBA', withDay: true });
   applyPick(cell, game, ctx, ctx.rowFaded([game]));
   return cell;
 }
@@ -521,9 +532,10 @@ function buildRow(row, ctx, lanes) {
   const games = row.cells.map((c) => c.game);
   const faded = ctx.rowFaded(games);
   const wrap = el('div', 'wk-row');
-  wrap.dataset.row = row.id;
+  wrap.dataset.row = row.network;
+  if (row.date != null) wrap.dataset.date = row.date;
   const head = el('div', 'wk-rowhead');
-  if (row.id === 'streaming') {
+  if (row.network === 'streaming') {
     head.append(el('span', 'wk-rowname', row.label));
   } else {
     head.append(networkMark({ id: first.networkId, name: first.networkName ?? row.label,
@@ -538,7 +550,7 @@ function buildRow(row, ctx, lanes) {
   lane.style.width = `${ctx.dayModel.laneWidth}px`;
   const bySub = [];
   for (const c of row.cells) {
-    const cell = buildCell(c.game, ctx, { tail: row.id === 'streaming' ? c.game.networkName : null });
+    const cell = buildCell(c.game, ctx, { tail: row.network === 'streaming' ? c.game.networkName : null });
     cell.style.left = `${c.left}px`;
     cell.style.top = `${c.subRow * SUB_ROW_PITCH}px`;
     cell.style.width = `${c.width}px`;
@@ -603,14 +615,27 @@ function wireRoving(grid, lanes) {
   });
 }
 
+/** Whether the Now line shows: today is the shown day (or, on a whole-week page, a day with
+ * grid rows) and the minute is on the axis. */
+function nowLineShows(ctx) {
+  const axis = ctx.dayModel.axis;
+  const { date, minutes } = ctx.nowParts;
+  if (!axis || minutes < axis.start || minutes > axis.end) return false;
+  return ctx.allDays ? ctx.dayModel.rows.some((r) => r.date === date) : date === ctx.day;
+}
+
 function buildNowLine(ctx, body, axisEl) {
   const { axis, pxh } = ctx.dayModel;
   const { date, minutes } = ctx.nowParts;
-  if (date !== ctx.day || minutes < axis.start || minutes > axis.end) return;
+  if (!nowLineShows(ctx)) return;
   const x = ROW_HEAD_WIDTH + Math.round(((minutes - axis.start) * pxh) / 60);
   const line = el('div', 'wk-now');
   line.style.left = `${x}px`;
-  body.append(line);
+  // A whole-week page draws the line through today's rows only.
+  const host = ctx.allDays
+    ? [...body.querySelectorAll('.wk-dayrows')].find((n) => n.dataset.date === date)
+    : body;
+  host.append(line);
   const label = el('span', 'wk-now-label', 'Now');
   // Too close to the axis start, the label flips right of the line, clear of the corner.
   const room = NOW_LABEL_WIDTH + 2 * NOW_LABEL_GAP;
@@ -639,7 +664,22 @@ export function buildGrid(ctx, api) {
   const axisEl = buildAxis(ctx, laneWidth);
   const body = el('div', 'wk-body');
   const lanes = [];
-  for (const row of rows) body.append(buildRow(row, ctx, lanes));
+  if (ctx.allDays) {
+    // One group per date, in date order: a day heading, then that day's network rows.
+    let group = null;
+    for (const row of rows) {
+      if (row.dayStart) {
+        const band = el('div', 'wk-dayband');
+        band.append(el('span', 'wk-dayband-label', row.date != null ? dayLabel(row.date) : 'Date TBA'));
+        group = el('div', 'wk-dayrows');
+        if (row.date != null) group.dataset.date = row.date;
+        body.append(band, group);
+      }
+      group.append(buildRow(row, ctx, lanes));
+    }
+  } else {
+    for (const row of rows) body.append(buildRow(row, ctx, lanes));
+  }
   buildNowLine(ctx, body, axisEl);
   grid.append(axisEl, body);
   scroller.append(grid);
@@ -667,10 +707,8 @@ const ORPHAN_FOCUS = new WeakMap();
  * it shows on the grid. The minute timer rebuilds only when this changes (WR-02).
  */
 function clockKey(ctx, kind) {
-  const { date, minutes } = ctx.nowParts;
-  const axis = ctx.dayModel.axis;
-  const nowLine = kind === 'grid' && axis && date === ctx.day
-    && minutes >= axis.start && minutes <= axis.end;
+  const { minutes } = ctx.nowParts;
+  const nowLine = kind === 'grid' && nowLineShows(ctx);
   const states = ctx.model.games.map((g) => cellState(g, ctx.nowWall)).join();
   return `${nowLine ? minutes : ''}|${states}`;
 }

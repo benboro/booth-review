@@ -145,6 +145,11 @@ export function dayToken(isoDate) {
   return DAY_TOKENS[weekdayOf(isoDate)];
 }
 
+/** The AP weekday of an ET ISO date, `Thu.`; used where a whole-week page names a game's day. */
+export function weekdayLabel(isoDate) {
+  return WEEKDAYS[weekdayOf(isoDate)];
+}
+
 /**
  * AP-style day tab label, `Sat. Oct. 31`.
  * @param {string} isoDate
@@ -304,15 +309,19 @@ function precedenceIndex(ids) {
 }
 
 /**
- * Everything the render needs for one day of one sport.
- * Undated games (no ET date) appear in every day's strip, so nothing is dropped.
+ * Everything the render needs for one day of one sport, or for the whole week when `day` is
+ * null (the NFL, user 2026-11-09): then each row is one network on one date, rows run in date
+ * order (Thursday above Sunday above Monday) on one shared time axis, and the first row of each
+ * date carries `dayStart`. Undated games (no ET date) appear in every day's strip, so nothing
+ * is dropped.
  * @param {WeekendGame[]} games - the whole week.
- * @param {{sport: 'cfb'|'nfl', day: string, width: number}} opts
+ * @param {{sport: 'cfb'|'nfl', day: string|null, width: number}} opts
  * @returns {{
  *   axis: {start: number, end: number, ticks: {min: number, label: string}[]}|null,
  *   pxh: number,
  *   laneWidth: number,
- *   rows: {id: string, label: string, subRows: number, height: number,
+ *   rows: {id: string, network: string, date: (string|null), dayStart: boolean, label: string,
+ *          subRows: number, height: number,
  *          cells: {game: WeekendGame, subRow: number, left: number, width: number}[]}[],
  *   tba: WeekendGame[],
  *   compact: WeekendGame[]
@@ -320,8 +329,13 @@ function precedenceIndex(ids) {
  */
 export function buildDayModel(games, { sport, day, width }) {
   const block = BLOCK_MINUTES[sport];
-  const inDay = games.filter((g) => g.date === day || g.date == null);
+  const allDays = day == null;
+  const inDay = allDays ? games : games.filter((g) => g.date === day || g.date == null);
+  // The whole week keys a row by date and network, so each day keeps its own rows.
+  const rowKey = (g, row) => (allDays ? `${g.date ?? ''}|${row}` : row);
   const byRow = new Map();
+  const rowNetwork = new Map();
+  const rowDate = new Map();
   const tba = [];
   const compact = [];
   for (const g of inDay) {
@@ -329,8 +343,13 @@ export function buildDayModel(games, { sport, day, width }) {
     if (c.section === 'tba') tba.push(g);
     else if (c.section === 'compact') compact.push(g);
     else {
-      if (!byRow.has(c.row)) byRow.set(c.row, []);
-      byRow.get(c.row).push(g);
+      const key = rowKey(g, c.row);
+      if (!byRow.has(key)) {
+        byRow.set(key, []);
+        rowNetwork.set(key, c.row);
+        rowDate.set(key, allDays ? (g.date ?? null) : day);
+      }
+      byRow.get(key).push(g);
     }
   }
   const kickoffs = [...byRow.values()].flat().map((g) => g.kickoffMin);
@@ -356,21 +375,31 @@ export function buildDayModel(games, { sport, day, width }) {
     axis = { ...range, ticks };
   }
 
-  const prec = precedenceIndex([...byRow.keys()].filter((id) => id !== STREAMING_ROW));
+  const net = (key) => rowNetwork.get(key);
+  const prec = precedenceIndex([...new Set(rowNetwork.values())].filter((id) => id !== STREAMING_ROW));
   const premium = (id) => {
     const k = sport === 'cfb' ? CFB_PREMIUM_ROWS.indexOf(id) : -1;
     return k === -1 ? Infinity : k;
   };
-  const ids = [...byRow.keys()].filter((id) => id !== STREAMING_ROW)
-    .sort((a, b) => cmpNum(premium(a), premium(b)) || cmpNum(prec(a), prec(b)) || a.localeCompare(b));
-  if (byRow.has(STREAMING_ROW)) ids.push(STREAMING_ROW);
+  const streamingLast = (id) => (id === STREAMING_ROW ? 1 : 0);
+  const ids = [...byRow.keys()].sort(
+    // Undated rows (a whole-week page only) come after every dated day.
+    (a, b) => cmpNum(rowDate.get(a) ?? '9999', rowDate.get(b) ?? '9999')
+      || cmpNum(streamingLast(net(a)), streamingLast(net(b)))
+      || cmpNum(premium(net(a)), premium(net(b))) || cmpNum(prec(net(a)), prec(net(b)))
+      || net(a).localeCompare(net(b)),
+  );
 
-  const rows = ids.map((id) => {
+  const rows = ids.map((id, k) => {
     const rowGames = byRow.get(id);
     const { placed, subRows } = packSubRows(rowGames, block);
+    const network = net(id);
     return {
       id,
-      label: id === STREAMING_ROW ? 'Streaming' : (rowGames[0].networkName ?? id),
+      network,
+      date: rowDate.get(id) ?? null,
+      dayStart: allDays && (k === 0 || rowDate.get(ids[k - 1]) !== rowDate.get(id)),
+      label: network === STREAMING_ROW ? 'Streaming' : (rowGames[0].networkName ?? network),
       subRows,
       height: rowHeight(subRows),
       cells: placed.map(({ game, subRow }) => ({

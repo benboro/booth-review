@@ -698,30 +698,25 @@ def test_hover_text_stays_minimal_and_drops_methodology_notes(
     assert "Noon" not in dot7
     assert "Afternoon" not in dot7
     assert "Prime time" not in dot7
-    assert (
-        '<span style="color:#8B8B8B">Other Network</span>'
-        '/<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009970">Beta Network</span>'
-    ) in dot7
+    # The primary network only (user 2026-11-09): the other outlets are panel-only.
+    assert '<span style="color:#8B8B8B">Other Network</span><br>' in dot7
+    assert "Alpha Sports" not in dot7
+    assert "Beta Network" not in dot7
 
 
-def test_hover_text_network_line_is_slash_joined_primary_first(
+def test_hover_text_network_line_is_the_primary_only(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """SITE-26: a multi-outlet telecast lists networks slash-delimited (no
-    spaces around '/'), primary first, each colored by its own family --
-    the tooltip stand-in for a filled pill, since Plotly's hover renderer
-    can't draw one."""
+    """User 2026-11-09 (superseding SITE-26's slash-joined list): a multi-outlet
+    telecast's text tooltip names the primary network only, colored by its family --
+    the stand-in for a filled pill, since Plotly's hover renderer can't draw one."""
     open_app(guarded_page, "")
     _use_plotly_tooltip(guarded_page)
     traces = _traces(guarded_page)
     dot4 = _hover_text(traces, 4)
-    assert (
-        '<span style="color:#0072B2">Alpha Sports</span>'
-        '/<span style="color:#009970">Beta Network</span>'
-    ) in dot4
+    assert '<span style="color:#0072B2">Alpha Sports</span><br>' in dot4
+    assert "Beta Network" not in dot4
     assert "(also" not in dot4
-    assert " / " not in dot4
 
 
 def test_hover_text_strips_nested_network_notes(
@@ -2115,27 +2110,18 @@ _BORDER_COLOR = {
 }
 
 
-def test_html_tooltip_pills_are_space_separated(
+def test_html_tooltip_shows_one_network_mark(
     guarded_page: Page, open_app: Callable[[Page, str], None]
 ) -> None:
-    """D-29: the tooltip's network pills are visually separated only by the
-    flex row's own gap -- no `.tooltip-sep` element, and no literal "/" in
-    the row's text."""
+    """User, 2026-11-09: the tooltip shows the primary network only, even on a game the
+    data lists on several outlets (no `.tooltip-sep`, no "/")."""
     open_app(guarded_page, "")
     _hover_dot(guarded_page, 4)
 
     assert guarded_page.locator("#chart-tooltip .tooltip-sep").count() == 0
     networks_text = guarded_page.inner_text("#chart-tooltip .tooltip-networks")
     assert "/" not in networks_text
-
-    pills = guarded_page.locator("#chart-tooltip .tooltip-networks .net-mark")
-    expect(pills).to_have_count(2)
-    box0 = pills.nth(0).bounding_box()
-    box1 = pills.nth(1).bounding_box()
-    assert box0 is not None
-    assert box1 is not None
-    gap = box1["x"] - (box0["x"] + box0["width"])
-    assert 4 <= gap <= 12, gap
+    expect(guarded_page.locator("#chart-tooltip .tooltip-networks .net-mark")).to_have_count(1)
 
 
 def test_html_tooltip_border_is_primary_family_color(
