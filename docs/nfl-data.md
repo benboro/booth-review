@@ -1,6 +1,6 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `2.2.0`). It is separate from
+`nfl-data.json` is the NFL site file (schema `2.3.0`). It is separate from
 `site-data.json` (see `docs/site-data.md`, schema `2.8.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
@@ -82,6 +82,7 @@ Every `people`, `networks` and `venues` entry must be referenced by something.
 | `home`, `away` | `lookups.franchises` indexes |
 | `home_name`, `away_name` | `lookups.team_names` indexes (the name that season) |
 | `home_points`, `away_points` | final score; both null or both set; null before the game is played |
+| `overtimes` | overtime periods played: 0 in regulation, 1 for one overtime, 2 and up for more (playoff games); from play-by-play (the last quarter number minus 4), else the schedule's yes/no `overtime` flag as 0 or 1; null before the game is played or when neither source says |
 | `final_margin` | home minus away points; null exactly when the points are null |
 | `slot` | `lookups.slots` index |
 | `standalone`, `agotw`, `cbs_national`, `international`, `flexed` | special-game flags |
@@ -248,3 +249,4 @@ removed or retyped field. Changing the CFB contract's version is out of scope he
 - 2.1.0 (Phase 18): the `upcoming` block and `freshness.weekend` for the This weekend tab
   (additive).
 - 2.2.0 (Phase 24): `place` on `games` and `upcoming`, `lookups.venues` (additive minor).
+- 2.3.0: `overtimes` on `games`, for the Crews game lists' Score column (additive minor).

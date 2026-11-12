@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from booth_review.contract.models import VenueRef
 
-NFL_SCHEMA_VERSION = "2.2.0"
+NFL_SCHEMA_VERSION = "2.3.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -208,6 +208,9 @@ class NflGameColumns(BaseModel):
     away_name: list[int]
     home_points: list[int | None]
     away_points: list[int | None]
+    # Overtime periods played (0 in regulation, 2 for a playoff game's second overtime); null
+    # before the game is played, or when neither play-by-play nor the schedule says.
+    overtimes: list[int | None]
     final_margin: list[int | None]
     slot: list[int]
     standalone: list[bool]
@@ -439,7 +442,7 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.2.0"]
+    schema_version: Literal["2.3.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
@@ -603,6 +606,12 @@ class NflSiteData(BaseModel):
                 raise ValueError(f"games.final_margin[{i}]: set without points")
         elif margin != home - away:
             raise ValueError(f"games.final_margin[{i}]: does not equal home minus away points")
+        overtimes = g.overtimes[i]
+        if overtimes is not None:
+            if home is None:
+                raise ValueError(f"games.overtimes[{i}]: set without points")
+            if overtimes < 0:
+                raise ValueError(f"games.overtimes[{i}]: must not be negative")
 
     def _check_rating(self, i: int) -> None:
         g = self.games

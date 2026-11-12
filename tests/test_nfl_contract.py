@@ -55,7 +55,7 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "2.2.0",
+        "schema_version": "2.3.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -112,6 +112,7 @@ def _minimal_payload() -> Payload:
             "away_name": [1, 0],
             "home_points": [27, None],
             "away_points": [24, None],
+            "overtimes": [0, None],
             "final_margin": [3, None],
             "slot": [10, 11],
             "standalone": [False, False],
@@ -584,6 +585,7 @@ def test_nfl_game_fields_pinned() -> None:
         "away_name",
         "home_points",
         "away_points",
+        "overtimes",
         "final_margin",
         "slot",
         "standalone",
@@ -625,8 +627,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "2.2.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/2.2.0"
+    assert NFL_SCHEMA_VERSION == "2.3.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/2.3.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -923,4 +925,29 @@ def test_venue_coordinates_are_range_checked() -> None:
     data["lookups"]["venues"] = [{**_venue(), "lat": 95.0}]
     data["games"]["place"][0] = 0
     with pytest.raises(ValidationError, match=r"venues\.0\.lat"):
+        validate_nfl_site_data(data)
+
+
+# --- overtimes on games (contract 2.3.0) ---
+
+
+def test_overtimes_fixture_marks_the_tie_and_one_decided_overtime() -> None:
+    games = _fixture()["games"]
+    assert sorted(v for v in games["overtimes"] if v) == [1, 1]
+    for i, value in enumerate(games["overtimes"]):
+        assert (value is None) == (games["home_points"][i] is None)
+
+
+def test_overtimes_set_without_points_is_rejected() -> None:
+    data = _fixture()
+    i = data["games"]["home_points"].index(None)
+    data["games"]["overtimes"][i] = 1
+    with pytest.raises(ValidationError, match=r"games\.overtimes\[\d+\]: set without points"):
+        validate_nfl_site_data(data)
+
+
+def test_overtimes_negative_is_rejected() -> None:
+    data = _fixture()
+    data["games"]["overtimes"][0] = -1
+    with pytest.raises(ValidationError, match=r"games\.overtimes\[0\]: must not be negative"):
         validate_nfl_site_data(data)

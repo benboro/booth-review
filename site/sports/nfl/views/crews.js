@@ -14,9 +14,11 @@ import { buildNflCrewRows, sortNflCrewRows, NFL_SORT_SPEC } from '../crew-rows.j
 import { lowNThreshold } from '../mode.js';
 import { createReasonBar, setReason, linkDisabled } from '../reason-bar.js';
 import { mountViewTools } from '../tools.js';
-import { createTableState, el, excitementCell, renderCrewsTable, activeSort } from '../../../modules/crews-table.js';
+import {
+  createTableState, el, excitementCell, renderCrewsTable, activeSort, scoreCell,
+} from '../../../modules/crews-table.js';
 import { networkMark } from '../../../modules/network.js';
-import { formatAudienceTable, MINUS } from '../../../modules/format.js';
+import { formatAudienceTable, MINUS, scoreParts } from '../../../modules/format.js';
 import { hideTooltip } from '../../../modules/tooltip.js';
 import { chartModel, drawCrewsChart, theme, CHART_ROWS } from './crews-chart.js';
 
@@ -242,7 +244,12 @@ function gameRow(ctx, model, row, i) {
       viewers.append(tag);
     }
   }
-  tr.append(matchupTd, el('td', 'date crews-game-date', c.date[i]), netTd, excitementCell(c.excitement[i]), viewers);
+  // The final score, away first as in the matchup (contract 2.3.0 overtimes), as on CFB.
+  const score = scoreCell(scoreParts(c.away_points[i], c.home_points[i], c.overtimes?.[i]));
+  tr.append(
+    matchupTd, el('td', 'date crews-game-date', c.date[i]), score, netTd,
+    excitementCell(c.excitement[i]), viewers,
+  );
   tr.addEventListener('click', () => ctx.openGame?.(i, tr));
   return tr;
 }
@@ -364,11 +371,13 @@ export function render(ctx) {
     colCount: columns.length + 1,
     tableClasses: ['is-nfl', ...(built.perSeason ? ['has-season'] : [])],
     // Laid under the row table's columns (crews-table.js `layoutGameCols`): Matchup under
-    // Booth, Date under Season (or Rank by season), Network under Network, and the figures
-    // ending under their averages.
+    // Booth, Date under Season (or Rank by season), the final score right after the widest
+    // date (user 2026-11-11: before Date it cost Matchup its room and wrapped most matchups),
+    // Network under Network, and the figures ending under their averages.
     gameCols: [
       { head: 'Matchup', cls: 'crews-gcol-matchup', anchor: 'booth' },
       { head: 'Date', cls: 'crews-gcol-date', anchor: ['season', 'rank'] },
+      { head: 'Score', cls: 'crews-gcol-score', width: 88, hug: true },
       { head: 'Network', cls: 'crews-gcol-network', anchor: 'network' },
       { head: 'Excitement', cls: 'crews-gcol-exc', anchor: 'exc', num: true },
       { head: 'Viewers', cls: 'crews-gcol-viewers', anchor: 'viewers', num: true },

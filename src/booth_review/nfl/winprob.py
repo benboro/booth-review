@@ -66,7 +66,8 @@ def game_wp_metrics(
     game_type_by_game: Mapping[str, str],
     min_plays: int = MIN_WP_PLAYS,
 ) -> pl.DataFrame:
-    """Per-game GEI-style excitement and sample sd of per-play home_wp deltas.
+    """Per-game GEI-style excitement and sample sd of per-play home_wp deltas, plus the
+    overtime periods played (`ot_periods`: the last quarter number minus 4, 0 in regulation).
 
     excitement = (3600 / t) x sum |delta home_wp|, t including overtime played.
     Null home_wp plays are skipped; the series is the non-null home_wp values
@@ -78,6 +79,10 @@ def game_wp_metrics(
         plays.sort("play_id").partition_by("game_id", as_dict=True, maintain_order=True).items()
     ):
         gid = str(game_id)
+        # Overtime periods played: nflverse numbers them 5, 6, ...; counted from any play, so a
+        # game with too few win-probability plays still says whether it went to overtime.
+        top_qtr = game["qtr"].max()
+        ot_periods = None if top_qtr is None else max(int(top_qtr) - 4, 0)  # type: ignore[arg-type]
         series = [float(v) for v in game["home_wp"].to_list() if v is not None]
         wp_plays = len(series)
         last = game.row(-1, named=True)
@@ -105,6 +110,7 @@ def game_wp_metrics(
                 "wp_plays": wp_plays,
                 "excitement_score": excitement,
                 "wp_volatility": volatility,
+                "ot_periods": ot_periods,
             }
         )
     return pl.DataFrame(
@@ -114,5 +120,6 @@ def game_wp_metrics(
             "wp_plays": pl.Int64,
             "excitement_score": pl.Float64,
             "wp_volatility": pl.Float64,
+            "ot_periods": pl.Int64,
         },
     )

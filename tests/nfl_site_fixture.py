@@ -178,6 +178,7 @@ def _game(
     exc: bool = True,
     booth: str | None = None,
     tie: bool = False,
+    ot: bool = False,
     original: tuple[str, int, str] | None = None,
     sideline: int | None = None,
     no_kickoff: bool = False,
@@ -200,6 +201,8 @@ def _game(
         "crew": crew,
         "flags": flags,
         "played": played,
+        # A tie went to overtime by definition; `ot` marks a decided overtime game.
+        "ot": ot or tie,
         "viewers": viewers and played,
         "cause": cause,
         "exc": exc and played,
@@ -233,7 +236,7 @@ def _specs() -> list[dict[str, Any]]:
             booth="lead",
         ),
         g(2024, 1, "2024-09-08", "13:00", 4, 5, "Sunday early", CBS, _CREW_CBS, flags="C"),
-        g(2024, 2, "2024-09-15", "20:20", 1, 2, "SNF", NBC, _CREW_NBC, flags="S"),
+        g(2024, 2, "2024-09-15", "20:20", 1, 2, "SNF", NBC, _CREW_NBC, flags="S", ot=True),
         g(2024, 2, "2024-09-16", "20:15", 3, 4, "MNF", ESPN, _CREW_ESPN, flags="S"),
         g(
             2024,
@@ -600,6 +603,7 @@ def _games_block(specs: list[dict[str, Any]], person_roles: dict[int, str]) -> d
             "away_name": _team_name_index(s["away"], s["season"]),
             "home_points": hp,
             "away_points": ap,
+            "overtimes": (1 if s["ot"] else 0) if s["played"] else None,
             "final_margin": margin,
             "slot": SLOT[s["slot"]],
             "standalone": "S" in s["flags"],
@@ -955,7 +959,7 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "2.2.0",
+        "schema_version": "2.3.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,

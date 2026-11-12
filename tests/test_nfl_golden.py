@@ -73,9 +73,13 @@ _NFL_GOLDEN: dict[str, str] = {
     # null freshness.weekend; no game, crew or figure changed.
     # Re-pinned at Phase 24 Plan 06: NFL contract 2.2.0 adds all-null place columns and an
     # empty lookups.venues (the location table ships header-only); nothing else changed.
-    "processed/nfl-data.json": ("4992c116abf13de5d505cc20fb63ec46280bb0e41e886d998d156482fe8dab38"),
+    # Re-pinned for the NFL Crews score column (2026-11-11): NFL contract 2.3.0 adds
+    # games.overtimes, and nfl_games.parquet an overtimes column, null for the three synthetic
+    # games. Dropping them (and setting the version back to 2.2.0) gives the earlier digests
+    # (4992c116abf1... and 8f4900395984...); nothing else changed.
+    "processed/nfl-data.json": ("033237fa794276e4ff0ae9b3c7486edffef49a31a58acd2dfc2b5efdfef9d9f7"),
     "processed/nfl_games.parquet": (
-        "8f49003959842fe8f30c4ff6427bd4c0c61815be6cbe53be6707ac90c23ea082"
+        "31c0655e30a13215aa8d0ecd596806c3255f77eadd9cc087c908f88b256f7337"
     ),
     # Added at Phase 18 Plan 07: the synthetic 2014 season is fully played, so both new
     # tables are empty (the digest of an empty NDJSON); no existing output changed.

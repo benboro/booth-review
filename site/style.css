@@ -5687,7 +5687,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   height: 16px;
 }
 
-/* The final score, away first as in the matchup, after the marks and before Date. An overtime
+/* The final score, away first as in the matchup: on CFB after the marks and before Date, on NFL
+   right after the date (user 2026-11-11). An overtime
    game adds "OT" / "2OT" in muted ink. Tabular digits keep the dash in one place down the list. */
 .crews-games td.crews-game-score {
   white-space: nowrap;
@@ -5896,8 +5897,8 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   }
 
   /* Game items with excitement carry it on its own line under line 2 (line 2 has no room left
-     at 360px), labeled since the heads are hidden. A CFB item with a final score opens that line
-     with the score; NFL and MLB items (no score cell) and unscored CFB items start it with
+     at 360px), labeled since the heads are hidden. A CFB or NFL item with a final score opens
+     that line with the score; MLB items (no score cell) and unscored items start it with
      excitement. */
   .table-scroll .crews-games tbody tr.crews-game.has-exc {
     grid-template-areas:

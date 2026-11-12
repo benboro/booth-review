@@ -14,7 +14,7 @@ import { NATURAL_DIR, defaultSort, modelBreakSeason, sortCrewRows } from './crew
 import { crewEntries, figureSourceOf, finalScore, formatAudienceTable, formatMatchup } from './format.js';
 import { networkMark } from './network.js';
 import { safeHref } from './panel.js';
-import { createTableState, el, excitementCell, renderCrewsTable } from './crews-table.js';
+import { createTableState, el, excitementCell, renderCrewsTable, scoreCell } from './crews-table.js';
 import { gameMarksCell } from './game-marks.js';
 
 /** This sport's table state: paging, open rows and announce memory (shared mechanics in crews-table.js). */
@@ -221,16 +221,6 @@ function gameColsFor(mode) {
   ];
 }
 
-/** The final score, away first as in the matchup, with "OT" / "2OT" after an overtime game. */
-function scoreCell(data, i) {
-  const td = el('td', 'crews-game-score');
-  const final = finalScore(data, i);
-  if (!final) return td;
-  td.append(final.score);
-  if (final.ot) td.append(' ', el('span', 'crews-game-ot', final.ot));
-  return td;
-}
-
 function gameRow(row, mode, ctx, i) {
   const { data } = ctx;
   const matchup = formatMatchup(data, i, {});
@@ -254,7 +244,7 @@ function gameRow(row, mode, ctx, i) {
   const net = data.lookups.networks[data.t.network[i]];
   const netTd = el('td', 'crews-game-network');
   netTd.append(networkMark({ id: net.id, name: net.name, family: net.family }));
-  tr.append(matchupTd, gameMarksCell(data, i), scoreCell(data, i), el('td', 'date crews-game-date', data.t.date[i]), netTd);
+  tr.append(matchupTd, gameMarksCell(data, i), scoreCell(finalScore(data, i)), el('td', 'date crews-game-date', data.t.date[i]), netTd);
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');
   tr.append(excitementCell(data.t.excitement[i]), viewers);

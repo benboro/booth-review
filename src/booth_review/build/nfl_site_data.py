@@ -369,6 +369,7 @@ def _append_game(
         )
     cols["home_points"].append(row["home_points"])
     cols["away_points"].append(row["away_points"])
+    cols["overtimes"].append(row["overtimes"])
     cols["final_margin"].append(row["final_margin"])
     cols["slot"].append(NFL_SLOTS.index(slot))
     cols["standalone"].append(bool(row["is_standalone"]))
