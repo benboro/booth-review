@@ -293,6 +293,7 @@ def build_site_data(
         "neutral_site",
         "home_points",
         "away_points",
+        "overtimes",
         "home_rank",
         "away_rank",
         "excitement",
@@ -681,6 +682,7 @@ def build_site_data(
         "neutral",
         "away_points",
         "home_points",
+        "overtimes",
         "away_rank",
         "home_rank",
         "network",
@@ -726,6 +728,7 @@ def build_site_data(
         target["neutral"].append(bool(row["neutral_site"]))
         target["away_points"].append(row["away_points"])
         target["home_points"].append(row["home_points"])
+        target["overtimes"].append(row["overtimes"])
         target["away_rank"].append(row["away_rank"])
         target["home_rank"].append(row["home_rank"])
         target["network"].append(network_index[network_key])

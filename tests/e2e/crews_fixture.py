@@ -362,6 +362,8 @@ def build_crews_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
             neutral=False,
             away_points=17 + n % 10,
             home_points=24 + n % 14,
+            # Every 7th game goes to one overtime and every 11th to two (n = 0: regulation).
+            overtimes=2 if n and n % 11 == 0 else 1 if n % 7 == 0 and n else 0,
             away_rank=None,
             home_rank=None,
             network=gm.network,

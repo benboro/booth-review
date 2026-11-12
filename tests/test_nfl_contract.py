@@ -45,7 +45,9 @@ REPO = Path(__file__).resolve().parent.parent
 # matched_crew_aa.
 # Re-pinned for the This weekend rivalry icon (2026-11-11): contract 2.9.0 adds
 # telecasts_scheduled.rivalry.
-CFB_SCHEMA_SHA256 = "8862de70f5f18e92018addedc8201cf3421a6843543765b3e76cc7bebbc55283"
+# Re-pinned for the Crews score column (2026-11-11): contract 2.10.0 adds telecasts[_unrated]
+# overtimes.
+CFB_SCHEMA_SHA256 = "129610bae35b8cbe0127f4687993347883ef7a0dbeaf49f26081555f56ad899b"
 
 INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.com")
 
@@ -628,7 +630,7 @@ def test_schema_version_pinned() -> None:
 
 
 def test_cfb_contract_unchanged() -> None:
-    assert cfb_models.SCHEMA_VERSION == "2.9.0"
+    assert cfb_models.SCHEMA_VERSION == "2.10.0"
     digest = hashlib.sha256((REPO / "docs" / "site-data.schema.json").read_bytes()).hexdigest()
     assert digest == CFB_SCHEMA_SHA256
 

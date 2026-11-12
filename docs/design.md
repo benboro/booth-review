@@ -168,7 +168,9 @@ records only where the site settles or applies them.
   column: Date in a fixed slot before Network, the crew under Network, Excitement ending
   under Excitement and Viewers under the last column. CFB lists put a marks column between
   Matchup and Date: rivalry, bowl, playoff trophy, the national championship emblem (the CFP
-  football mark, title game only, beside the trophy) and the ranked-matchup star. A CFB
+  football mark, title game only, beside the trophy) and the ranked-matchup star, then a Score
+  column (away first, as in the matchup, with a muted "OT" / "2OT" after an overtime game)
+  before Date, so the marks sit near the matchup (user 2026-11-11). A CFB
   person row's games name the rest of the booth after the matchup, muted, instead of in a
   Crew column.
 

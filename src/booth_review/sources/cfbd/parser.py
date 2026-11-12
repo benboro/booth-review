@@ -83,6 +83,37 @@ class CfbdGame:
     is_cfp: bool = False
     playoff_round: str | None = None
     venue_id: int | None = None
+    # Overtimes from the line scores (see `_overtimes`): 0 regulation, 1 at least one overtime,
+    # 2+ that many; None when the line scores are missing or don't fit the final score.
+    overtimes: int | None = None
+
+
+def _overtimes(row: dict[str, Any]) -> int | None:
+    """Overtimes from CFBD's line scores: entries past the fourth quarter.
+
+    0 for regulation; 1 for "went to overtime", since CFBD's 2026 data folds every overtime
+    period into one fifth entry (some hold more points than one period allows); 2 or more only
+    when CFBD lists the periods one by one. None when the line scores can't be trusted: missing,
+    shorter than four periods, a different count per team, a non-integer entry, totals that
+    differ from the final score, a tied final, or extra entries after an untied fourth quarter
+    that aren't all zero. Zero-filled extra entries after an untied fourth quarter are
+    regulation padding.
+    """
+    home, away = row.get("homeLineScores"), row.get("awayLineScores")
+    home_points, away_points = row.get("homePoints"), row.get("awayPoints")
+    if not isinstance(home, list) or not isinstance(away, list) or len(home) != len(away):
+        return None
+    if len(home) < 4 or not all(_is_int(v) for v in (*home, *away)):
+        return None
+    if not _is_int(home_points) or not _is_int(away_points):
+        return None
+    if sum(home) != home_points or sum(away) != away_points or home_points == away_points:
+        return None
+    tied = sum(home[:4]) == sum(away[:4])
+    extra = [*home[4:], *away[4:]]
+    if not tied:
+        return 0 if all(v == 0 for v in extra) else None
+    return len(home) - 4
 
 
 def parse_games(content: bytes) -> list[CfbdGame]:
@@ -129,6 +160,7 @@ def parse_games(content: bytes) -> list[CfbdGame]:
                 is_cfp=is_cfp,
                 playoff_round=playoff_round,
                 venue_id=_optional_int(row, "venueId", kind="game"),
+                overtimes=_overtimes(row),
             )
         )
     return games

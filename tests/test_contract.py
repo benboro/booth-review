@@ -835,7 +835,7 @@ def test_unrated_fields_are_display_only() -> None:
 
 
 def test_site_data_fields_unchanged() -> None:
-    assert len(SITE_DATA_FIELDS) == 36
+    assert len(SITE_DATA_FIELDS) == 37
     assert SITE_DATA_FIELDS[:3] == ("season", "date", "kickoff")
     assert SITE_DATA_FIELDS[-1] == "week"
     assert not set(UnratedColumns.model_fields) & {"cause"} & set(SITE_DATA_FIELDS)
@@ -862,7 +862,7 @@ def test_unrated_block_has_no_cfbd_only_fields() -> None:
 def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
     """The fixture plus a one-row unrated block (a regular 2019 net-b game,
     crewless, cause none); every unrated variant mutates this row."""
-    data["schema_version"] = "2.9.0"
+    data["schema_version"] = "2.10.0"
     # The replaced unrated block was the only user of the last two venues.
     del data["lookups"]["venues"][7:]
     row: dict[str, Any] = {
@@ -875,6 +875,7 @@ def _with_unrated_row(data: dict[str, Any]) -> dict[str, Any]:
         "neutral": False,
         "away_points": 17,
         "home_points": 24,
+        "overtimes": 0,
         "away_rank": None,
         "home_rank": None,
         "network": 1,

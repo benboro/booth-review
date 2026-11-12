@@ -1159,6 +1159,20 @@
           "title": "Outlets",
           "type": "array"
         },
+        "overtimes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Overtimes",
+          "type": "array"
+        },
         "place": {
           "items": {
             "anyOf": [
@@ -1318,6 +1332,7 @@
         "neutral",
         "away_points",
         "home_points",
+        "overtimes",
         "away_rank",
         "home_rank",
         "network",
@@ -1615,6 +1630,20 @@
           "title": "Outlets",
           "type": "array"
         },
+        "overtimes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Overtimes",
+          "type": "array"
+        },
         "place": {
           "items": {
             "anyOf": [
@@ -1729,6 +1758,7 @@
         "neutral",
         "away_points",
         "home_points",
+        "overtimes",
         "away_rank",
         "home_rank",
         "network",
@@ -1917,7 +1947,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/site-data/2.9.0",
+  "$id": "booth-review/site-data/2.10.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1939,7 +1969,7 @@
       "$ref": "#/$defs/Lookups"
     },
     "schema_version": {
-      "const": "2.9.0",
+      "const": "2.10.0",
       "title": "Schema Version",
       "type": "string"
     },
