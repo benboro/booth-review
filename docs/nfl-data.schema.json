@@ -732,6 +732,20 @@
           "title": "Original Slot",
           "type": "array"
         },
+        "overtimes": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Overtimes",
+          "type": "array"
+        },
         "place": {
           "items": {
             "anyOf": [
@@ -846,6 +860,7 @@
         "away_name",
         "home_points",
         "away_points",
+        "overtimes",
         "final_margin",
         "slot",
         "standalone",
@@ -1842,7 +1857,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/nfl-data/2.2.0",
+  "$id": "booth-review/nfl-data/2.3.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1862,7 +1877,7 @@
       "$ref": "#/$defs/NflLookups"
     },
     "schema_version": {
-      "const": "2.2.0",
+      "const": "2.3.0",
       "title": "Schema Version",
       "type": "string"
     },

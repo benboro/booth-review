@@ -113,6 +113,7 @@ NFL_GAME_COLUMNS: tuple[str, ...] = (
     "final_margin",
     "home_points",
     "away_points",
+    "overtimes",
     "viewership",
     "viewership_scope",
     "viewership_status",
@@ -177,6 +178,7 @@ NFL_GAME_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "final_margin": pl.Int64,
     "home_points": pl.Int64,
     "away_points": pl.Int64,
+    "overtimes": pl.Int64,
     "viewership": pl.Float64,
     "viewership_scope": pl.String,
     "viewership_status": pl.String,
@@ -347,6 +349,17 @@ def _pick_headline(
     if network_id is not None:
         pool = [m for m in pool if network_id in m.network_ids] or pool
     return sorted(pool, key=lambda m: m.telecast_id)[0], len(pool) > 1
+
+
+def _overtimes(game: NflGame, metrics: Mapping[str, object]) -> int | None:
+    """Overtime periods a played game went to: the play-by-play count (so a playoff game's
+    second overtime reads 2OT), else the schedule's yes/no flag as 0 or 1, else null."""
+    periods = metrics.get("ot_periods")
+    if isinstance(periods, int):
+        return periods
+    if game.overtime is not None:
+        return int(game.overtime)
+    return None
 
 
 def _wp_by_game(
@@ -615,6 +628,7 @@ def assemble_nfl_games(
         if game.home_score is not None and game.away_score is not None:
             home_points, away_points = game.home_score, game.away_score
             margin = home_points - away_points
+        overtimes = _overtimes(game, metrics) if home_points is not None else None
         is_agotw = agotw_src is not None
         is_cbs = cbs_src is not None
         listing = item.listing
@@ -674,6 +688,7 @@ def assemble_nfl_games(
                 "final_margin": margin,
                 "home_points": home_points,
                 "away_points": away_points,
+                "overtimes": overtimes,
                 "viewership": headline.headline_value if headline else None,
                 "viewership_scope": "window" if slot_value in _SUNDAY_AFTERNOON else "game",
                 "viewership_status": headline.headline_status if headline else None,

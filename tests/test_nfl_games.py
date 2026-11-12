@@ -312,6 +312,42 @@ def test_pbp_metrics_joined_by_game_id(tmp_path: Path) -> None:
     assert table.counts["pbp_missing_seasons"] == 0
 
 
+def _ot_plays(game_id: str, last_qtr: int) -> list[dict[str, object]]:
+    return [
+        {
+            "game_id": game_id,
+            "play_id": float(i + 1),
+            "qtr": last_qtr if i == 2 else 1,
+            "quarter_seconds_remaining": 300.0,
+            "home_wp": 0.5,
+            "home_wp_post": 1.0,
+        }
+        for i in range(3)
+    ]
+
+
+def test_overtimes_from_pbp_then_schedule_flag_then_null(tmp_path: Path) -> None:
+    """Contract 2.3.0: play-by-play counts the periods (a second overtime reads 2); without it
+    the schedule's yes/no flag gives 0 or 1; an unplayed game, or one neither source covers,
+    is null."""
+    scored = {"home_score": "27", "away_score": "24"}
+    rows = [
+        game_row("p2", 1, 2, "2015-09-13", **scored, overtime="1"),
+        game_row("p0", 3, 4, "2015-09-13", **scored, overtime="0"),
+        game_row("f1", 5, 6, "2015-09-13", **scored, overtime="1"),
+        game_row("na", 7, 8, "2015-09-13", **scored, overtime="NA"),
+        game_row("un", 9, 10, "2015-09-20", week=2),
+    ]
+    path = tmp_path / "pbp.parquet"
+    plays = [*_ot_plays("p2", 6), *_ot_plays("p0", 4)]
+    pl.DataFrame(plays).select(PBP_COLUMNS).write_parquet(path)
+    table = build(tmp_path, rows, pbp={2015: path})
+    got = {g: one(table, g)["overtimes"] for g in ("p2", "p0", "f1", "na")}
+    assert got == {"p2": 2, "p0": 0, "f1": 1, "na": None}
+    unplayed = table.frame.filter(pl.col("game_id") == "un")
+    assert unplayed.height == 0 or unplayed["overtimes"][0] is None
+
+
 def test_viewership_scope_and_attribution(tmp_path: Path) -> None:
     rows = [
         game_row("a", 1, 2, "2015-09-13", "13:00"),

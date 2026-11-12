@@ -154,6 +154,11 @@ class _Builder:
             network=network,
             crew=crew,
             final_margin=1 + k % 21,
+            # Points that agree with the margin, and a few overtime games (contract 2.3.0) so
+            # the Score column shows "OT" and "2OT".
+            home_points=17 + 1 + k % 21,
+            away_points=17,
+            overtimes=2 if k % 11 == 5 else 1 if k % 7 == 3 else 0,
             excitement=round(2.0 + (k % 70) / 10, 3),
             viewers=6_000_000 + 100_000 * (k % 40),
             era=_ERA_OF_SEASON[season] if era is None else era,

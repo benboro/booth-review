@@ -170,7 +170,12 @@ records only where the site settles or applies them.
   Matchup and Date: rivalry, bowl, playoff trophy, the national championship emblem (the CFP
   football mark, title game only, beside the trophy) and the ranked-matchup star, then a Score
   column (away first, as in the matchup, with a muted "OT" / "2OT" after an overtime game)
-  before Date, so the marks sit near the matchup (user 2026-11-11). A CFB
+  before Date, so the marks sit near the matchup (user 2026-11-11). NFL lists read Matchup |
+  Date | Score | Network: the score starts right after the widest date (a `hug` column, with an
+  88px slot before Network as the fallback), because a Score slot before Date took Matchup's
+  room and wrapped most NFL matchups onto two lines (user 2026-11-11, option A); NFL overtime comes from play-by-play (so a playoff game's second overtime reads
+  "2OT"), else the schedule's yes/no flag ("OT"). On a phone, a scored CFB or NFL game opens
+  its third line with the score, then excitement. A CFB
   person row's games name the rest of the booth after the matchup, muted, instead of in a
   Crew column.
 

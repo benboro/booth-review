@@ -420,7 +420,7 @@ def test_game_list_ten_newest_first_with_tags(
     games = sub.locator("tr.crews-game")
     assert games.count() == 10
     heads = [h.strip() for h in sub.locator("table.crews-games thead th").all_inner_texts()]
-    assert heads == ["Matchup", "Date", "Network", "Excitement", "Viewers"]
+    assert heads == ["Matchup", "Date", "Score", "Network", "Excitement", "Viewers"]
     excitement = [c.strip() for c in sub.locator("td.crews-game-exc").all_inner_texts()]
     assert len(excitement) == 10
     assert all(re.fullmatch(r"\d+\.\d", c) for c in excitement), excitement
@@ -1008,21 +1008,134 @@ def test_phone_booth_column_is_pinned_with_a_fill_and_heads_fit(
     assert widths[1] == 148  # Booth
 
 
-def test_phone_game_item_excitement_starts_its_line(
+def test_phone_game_item_score_opens_the_excitement_line(
     nfl_mobile_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
-    """NFL game items have no score cell, so excitement opens line 3 under the date (the CFB
-    score column's phone line must not reserve a score slot here)."""
+    """A scored NFL game item opens line 3 with its score, under the date, then excitement
+    (the CFB phone rule; an item without a score starts that line with excitement)."""
     page = nfl_mobile_page
+    _open(page, open_nfl_app)
+    page.locator(f"{ROW} td.crews-name").first.click(position={"x": 20, "y": 12})
+    game = page.locator(
+        f"{VIEW} tr.crews-game.has-exc:has(td.crews-game-exc:not(:empty))"
+        ":has(td.crews-game-score:not(:empty))"
+    ).first
+    game.wait_for()
+    date = game.locator("td.crews-game-date").bounding_box()
+    score = game.locator("td.crews-game-score").bounding_box()
+    exc = game.locator("td.crews-game-exc").bounding_box()
+    assert date and score and exc
+    assert score["y"] > date["y"] + 2
+    assert abs(score["x"] - date["x"]) <= 2
+    assert abs(exc["y"] - score["y"]) <= 2
+    assert exc["x"] > score["x"] + score["width"]
+
+
+def test_phone_unscored_game_item_excitement_starts_its_line(
+    nfl_mobile_page: Page, open_nfl_app: Callable[..., None], nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """An NFL game with no final score has an empty score cell, so excitement opens line 3
+    under the date, with no score slot reserved."""
+    raw = build_nfl_crews_raw(nfl_fixture_raw)
+    raw["games"]["home_points"] = [None] * len(raw["games"]["home_points"])
+    raw["games"]["away_points"] = [None] * len(raw["games"]["away_points"])
+    page = nfl_mobile_page
+    page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
     _open(page, open_nfl_app)
     page.locator(f"{ROW} td.crews-name").first.click(position={"x": 20, "y": 12})
     game = page.locator(f"{VIEW} tr.crews-game.has-exc:has(td.crews-game-exc:not(:empty))").first
     game.wait_for()
+    assert game.locator("td.crews-game-score").inner_text() == ""
     date = game.locator("td.crews-game-date").bounding_box()
     exc = game.locator("td.crews-game-exc").bounding_box()
     assert date and exc
     assert exc["y"] > date["y"] + 2
     assert abs(exc["x"] - date["x"]) <= 2
+
+
+_SCORE_JS = """() => {
+  const sub = document.querySelector('#nfl-view-crews tr.crews-expanded table.crews-games');
+  const heads = [...sub.querySelectorAll('thead th')].map((th) => th.className);
+  const cells = [...sub.querySelectorAll('td.crews-game-score')];
+  const box = (sel) => sub.querySelector(sel).getBoundingClientRect();
+  return {
+    heads,
+    scores: cells.map((td) => td.textContent.trim()).filter(Boolean),
+    scoreRight: box('thead th.crews-gcol-score').right,
+    scoreLeft: box('thead th.crews-gcol-score').left,
+    networkLeft: box('thead th.crews-gcol-network').left,
+    widestDateRight: Math.max(...[...sub.querySelectorAll('td.crews-game-date')].map((td) => {
+      const r = document.createRange();
+      r.selectNodeContents(td);
+      return r.getBoundingClientRect().right;
+    })),
+    matchupLines: [...sub.querySelectorAll('td.crews-game-matchup')].map((td) => {
+      const r = document.createRange();
+      r.selectNodeContents(td);
+      return r.getClientRects().length;
+    }),
+  };
+}"""
+
+
+def test_game_list_scores_sit_before_the_date_and_note_overtime(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    """Matchup | Date | Score | Network (user 2026-11-11, option A): the score away first with
+    an en dash, then "OT" / "2OT" after an overtime game, starting just after the widest date
+    and ending before Network, so the matchup keeps its room."""
+    serve_nfl_crews(nfl_guarded_page)
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&perseason=0")
+    _vm(page)
+    two = f"fox:{CASE_TWO_ANALYSTS['pbp']}.synth-an-two-a"
+    _row(page, two).locator(".crews-chevron").click()
+    sub = page.locator(f"{VIEW} tr.crews-expanded[data-sub-for='{two}']")
+    more = sub.locator(".crews-games-more")
+    while more.count():
+        more.first.click()
+    got = page.evaluate(_SCORE_JS)
+    order = [next(c for c in h.split() if c.startswith("crews-gcol-")) for h in got["heads"]]
+    assert order[:4] == [
+        "crews-gcol-matchup",
+        "crews-gcol-date",
+        "crews-gcol-score",
+        "crews-gcol-network",
+    ]
+    assert got["scores"] and all(
+        re.fullmatch("\\d+\u2013\\d+( [2-9]?OT)?", s) for s in got["scores"]
+    )
+    # Away first, as in the matchup: the overlay's away side always scored 17.
+    assert all(s.startswith("17\u2013") for s in got["scores"])
+    assert any(s.endswith(" OT") for s in got["scores"]), "a one-overtime game reads OT"
+    assert any(s.endswith(" 2OT") for s in got["scores"]), "a double-overtime game reads 2OT"
+    gap = got["scoreLeft"] - got["widestDateRight"]
+    assert 0 <= gap <= 32, f"the score sits just after the widest date ({gap}px)"
+    assert got["scoreRight"] <= got["networkLeft"] + 1
+    assert max(got["matchupLines"]) == 1, "every matchup stays on one line at 1440px"
+
+
+def test_overtime_label_is_muted(
+    nfl_guarded_page: Page,
+    open_nfl_app: Callable[..., None],
+    serve_nfl_crews: Callable[[Page], None],
+) -> None:
+    serve_nfl_crews(nfl_guarded_page)
+    page = nfl_guarded_page
+    _open(page, open_nfl_app, "&perseason=0")
+    _vm(page)
+    two = f"fox:{CASE_TWO_ANALYSTS['pbp']}.synth-an-two-a"
+    _row(page, two).locator(".crews-chevron").click()
+    sub = page.locator(f"{VIEW} tr.crews-expanded[data-sub-for='{two}']")
+    more = sub.locator(".crews-games-more")
+    while not sub.locator(".crews-game-ot").count() and more.count():
+        more.first.click()
+    colors = sub.locator(".crews-game-ot").first.evaluate(
+        "el => [getComputedStyle(el).color, getComputedStyle(el.parentElement).color]"
+    )
+    assert colors[0] != colors[1]
 
 
 def test_no_console_errors(page: Page, nfl_site_url: str) -> None:

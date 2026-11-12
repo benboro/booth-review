@@ -71,6 +71,18 @@ def test_playoff_multiple_overtimes_add_up() -> None:
     assert row["excitement_score"] == pytest.approx(1.1 * 3600 / (3600 + 900 + 600))
 
 
+@pytest.mark.parametrize(("last_qtr", "periods"), [(4, 0), (5, 1), (6, 2)])
+def test_ot_periods_count_the_quarters_past_four(last_qtr: int, periods: int) -> None:
+    row = _run(_plays("g", [0.5, 0.7, 0.4], 1.0, last_qtr=last_qtr), gtype="DIV", min_plays=3)
+    assert row["ot_periods"] == periods
+
+
+def test_ot_periods_known_even_without_enough_wp_plays() -> None:
+    row = _run(_plays("g", [None, None, None], None, last_qtr=5), min_plays=3)
+    assert row["excitement_score"] is None
+    assert row["ot_periods"] == 1
+
+
 def test_null_plays_skipped_not_zero_filled() -> None:
     df = _plays("g", [0.5, None, 0.7, 0.4], 1.0)
     row = _run(df, min_plays=3)

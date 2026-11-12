@@ -505,10 +505,20 @@ export function matchupParts(data, i, options = {}) {
  */
 export function finalScore(data, i) {
   const t = data.t;
-  const away = t.away_points[i];
-  const home = t.home_points[i];
+  return scoreParts(t.away_points[i], t.home_points[i], t.overtimes?.[i]);
+}
+
+/**
+ * `finalScore` from plain values, shared by the CFB and NFL Crews game lists: the score away
+ * first with an en dash, and "OT" for one overtime, "2OT" and up for more.
+ * @param {number|null|undefined} away
+ * @param {number|null|undefined} home
+ * @param {number|null|undefined} overtimes - periods played; null or missing reads as none
+ * @returns {{score: string, ot: string|null}|null} null before a final score
+ */
+export function scoreParts(away, home, overtimes) {
   if (away == null || home == null) return null;
-  const periods = t.overtimes?.[i] ?? 0;
+  const periods = overtimes ?? 0;
   return { score: `${away}\u2013${home}`, ot: periods > 1 ? `${periods}OT` : periods === 1 ? 'OT' : null };
 }
 

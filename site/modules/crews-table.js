@@ -48,6 +48,20 @@ export function el(tag, cls, text) {
  * Avg excitement column leaves it). Sits just before Viewers; its row takes `has-exc`.
  * @param {number|null|undefined} value
  */
+/**
+ * A game list's Score cell (CFB and NFL): the final score, away first as in the matchup, with a
+ * muted "OT" / "2OT" after an overtime game; empty before a final score.
+ * @param {{score: string, ot: string|null}|null} final - `finalScore` / `scoreParts` output
+ * @returns {HTMLTableCellElement}
+ */
+export function scoreCell(final) {
+  const td = el('td', 'crews-game-score');
+  if (!final) return td;
+  td.append(final.score);
+  if (final.ot) td.append(' ', el('span', 'crews-game-ot', final.ot));
+  return td;
+}
+
 export function excitementCell(value) {
   const td = el('td', 'num crews-game-exc');
   if (value != null) td.append(el('span', 'crews-figure', value.toFixed(1)));
