@@ -8,15 +8,21 @@ rr_records/*.json} (invented teams, people, and figures only; D-07).
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
+
+import pytest
 
 from booth_review.config import DataPaths
 from booth_review.resolve.inputs import (
     load_506_listings,
     load_cfbd_games,
     load_rr_records,
+    shown_outlet_crew,
     vault_seasons,
 )
+from booth_review.resolve.networks import NetworkTable, load_networks
+from booth_review.sources.sports506.parser import CrewLine, Listing506
 
 FIXTURES = Path(__file__).parent / "fixtures" / "spike"
 
@@ -121,3 +127,77 @@ def test_load_rr_records_empty_when_no_season_directory(vault_paths: DataPaths) 
     records, parse_error_count = load_rr_records(vault_paths, 2025)
     assert records == []
     assert parse_error_count == 0
+
+
+# -- inputs.shown_outlet_crew --------------------------------------------------------------
+
+_NETWORKS_CSV = (
+    "variant,network_id,display_name,family,tier,feed_type,season_from,season_to,priority\n"
+    "KXMP (Example City),local-affiliate,Local Affiliate,other,other,main,,,\n"
+    "ECN+,example-conference-network,Example Conference Network,conference,conference,main,,,\n"
+    "Example Network,example-network,Example Network,other,regional,main,,,\n"
+    "Example Network Union Sports,example-network,Example Network,other,regional,main,,,\n"
+)
+
+
+def _networks(tmp_path: Path) -> NetworkTable:
+    (tmp_path / "networks.csv").write_text(_NETWORKS_CSV)
+    return load_networks(tmp_path)
+
+
+def _listing(network_raw: str, lines: tuple[CrewLine, ...]) -> Listing506:
+    return Listing506(
+        season=2026,
+        week_label="8",
+        source_row_index=0,
+        date_et=date(2026, 10, 17),
+        kickoff_et=None,
+        away_raw="Prairie State",
+        away_rank=None,
+        home_raw="Union City",
+        home_rank=None,
+        neutral=False,
+        network_raw=network_raw,
+        crew_raw="(not read)",
+        crew_names=tuple(name for line in lines for name in line.names),
+        feed_kind="main",
+        game_label=None,
+        crew_lines=lines,
+    )
+
+
+_LOCAL = CrewLine(outlet="KXMP", names=("Pat Example", "Jordan Sample"))
+_CONFERENCE = CrewLine(outlet="ECN+", names=("Casey Demo", "Riley Mock"))
+
+
+def test_shown_outlet_crew_keeps_the_crew_of_the_primary_network(tmp_path: Path) -> None:
+    listing = _listing("KXMP (Example City) / ECN+", (_LOCAL, _CONFERENCE))
+    picked = shown_outlet_crew(listing, _networks(tmp_path))
+    assert picked.crew_names == ("Casey Demo", "Riley Mock")
+    assert picked.crew_lines == listing.crew_lines
+
+
+def test_shown_outlet_crew_matches_a_positional_outlet(tmp_path: Path) -> None:
+    lines = (
+        CrewLine(outlet="Example Network", names=("Pat Example", "Jordan Sample", "Avery Test")),
+        CrewLine(outlet="Union Sports", names=("Casey Demo", "Riley Mock")),
+    )
+    picked = shown_outlet_crew(_listing("Example Network Union Sports", lines), _networks(tmp_path))
+    assert picked.crew_names == ("Pat Example", "Jordan Sample", "Avery Test")
+
+
+@pytest.mark.parametrize(
+    ("network_raw", "lines"),
+    [
+        ("KXMP (Example City) / ECN+", (_LOCAL, CrewLine(outlet=None, names=("Casey Demo",)))),
+        ("KXMP (Example City) / ECN+", (_LOCAL, CrewLine(outlet="ECN", names=("Casey Demo",)))),
+        ("ECN+", (_CONFERENCE, CrewLine(outlet="ECN+", names=("Avery Test",)))),
+        ("Unlisted Network", (_LOCAL, _CONFERENCE)),
+    ],
+    ids=["unknown-outlet", "no-line-matches", "two-lines-match", "unmapped-network"],
+)
+def test_shown_outlet_crew_keeps_every_name_when_no_single_line_matches(
+    tmp_path: Path, network_raw: str, lines: tuple[CrewLine, ...]
+) -> None:
+    listing = _listing(network_raw, lines)
+    assert shown_outlet_crew(listing, _networks(tmp_path)) == listing

@@ -6,10 +6,18 @@ spike/join.py's private per-season loaders now delegate to these.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from booth_review.config import DataPaths
 from booth_review.errors import ParseError
+from booth_review.reference import reference_dir
+from booth_review.resolve.networks import (
+    NetworkTable,
+    load_networks,
+    primary_network,
+    strip_feed_marker,
+)
 from booth_review.sources.cfbd.parser import CfbdGame, parse_games
 from booth_review.sources.ratingsref.parser import RRRecord, parse_record
 from booth_review.sources.sports506.parser import Listing506, parse_week_page
@@ -76,10 +84,39 @@ def load_506_listings(paths: DataPaths, season: int) -> list[Listing506]:
         week_files.append((sort_key, label, file_path))
     week_files.sort(key=lambda item: item[0])
 
+    networks = load_networks(reference_dir())
     listings: list[Listing506] = []
     for _sort_key, label, file_path in week_files:
-        listings.extend(parse_week_page(file_path.read_bytes(), season=season, week_label=label))
+        listings.extend(
+            shown_outlet_crew(listing, networks)
+            for listing in parse_week_page(file_path.read_bytes(), season=season, week_label=label)
+        )
     return listings
+
+
+def shown_outlet_crew(listing: Listing506, networks: NetworkTable) -> Listing506:
+    """Keep only the crew of the outlet the site shows when a 506 crew cell
+    lists one crew per outlet (`Listing506.crew_lines`): the line whose
+    outlet maps to the listing's primary network. A second outlet's crew is
+    often a radio or local-station call, never the telecast's booth. When
+    any line's outlet is unknown, or no line (or more than one) maps to the
+    primary network, the listing keeps every line's names.
+    """
+    if not listing.crew_lines or listing.network_raw is None:
+        return listing
+    if any(line.outlet is None for line in listing.crew_lines):
+        return listing
+    shown = primary_network([listing.network_raw], listing.season, networks).network_id
+    if shown is None:
+        return listing
+    matches = []
+    for line in listing.crew_lines:
+        row = networks.lookup(strip_feed_marker(line.outlet or "")[0], listing.season)
+        if row is not None and row.network_id == shown:
+            matches.append(line)
+    if len(matches) != 1:
+        return listing
+    return replace(listing, crew_names=matches[0].names)
 
 
 def load_rr_records(paths: DataPaths, season: int) -> tuple[list[RRRecord], int]:
