@@ -95,11 +95,16 @@ header-only review_crew_backup_disagreements.csv (old digest 9e2b349af80b... is 
 of the old header line, the new one the sha256 of the new header line); no other digest
 moved, so no figure or crew changed.
 
-Crews score column (2026-11-11): contract 2.9.0 adds telecasts[_unrated].overtimes, and
+This weekend rivalry icon (2026-11-11): contract 2.9.0 adds telecasts_scheduled.rivalry
+(null on every synthetic scheduled row); site-data.json with that column dropped and the
+version set back to 2.8.0 hashes to the earlier digest (3244f6b46d0c...), so no figure or
+crew changed.
+
+Crews score column (2026-11-11): contract 2.10.0 adds telecasts[_unrated].overtimes, and
 games.parquet an overtimes column (all null in the synthetic vault, which has no line scores).
 games.parquet with that column dropped hashes to the old digest (b91e1e6f2b96...), and
-site-data.json with it dropped and the version set back to 2.8.0 hashes to the old digest
-(3244f6b46d0c...), so no figure or crew changed.
+site-data.json with it dropped and the version set back to 2.9.0 hashes to the rivalry-icon
+digest (3ce1d142ca89...), so no figure or crew changed.
 """
 
 from __future__ import annotations
@@ -198,7 +203,7 @@ _GOLDEN: dict[str, str] = {
         "07ff159d34d5e0cfdd3b77f84c3ecaec0cd14c437fa015fe89333709317831c3"
     ),
     "processed/site-data.json": (
-        "384097fe024b589da1a0a6526076e43f62282f08d89d4dd6e16ded3993f6499d"
+        "82bc7f9fa1a763b4e77a7c2753339b109a189c4f4f114d039bfe27aef466190c"
     ),
     "processed/telecast_flags.parquet": (
         "2e2f334909dc09ab5ff590cadd3d4cb2158678a2d980948cd454219ab82927e2"

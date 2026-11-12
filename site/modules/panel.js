@@ -333,6 +333,8 @@ export function renderMatchupTitle(titleEl, data, i) {
     nodes.push(glue);
   }
   titleEl.replaceChildren(...joinerBreakNodes(away, nodes));
+  // Only a ranked title keeps the badge's 36px at its line ends (user 2026-11-11).
+  titleEl.classList.toggle('rk-has', ranked);
   // A wrapped title moves its badge to the right, centred on the lines (matchup-wrap.js).
   watchBadgeWrap(titleEl);
   const label = formatMatchup(data, i, { withScore: true });

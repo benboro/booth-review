@@ -18,7 +18,7 @@ immediately, in parallel with Phase 3's real joins.
 `site-data.json` is **one versioned columnar JSON file** (D-13), not an array
 of per-telecast objects:
 
-- `schema_version` — the contract version (currently `"2.9.0"`). See
+- `schema_version` — the contract version (currently `"2.10.0"`). See
   Versioning below.
 - `generated_at` — ISO UTC time of the newest change to a collected input (the
   newest manifest entry whose content differs from the previous one for the same
@@ -93,7 +93,7 @@ the client, never in the data:
 Phase 18's This weekend tab. One list per display field, index-aligned like the other
 blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neutral`,
 `away_rank`, `home_rank`, `network`, `outlets`, `crew`, `crew_source_url`,
-`crew_source_label`, `home_conference`, `away_conference`, `place`, `week`. Each has the meaning of the same-named `telecasts` field, with these differences:
+`crew_source_label`, `home_conference`, `away_conference`, `place`, `week`, `rivalry`. Each has the meaning of the same-named `telecasts` field, with these differences:
 
 - A row is an unplayed FBS-involving regular-season game of the current season, in weeks
   up to and including the current weekend, that has no shipped telecast row (a game in
@@ -119,6 +119,9 @@ blocks: `season`, `date`, `kickoff`, `time_slot`, `away_team`, `home_team`, `neu
   lists a game at TBA but the week's Awful Announcing announcing-schedule post gives a
   clear ET time for it, that time fills `kickoff`; CFBD's own time always wins.
 - `week` is never null here: every row is a numbered regular-season week's game.
+- `rivalry` follows the `telecasts.rivalry` rule (the first regular-season meeting of a
+  curated rivalry's two teams in the season, resolved over every game of the season), so a
+  rivalry game with no telecast row yet still carries its rivalry for This weekend.
 - `crew` is empty unless the user has imported an ESPN Press Room page whose booth names
   this game on the game's own CFBD network, in the ESPN family (18-13 F7). Then it lists
   that booth (main feed; the first name is play-by-play), and `crew_source_url` (the
@@ -230,7 +233,7 @@ Each `crew` entry is `{ person: int, role, feed }`:
   is null when a flag has no single citable source.
 - **`bowls`**: `{ name, core, franchise }` — `name` is the official bowl name for that season with sponsor, `core` is the core bowl name and is always a substring of `name` (D-17/D-19). Never a raw CFBD note. `franchise` is an index into `bowl_franchises`, and `core` is always the franchise's `name` or one of its `former` names.
 - **`bowl_franchises`**: `{ slug, name, former }` — a bowl franchise from the hand-checked `franchise` column of `data/reference/bowls.csv`; `name` is the latest core name and must be the `core` of one of the franchise's `lookups.bowls` entries, `former` the older core names oldest first, for search only; `slug` is a permanent URL value (SITE-44, 04.9 D-07). Franchise and rivalry `name`s are distinct across both lists, compared case-insensitively, so no two Game rows share a label. `name` and `former` are derived from every shipped postseason game, rated or not (04.13 D-14), so a bowl's latest core name and its older core names reflect unrated games too.
-- **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one shipped game, rated or unrated; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
+- **`rivalries`**: `{ slug, name, article, teams }` — a curated rivalry from `data/reference/rivalries.csv` with at least one shipped game, rated, unrated or scheduled; `article` is `"the"` when titles read "of the {name}" (the Iron Bowl) and null when the name stands alone (Bedlam, Paul Bunyan's Axe) or already starts with "The " (The Game), which must be null; `teams` are two ascending indexes into `lookups.teams` (SITE-45). Franchise and rivalry slugs share one namespace with the four reserved CFP slugs (`cfp-national-championship`, `cfp-semifinal`, `cfp-quarterfinal`, `cfp-first-round`).
 - **`venues`**: `{ name, city, state, country, lat, lon }` — a venue that at least one shipped game (rated or unrated) was played at and that has coordinates, in ascending CFBD venue id order; every row is referenced by some game's `place` (the contract rejects an unreferenced row), so no standalone venue table ships. `city`, `state` and `country` are null when CFBD has no value (`state` is null abroad); `country` is CFBD's country code; `lat` and `lon` are rounded to 4 decimals (SITE-71, 04.18).
 - **`booths`**: `{ family, season, pbp, analyst, rank, tier, lead_network }` — a CFB booth some shipped game belongs to, sorted by family, season and play-by-play person. `family` is `disney`, `fox`, `cbs` or `nbc`; `pbp` and `analyst` index `lookups.people` (the booth is keyed by its play-by-play voice and stores the regular analyst; `analyst` is null when none is on record or the regular analyst is on no shipped crew row); `rank` is the published rank (null for an unlisted booth or an unranked conference lead); `tier` is `a` (rank 1), `b` (rank 2) or `other`; `lead_network` indexes `lookups.networks` and is set only for a conference-network lead, which is always tier `other`. The contract rejects a game whose booth family differs from its network's family or whose booth season differs from its season, a tier that does not match its rank, a second `a` or `b` booth for one family and season, a duplicate (family, season, pbp), and a booth no game references. No game or telecast ids or counts ship (Phase 10).
 - **`conferences`**: `{ name, is_fbs }` — one entry per distinct conference
@@ -336,7 +339,8 @@ Unrated rows carry the same display-only CFBD fields as rated rows (`excitement`
   `2.5.0 -> 2.6.0`: `lookups.booths` and `telecasts[_unrated].booth` (Phase 10 CFB booth tiers; additive);
   `2.6.0 -> 2.7.0`: the `telecasts_scheduled` block, `lookups.weeks`, `freshness.weekend` and the per-game `week` label in all three blocks (Phase 18 This weekend tab; additive);
   `2.7.0 -> 2.8.0` added coverage `matched_crew_aa` (Phase 27 AA crews, review WR-05); minor bump, additive;
-  `2.8.0 -> 2.9.0` added `telecasts[_unrated].overtimes` (the Crews score column, 2026-11-11); minor bump, additive.
+  `2.8.0 -> 2.9.0` added `telecasts_scheduled.rivalry` (This weekend rivalry icon), so a scheduled rivalry game is tagged like a telecast and `lookups.rivalries` counts scheduled games; minor bump, additive;
+  `2.9.0 -> 2.10.0` added `telecasts[_unrated].overtimes` (the Crews score column, 2026-11-11); minor bump, additive.
 - **Removing a field, renaming a field, or changing a field's type**
   (including narrowing an enum) bumps the **major** version (`1.0.0` →
   `2.0.0`).
@@ -375,6 +379,8 @@ As of v1.4.0 telecast 3 (2021) carries a crew-source pair (a patched crew with n
 As of v2.0.0 there is no `pregame` column; the fixture's `home_spread` column is unchanged: `[-3.5, 7.0, -2.0, null, -1.0, -14.0, 5.5, -3.0, 6.5, -0.5, -2.5, 1.5]`. By telecast index: 0 home favorite won; 1 away favorite, home won (upset); 2 line but no final score; 3 no line; 4 home favorite won; 5 home favorite won; 6 away favorite, home won; 7 home favorite, away won; 8 away favorite won; 9 home favorite, away won; 10 tie (20-20); 11 away favorite won.
 
 As of v2.1.0 the two bowls belong to franchises `harbor-bowl` (latest name Harbor Bowl, former name Bayside Bowl: a renamed bowl) and `summit-bowl` (hosting the telecast 5 CFP semifinal); `Lakeshore Rivalry` (Northfield-Lakeview, article `"the"`) tags telecasts 0 and 4; `The Bridge Game` (Stonebridge-Maplecrest, article null) tags telecast 11, while telecast 3 between the same teams (2021-12-04, neutral) is null: it stands for a conference-championship rematch whose regular-season meeting was not rated. The two-season rename itself is exercised with synthetic games in tests/test_named_games.py and tests/test_build_site_data.py.
+
+As of v2.9.0 every fixture `telecasts_scheduled.rivalry` is null (no scheduled game is a rivalry meeting); the tagged case is exercised with synthetic games in tests.
 
 As of v2.8.0 every fixture coverage row has `matched_crew_aa` 0.
 

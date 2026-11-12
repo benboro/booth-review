@@ -10,7 +10,7 @@
 
 import {
   accessibleName, applyPick, buildSourceLine, buildStampLine, clock12, el,
-  mountWeekend,
+  mountWeekend, rivalryMark,
 } from './weekend-view.js';
 import { makeCaretIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
@@ -61,12 +61,18 @@ function item(game, ctx, { showTime = false } = {}) {
   l2.append(booth);
   // The matchup's own wrapper is as tall as its visible lines, so the ranked badge inside it
   // centres on line 1, or lines 1-2 when the matchup wraps (user feedback 2026-11-03). Every
-  // row gets it, ranked or not, so the layout is the same either way.
+  // row gets the wrapper; only a row with a mark gives up room for it (user 2026-11-11).
   const mu = el('span', 'wk-item-mu');
   mu.append(l1);
   if (isRankedMatchup(game)) {
     btn.classList.add('rk-has');
     mu.append(rankBadge({ hidden: true }));
+  }
+  // The rivalry swords (user pick B2, 2026-11-11): alone they take the badge's place on the
+  // matchup lines; with the badge they sit under it, at the end of the booth line.
+  if (game.rivalry) {
+    btn.classList.add('rv-has');
+    (isRankedMatchup(game) ? l2 : mu).append(rivalryMark(game.rivalry));
   }
   text.append(mu, l2);
   btn.append(mark, text);

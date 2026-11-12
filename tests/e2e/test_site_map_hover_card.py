@@ -789,7 +789,7 @@ async (which) => {
   }
   const el = document.getElementById('chart-tooltip');
   return {rkHas: el.classList.contains('rk-has'), badges: el.querySelectorAll('.rk-badge').length,
-    rkSlot: el.classList.contains('rk-slot'), padRight: getComputedStyle(el).paddingRight};
+    padRight: getComputedStyle(el).paddingRight};
 }
 """
 
@@ -849,8 +849,7 @@ def test_game_card_badge_clears_the_text_boxes(guarded_page: Page, open_app: Ope
 _CARD_SWEEP_JS = """
 async (base) => {
   // Shows the same card text ranked and unranked (both CFB cards), one character longer each
-  // step, and compares the card's height and each text line's height, so a line that wraps at
-  // a different place with the badge shows up.
+  // step, and measures the card's height and width and each text line's height.
   const t = await import('./modules/tooltip.js');
   const el = document.getElementById('chart-tooltip') ?? t.ensureTooltipEl();
   const full = '#20 Ironpeak Polytechnic Institute of the Northern Plains @ #5 Stonebridge State';
@@ -866,9 +865,9 @@ async (base) => {
   for (let n = 1; n <= full.length; n += 1) {
     const card = {...base, matchup: full.slice(0, n),
       booth: {...base.booth, text: booth.slice(0, n)}};
-    t.showGameTooltip({...card, ranked: true, rankSlot: true}, opts);
+    t.showGameTooltip({...card, ranked: true}, opts);
     const ranked = measure();
-    t.showGameTooltip({...card, ranked: false, rankSlot: true}, opts);
+    t.showGameTooltip({...card, ranked: false}, opts);
     const plain = measure();
     out.push({n, ranked, plain});
   }
@@ -877,50 +876,50 @@ async (base) => {
 """
 
 
-def test_every_cfb_game_card_keeps_the_badge_padding(guarded_page: Page, open_app: OpenApp) -> None:
-    """User decision 2026-11-03 ("reserve badge space everywhere"): an unranked CFB card keeps
-    the ranked card's 43.5px right padding; a card without rankSlot (NFL) keeps 16px."""
+def test_only_a_ranked_card_keeps_the_badge_padding(guarded_page: Page, open_app: OpenApp) -> None:
+    """User 2026-11-11 (reversing 2026-11-03's "reserve badge space everywhere"): a ranked card
+    keeps 43.5px at its right for the badge; any other card keeps 16px."""
     page = _desk(guarded_page, open_app)
     pad = "() => getComputedStyle(document.getElementById('chart-tooltip')).paddingRight"
-    _show_game(page, _game_card(ranked=False, rankSlot=True))
+    _show_game(page, _game_card(ranked=True))
     assert page.evaluate(pad) == "43.5px"
-    _show_game(page, _game_card(ranked=True, rankSlot=True))
-    assert page.evaluate(pad) == "43.5px"
+    _show_game(page, _game_card(ranked=False))
+    assert page.evaluate(pad) == "16px"
     _show_game(page, _game_card(ranked=False, conf=None))
     assert page.evaluate(pad) == "16px"
 
 
-def test_game_card_wraps_the_same_with_or_without_the_badge(
-    guarded_page: Page, open_app: OpenApp
-) -> None:
-    """At 1440px, identical card text is exactly as tall, line by line, ranked or not."""
+def test_unranked_card_text_uses_the_badge_room(guarded_page: Page, open_app: OpenApp) -> None:
+    """At 1440px, identical card text wraps on what is visible: an unranked card never needs
+    more lines than the ranked one, and once the text is long enough to fill a line the
+    unranked card fits more of it (fewer or equal lines at every step, fewer at some)."""
     page = _desk(guarded_page, open_app)
     rows = page.evaluate(_CARD_SWEEP_JS, _game_card())
-    differ = [r for r in rows if r["ranked"] != r["plain"]]
-    assert differ == []
+    assert all(r["plain"]["h"] <= r["ranked"]["h"] for r in rows)
+    assert any(r["plain"]["h"] < r["ranked"]["h"] for r in rows)
+    # Short text that fits on one line is the same height either way.
+    assert rows[0]["plain"]["h"] == rows[0]["ranked"]["h"]
     # The sweep reached the 320px cap and wrapped, so it crossed the lengths near the edge.
     assert max(r["plain"]["w"] for r in rows) == pytest.approx(320, abs=0.01)
     assert len({r["plain"]["matchup"] for r in rows}) >= 2
-    assert len({r["plain"]["booth"] for r in rows}) >= 2
 
 
 def test_hiding_the_game_card_drops_its_badge_classes(
     guarded_page: Page, open_app: OpenApp
 ) -> None:
-    """Review LOW: hideTooltip removes rk-has and rk-slot, so a hidden card keeps no badge
-    padding for whatever reads or shows the element next."""
+    """Review LOW: hideTooltip removes rk-has, so a hidden card keeps no badge padding for
+    whatever reads or shows the element next."""
     page = _desk(guarded_page, open_app)
-    assert _show_game(page, _game_card(ranked=True, rankSlot=True))["rkHas"] is True
+    assert _show_game(page, _game_card(ranked=True))["rkHas"] is True
     got = page.evaluate(
         """async () => {
           const t = await import('./modules/tooltip.js');
           t.hideTooltip();
           const el = document.getElementById('chart-tooltip');
-          return {hidden: el.hidden, rkHas: el.classList.contains('rk-has'),
-                  rkSlot: el.classList.contains('rk-slot')};
+          return {hidden: el.hidden, rkHas: el.classList.contains('rk-has')};
         }"""
     )
-    assert got == {"hidden": True, "rkHas": False, "rkSlot": False}
+    assert got == {"hidden": True, "rkHas": False}
 
 
 @pytest.mark.parametrize("which", ["venue", "text", "chart"])
@@ -931,7 +930,6 @@ def test_other_tooltips_drop_the_ranked_padding(
     assert _show_game(page, _game_card(ranked=True))["rkHas"] is True
     r = page.evaluate(_OTHER_TIP_JS, which)
     assert r["rkHas"] is False
-    assert r["rkSlot"] is False
     assert r["badges"] == 0
     assert r["padRight"] != "43.5px"
 

@@ -20,7 +20,7 @@ import {
   dayLabel, dayTabs, defaultDay, etParts, etWallMinutes, matchupSides, matchupText,
   stripCollapsedByDefault, weekdayLabel,
 } from './weekend.js';
-import { makeCaretIcon } from './icons.js';
+import { makeCaretIcon, makeGameTypeIcon } from './icons.js';
 import { isRankedMatchup, rankBadge } from './rank-badge.js';
 import { fillTableMatchup } from './matchup-wrap.js';
 import { networkMark } from './network.js';
@@ -143,7 +143,23 @@ export function accessibleName(game, state, line, { withDay = false } = {}) {
   if (line.star) parts.push('Lead booth.');
   parts.push(crewSentence(game, state, line));
   if (isRankedMatchup(game)) parts.push('Both teams ranked.');
+  if (game.rivalry) parts.push(`Rivalry: ${game.rivalry}.`);
   return parts.join(' ');
+}
+
+/**
+ * The rivalry mark on a CFB cell or phone row: the crossed swords in the text colour, like the
+ * ranked badge. Decorative: the item's accessible name already says "Rivalry: <name>.", and the
+ * mark's own title names it on hover. The name enters only as a title property, never markup.
+ * @param {string} name - the rivalry's display name
+ * @returns {HTMLSpanElement}
+ */
+export function rivalryMark(name) {
+  const mark = el('span', 'rv-mark');
+  mark.title = `Rivalry: ${name}`;
+  mark.setAttribute('aria-hidden', 'true');
+  mark.append(makeGameTypeIcon('rivalry'));
+  return mark;
 }
 
 /**
@@ -194,9 +210,16 @@ export function buildCell(game, ctx, { tail = null, withDay = false } = {}) {
   booth.style.fontWeight = String(line.weight);
   l2.append(booth);
   btn.append(l1, l2);
+  // The marks sit in the top-right corner (user pick B2, 2026-11-11): the ranked badge on the
+  // matchup line, the rivalry swords in its place when alone, else under it on the booth line.
+  // A line gives up room only for a mark drawn on it (rk-has / rv-has; style.css).
   if (isRankedMatchup(game)) {
     btn.classList.add('rk-has');
     btn.append(rankBadge({ hidden: true }));
+  }
+  if (game.rivalry) {
+    btn.classList.add('rv-has');
+    btn.append(rivalryMark(game.rivalry));
   }
 
   if (game.networkId == null) {

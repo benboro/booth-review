@@ -1794,7 +1794,7 @@ def test_backup_crew_ships_espn_press_room_credit_and_main_crew(build_reference:
     )
     payload = _site(tables, build_reference)
 
-    assert payload["schema_version"] == "2.9.0"
+    assert payload["schema_version"] == "2.10.0"
     columns = payload["telecasts"]
     assert columns["crew_source_label"] == [None, "ESPN Press Room"]
     assert columns["crew_source_url"] == [None, release]
@@ -2650,6 +2650,23 @@ def test_scheduled_ships_current_and_past_weeks_not_later_ones(
     assert [w["label"] for w in payload["lookups"]["weeks"]] == ["4", "5", "6"]
     assert payload["_counts"]["scheduled_games"] == 4
     assert payload["_counts"]["scheduled_network_unmapped"] == 1
+
+
+def test_scheduled_rivalry_meeting_is_tagged(
+    small_tables: BuildTables, build_reference: Path, tmp_path: Path
+) -> None:
+    """2.9.0: a scheduled game that is a rivalry's first meeting carries the rivalry, and
+    the rivalry ships in the lookup even with no telecast row behind it."""
+    ref = _rivalry_reference(
+        tmp_path, build_reference, "sched-cup,Sched Cup,the,Sched Home 102,Sched Away 102,,\n"
+    )
+    # Own team ids, so the pair is not the fixture telecast's default teams.
+    own_ids = {102: {"home_id": 9102, "away_id": 9602}}
+    payload = _scheduled_site(small_tables, _weeks_four_to_six(), {}, ref, own_ids)
+    block = payload["telecasts_scheduled"]
+    homes = [payload["lookups"]["teams"][i]["name"] for i in block["home_team"]]
+    assert block["rivalry"] == [0 if h == "Sched Home 102" else None for h in homes]
+    assert [r["slug"] for r in payload["lookups"]["rivalries"]] == ["sched-cup"]
 
 
 def test_scheduled_tbd_kickoff_and_radio_only_network_are_null(

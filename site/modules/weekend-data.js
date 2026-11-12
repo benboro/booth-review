@@ -112,7 +112,9 @@ export function scheduledFacade(data) {
     s506_url: nulls(),
     playoff_round: nulls(),
     bowl: nulls(),
-    rivalry: nulls(),
+    // 2.9.0: a scheduled rivalry meeting carries its rivalry (the This weekend rivalry icon);
+    // an older payload without the column reads as no rivalry.
+    rivalry: raw.rivalry ?? nulls(),
     // A scheduled game is a current-season game with no figure yet, so a panel opened after
     // kickoff reads "viewership not posted yet" (18-13 F3).
     cause: new Array(n).fill('pending'),
@@ -194,6 +196,8 @@ function weekendGame(data, obj, block, i, week, weekend) {
     awayConference: conferenceName(obj, t.away_conference?.[i]),
     homeConference: conferenceName(obj, t.home_conference?.[i]),
     venue: placeIdx == null ? null : (obj.lookups.venues?.[placeIdx] ?? null),
+    // The rivalry's name (the cell's swords icon and its accessible name), or null.
+    rivalry: obj.lookups.rivalries?.[t.rivalry?.[i]]?.name ?? null,
   };
 }
 

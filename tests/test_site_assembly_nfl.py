@@ -64,9 +64,14 @@ NFL_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "contract" / "nfl-data.fixture.
 # gives the old site-data digest cec8bf26b5e0...); coverage.html gains the "Of which Awful
 # Announcing" column (dropping its header and cells gives the old coverage digest
 # c0475d22f70c...); the index moves only through its site-data cache-bust version.
-# Re-pinned for the Crews score column (2026-11-11): contract 2.9.0 adds telecasts[_unrated]
-# overtimes to the fixture (0 on every scored game, null otherwise) and bumps its version.
-_SITE_DATA_SHA256 = "3b70807277565f010e3569e5f506d489e54eb63b43a9114140c12965336a0405"
+# Re-pinned for the This weekend rivalry icon (2026-11-11): contract 2.9.0 adds
+# telecasts_scheduled.rivalry, null on every fixture row (dropping it and setting the version
+# back to 2.8.0 gives the old digest 534196a957ee...); the index moves only through its
+# site-data cache-bust version.
+# Re-pinned for the Crews score column (2026-11-11): contract 2.10.0 adds telecasts[_unrated]
+# overtimes to the fixture (0 on every scored game, null otherwise) and bumps its version;
+# dropping both gives the rivalry-icon digest 1eacf35db86a...
+_SITE_DATA_SHA256 = "3e5092f00c6f4b2e89e34a3480bb926b15a8460da7cfdaa4dc547a62d651a3a9"
 # Re-pinned at Phase 13 Plan 01: footer RT-23/RT-24 lines, data-theme and color-scheme,
 # new header with theme slot, site name.
 # Re-pinned at Phase 17 Plan 06: inline hash-pinned theme-init.js script, sha256 CSP and
@@ -115,9 +120,11 @@ _COVERAGE_SHA256 = "1d3cfc66d673c021045d2d225b89daa91999bb4698e5de461f761eb2a924
 # through its site-data cache-bust version (cec8bf26b5 -> 534196a957, the one changed line).
 # Re-pinned at Phase 28 Plan 06: the footer trademark line names conference logos too
 # (probe: the previous pages.py reproduces the old digest, so only that sentence moved it).
-# Re-pinned for the Crews score column (2026-11-11): contract 2.9.0 moves the index only
-# through its site-data cache-bust version (534196a957 -> 3b70807277, the one changed line).
-_INDEX_PRE_PHASE_SHA256 = "e36eb787819331245595f97b0414437b19920bfcdb6eb796db78da511b0e257c"
+# Re-pinned for the This weekend rivalry icon (2026-11-11): only the site-data cache-bust
+# version moved (contract 2.9.0; diffed against origin/main, one changed line).
+# Re-pinned for the Crews score column (2026-11-11): contract 2.10.0 moves the index only
+# through its site-data cache-bust version (diffed against main, one changed line).
+_INDEX_PRE_PHASE_SHA256 = "a6542842a0a7b2c60033a65fd0d6917412f39252e9240783a742da20b6c573af"
 
 _CANARY = "invented-nfl-canary-key-0001"
 _META_OFF = '<meta name="booth-review-sports" content="cfb">'

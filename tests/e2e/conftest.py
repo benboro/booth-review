@@ -370,6 +370,7 @@ def weekend_map_raw(fixture_raw: dict[str, Any]) -> dict[str, Any]:
             "away_conference": 3,
             "place": place,
             "week": "5",
+            "rivalry": None,
         }
         assert row.keys() == sched.keys()
         for key, value in row.items():
