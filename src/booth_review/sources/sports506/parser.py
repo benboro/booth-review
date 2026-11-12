@@ -22,8 +22,11 @@ be bold, so the same logic reads both conventions without a per-layout
 special case.
 
 The only cleanup applied to any name is structural: whitespace collapse,
-splitting a leading AP-rank integer off a team name, and splitting a crew
-string on its ", " delimiter. No team, network, or announcer name is
+splitting a leading AP-rank integer off a team name, splitting a crew
+string on its ", " delimiter, and splitting a crew cell that lists one crew
+per line (one per outlet) into those lines, each keeping its outlet: the
+trailing "(Outlet)" tag every line carries, or else the network cell's line
+in the same position (see `CrewLine`). No team, network, or announcer name is
 otherwise altered (AGENTS.md's crosswalk-only rule; team/announcer
 resolution happens later, in Phase 3, through crosswalk tables).
 """
@@ -64,6 +67,25 @@ _SPANISH_MARKER = "spanish"
 
 FeedKind = Literal["main", "alt", "spanish", "unknown"]
 
+# A crew line's trailing outlet tag, e.g. "Pat Example, Jordan Sample (ECN)".
+_OUTLET_TAG_RE = re.compile(r"\s*\(([^()]+)\)$")
+# Stands in for <br> while a cell's text is read, so a line break in the HTML
+# source (which is just whitespace) is never mistaken for a <br>.
+_BR_MARK = "\x00"
+
+
+@dataclass(frozen=True)
+class CrewLine:
+    """One crew of a crew cell that lists a crew per line, one per outlet.
+
+    `outlet` is the line's trailing "(Outlet)" tag when every line carries
+    one, else the network cell's line in the same position when both cells
+    have the same number of lines, else None. `names` never includes the tag.
+    """
+
+    outlet: str | None
+    names: tuple[str, ...]
+
 
 @dataclass(frozen=True)
 class Listing506:
@@ -84,6 +106,10 @@ class Listing506:
     crew_names: tuple[str, ...]
     feed_kind: FeedKind
     game_label: str | None
+    # Empty unless the crew cell lists more than one line; `crew_names` then
+    # holds every line's names, and resolve.inputs.load_506_listings keeps
+    # only the line whose outlet is the telecast's network.
+    crew_lines: tuple[CrewLine, ...] = ()
 
 
 def decode_html(html: bytes) -> str:
@@ -143,19 +169,53 @@ def _classify_feed(network_raw: str | None) -> FeedKind:
     return "main"
 
 
-def _extract_cell_text(tag: Tag | None) -> str:
-    """Collapsed text of a network/crew/time cell.
-
-    <br> is turned into a space first, so a line-wrapped multi-network cell
-    ("Network A,<br>Network B", seen in 2014-2021 pages) reads as one
-    comma-separated string, the same shape the newer layout's single-line
-    network cell already produces.
-    """
+def _extract_cell_lines(tag: Tag | None) -> list[str]:
+    """A network/crew cell's <br>-separated lines, each whitespace-collapsed,
+    empty lines dropped."""
     if tag is None:
-        return ""
+        return []
     for br in tag.find_all("br"):
-        br.replace_with(" ")
-    return collapse_whitespace(tag.get_text())
+        br.replace_with(_BR_MARK)
+    lines = (collapse_whitespace(line) for line in tag.get_text().split(_BR_MARK))
+    return [line for line in lines if line]
+
+
+def _cell_text(lines: list[str]) -> str:
+    """The cell's lines joined by a space, so a line-wrapped multi-network
+    cell ("Network A,<br>Network B", seen in 2014-2021 pages) reads as one
+    comma-separated string, the same shape the newer layout's single-line
+    network cell already produces."""
+    return " ".join(lines)
+
+
+def _split_crew(text: str) -> tuple[str, ...]:
+    return tuple(name.strip() for name in text.split(",") if name.strip())
+
+
+def _crew_lines(crew_lines: list[str], network_lines: list[str]) -> tuple[CrewLine, ...]:
+    """A crew cell of two or more lines read as one crew per outlet (see
+    CrewLine); () for a one-line cell."""
+    if len(crew_lines) < 2:
+        return ()
+    tags = [_OUTLET_TAG_RE.search(line) for line in crew_lines]
+    if all(tags):
+        return tuple(
+            CrewLine(outlet=match.group(1).strip(), names=_split_crew(line[: match.start()]))
+            for line, match in zip(crew_lines, tags, strict=True)
+            if match is not None
+        )
+    # A line ending in "," is one crew wrapped onto the next line, not a
+    # second outlet's crew, so its lines get no outlet.
+    wrapped = any(line.endswith(",") for line in crew_lines[:-1])
+    outlets: list[str | None] = (
+        list(network_lines)
+        if len(network_lines) == len(crew_lines) and not wrapped
+        else [None] * len(crew_lines)
+    )
+    return tuple(
+        CrewLine(outlet=outlet, names=_split_crew(line))
+        for line, outlet in zip(crew_lines, outlets, strict=True)
+    )
 
 
 def _extract_matchup(matchup_tag: Tag) -> tuple[str | None, str]:
@@ -248,12 +308,17 @@ def _build_listing(
 
     kickoff_et = _parse_kickoff(date_et, time_text)
 
-    network_text = _extract_cell_text(network_tag)
-    network_raw = network_text or None
+    network_lines = _extract_cell_lines(network_tag)
+    network_raw = _cell_text(network_lines) or None
 
-    crew_text = _extract_cell_text(crew_tag)
-    crew_raw = crew_text or None
-    crew_names = tuple(name.strip() for name in crew_text.split(",") if name.strip())
+    crew_cell_lines = _extract_cell_lines(crew_tag)
+    crew_raw = _cell_text(crew_cell_lines) or None
+    crew_lines = _crew_lines(crew_cell_lines, network_lines)
+    crew_names = (
+        tuple(name for line in crew_lines for name in line.names)
+        if crew_lines
+        else _split_crew(_cell_text(crew_cell_lines))
+    )
 
     return Listing506(
         season=season,
@@ -271,6 +336,7 @@ def _build_listing(
         crew_names=crew_names,
         feed_kind=_classify_feed(network_raw),
         game_label=game_label,
+        crew_lines=crew_lines,
     )
 
 

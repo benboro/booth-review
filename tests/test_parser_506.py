@@ -403,3 +403,77 @@ def test_spaced_and_hash_prefixed_ranks_still_split_unchanged() -> None:
     listing = _table_week_listings()[2]
     assert listing.away_raw == "Union City"
     assert listing.away_rank == 7
+
+
+# -- a crew cell listing one crew per outlet, one per line ---------------------------------
+
+
+def _per_outlet_page_div(crew_cell: str, network_cell: str) -> bytes:
+    return (
+        "<html><body><h3>SATURDAY, OCTOBER 17</h3>\n"
+        '<div id="cgame"><div id="cmatchup">Prairie State @ Union City</div>'
+        f'<div id="ctime">3:30 PM ET</div><div id="cntwk">{network_cell}</div>'
+        f'<div id="canncrs">{crew_cell}</div></div>\n</body></html>'
+    ).encode()
+
+
+def _per_outlet_page_table(crew_cell: str, network_cell: str) -> bytes:
+    return (
+        "<html><body><h3>SATURDAY, OCTOBER 17</h3>\n"
+        '<table class="listingtable"><tr><td>3:30 PM</td><td>Prairie State @ Union City</td>'
+        f"<td>{network_cell}</td><td>{crew_cell}</td></tr></table></body></html>"
+    ).encode()
+
+
+def test_tagged_crew_lines_split_into_one_crew_per_outlet() -> None:
+    """Each line ends in its outlet's tag; the tag never joins a name and the
+    last name of one line never runs into the first of the next."""
+    html = _per_outlet_page_div(
+        "Pat Example, Jordan Sample (KXMP)<br>Casey Demo, Riley Mock (ECN+)",
+        "KXMP (Example City) / ECN+",
+    )
+    (listing,) = parse_week_page(html, season=2026, week_label="8")
+    assert listing.crew_raw == "Pat Example, Jordan Sample (KXMP) Casey Demo, Riley Mock (ECN+)"
+    assert [(line.outlet, line.names) for line in listing.crew_lines] == [
+        ("KXMP", ("Pat Example", "Jordan Sample")),
+        ("ECN+", ("Casey Demo", "Riley Mock")),
+    ]
+    assert listing.crew_names == ("Pat Example", "Jordan Sample", "Casey Demo", "Riley Mock")
+
+
+def test_untagged_crew_lines_take_the_network_line_in_the_same_position() -> None:
+    html = _per_outlet_page_table(
+        "Pat Example, Jordan Sample, Avery Test<br>Casey Demo, Riley Mock",
+        "<b>Example Network</b><br><a href='#'><b>Union Sports</b></a>",
+    )
+    (listing,) = parse_week_page(html, season=2015, week_label="10")
+    assert listing.network_raw == "Example Network Union Sports"
+    assert [(line.outlet, len(line.names)) for line in listing.crew_lines] == [
+        ("Example Network", 3),
+        ("Union Sports", 2),
+    ]
+    assert "Avery Test Casey Demo" not in listing.crew_names
+    assert len(listing.crew_names) == 5
+
+
+def test_untagged_crew_lines_have_no_outlet_when_the_line_counts_differ() -> None:
+    html = _per_outlet_page_div("Pat Example, Jordan Sample<br>Casey Demo", "ECN")
+    (listing,) = parse_week_page(html, season=2026, week_label="8")
+    assert [line.outlet for line in listing.crew_lines] == [None, None]
+    assert listing.crew_names == ("Pat Example", "Jordan Sample", "Casey Demo")
+
+
+def test_one_line_crew_cell_has_no_crew_lines_and_a_source_newline_is_not_a_break() -> None:
+    html = _per_outlet_page_div("Pat Example,\n   Jordan Sample (ECN)", "ECN")
+    (listing,) = parse_week_page(html, season=2026, week_label="8")
+    assert listing.crew_lines == ()
+    assert listing.crew_names == ("Pat Example", "Jordan Sample (ECN)")
+
+
+def test_a_crew_wrapped_after_a_comma_is_not_read_as_one_crew_per_outlet() -> None:
+    html = _per_outlet_page_div(
+        "Pat Example, Jordan Sample,<br>Casey Demo", "Example Network<br>Union Sports"
+    )
+    (listing,) = parse_week_page(html, season=2026, week_label="8")
+    assert [line.outlet for line in listing.crew_lines] == [None, None]
+    assert listing.crew_names == ("Pat Example", "Jordan Sample", "Casey Demo")
