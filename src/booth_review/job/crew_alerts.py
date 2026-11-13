@@ -20,9 +20,9 @@ Limit: bowls, the CFB playoff and the NFL playoffs reach the site files only
 once their 506 page is imported, so until then neither stage can flag them.
 
 `ledger/crew_alerts.json` records each (game, stage) and each reminder line
-already emailed. An email goes out only when something is new, and it lists
-only the new games and reminders, with a count of the games flagged earlier
-that still have no crew.
+already emailed. An email goes out only when something is new; it then lists every
+game still open (new and earlier) in one list per stage and week, plus the new
+reminders. A reminders-only email lists no games.
 """
 
 from __future__ import annotations
@@ -474,8 +474,12 @@ def _week_heading(league: League, season: int, week: str) -> str:
     return f"{_LEAGUE_NAME[league]} {season} {label}"
 
 
+_DISPATCH_CMD = "gh workflow run collect.yml -R benboro/booth-review-data -f mode=rebuild"
 _LEAGUE_NAME = {"cfb": "College football", "nfl": "NFL"}
-_STAGE_TITLE = {"upcoming": "Kicking off in the next 48 hours", "played": "Played, still no crew"}
+_STAGE_TITLE = {
+    "upcoming": "No crew yet, kicking off in the next 48 hours",
+    "played": "No crew, already played",
+}
 _IMPORT_HINT = {
     "cfb": "booth-review import 506 --season {season}",
     "nfl": "booth-review import 506 --season {season} --league nfl",
@@ -490,23 +494,26 @@ def compose(
     new: Sequence[MissingCrew],
     reminders: Sequence[str],
     *,
-    still_open: int,
+    still_open: Sequence[MissingCrew],
     aa_weeks: Mapping[str, str],
 ) -> tuple[str, str]:
     """(subject, plain-text body) for the new games and new reminder lines.
 
-    `still_open` counts games flagged in an earlier email that still have no crew.
+    `still_open` holds the games flagged in an earlier email that still have no crew;
+    they are listed with the new ones, in one list per stage and week.
     """
+    # An email with new games lists every game still open; a reminders-only email lists none.
+    games_open = [*new, *still_open] if new else []
     subject_parts: list[str] = []
-    if new:
-        subject_parts.append(f"{_plural(len(new), 'game')} with no crew")
+    if games_open:
+        subject_parts.append(f"{_plural(len(games_open), 'game')} with no crew")
     if reminders:
         subject_parts.append(_plural(len(reminders), "hand-save reminder"))
     subject = f"booth-review: {', '.join(subject_parts)}"
 
     lines: list[str] = []
     groups: dict[tuple[Stage, League, int, str], list[MissingCrew]] = {}
-    for game in new:
+    for game in games_open:
         groups.setdefault((game.stage, game.league, game.season, game.week), []).append(game)
 
     def order(key: tuple[Stage, League, int, str]) -> tuple[int, int, int, int, str]:
@@ -532,19 +539,13 @@ def compose(
                 lines.append(f"- {name}: {url}")
             lines.append("")
 
-    if still_open:
-        lines.append(
-            f"{_plural(still_open, 'game')} from earlier emails still "
-            f"{'has' if still_open == 1 else 'have'} no crew."
-        )
-        lines.append("")
-
     if new:
-        lines.append("After saving a page, import it, then dispatch the job with mode=rebuild:")
-        seasons = sorted({(m.league, m.season) for m in new})
+        lines.append("After saving a page, import it, then dispatch the job:")
+        seasons = sorted({(m.league, m.season) for m in games_open})
         lines.extend(f"  {_IMPORT_HINT[lg].format(season=season)}" for lg, season in seasons)
-        if any(m.league == "cfb" for m in new):
+        if any(m.league == "cfb" for m in games_open):
             lines.append("  booth-review import espnpr")
+        lines.append(f"  {_DISPATCH_CMD}")
         lines.append("")
 
     if reminders:
@@ -553,13 +554,6 @@ def compose(
         lines.extend(f"- {line}" for line in reminders)
         lines.append("")
 
-    if new:
-        lines.append(
-            "Each game is emailed once before kickoff and once after it is played. "
-            "College football games with no network yet or on ESPN+ and other streaming-only "
-            "outlets are left out. Bowls and playoffs show up only once their 506 page is "
-            "imported."
-        )
     return subject, "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -620,6 +614,8 @@ def _run(paths: DataPaths, now: datetime, options: _Options, vault: VaultRepo | 
     missing = find_missing(paths, now, nfl_required=nfl_required)
     ledger = load_ledger(paths)
     new = new_alerts(missing, ledger)
+    new_keys = {m.alert_key for m in new}
+    earlier = [m for m in missing if m.alert_key not in new_keys]
     reminders = new_reminders(read_reminders(reminders_file), ledger)
     n_cfb = sum(1 for m in missing if m.league == "cfb")
     print(
@@ -629,9 +625,7 @@ def _run(paths: DataPaths, now: datetime, options: _Options, vault: VaultRepo | 
     )
     if not new and not reminders:
         return 0
-    subject, body = compose(
-        new, reminders, still_open=len(missing) - len(new), aa_weeks=aa_cfb_weeks(paths)
-    )
+    subject, body = compose(new, reminders, still_open=earlier, aa_weeks=aa_cfb_weeks(paths))
     if show:
         print(subject)
         print(body)

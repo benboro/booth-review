@@ -211,7 +211,7 @@ def test_cfb_null_week_in_december_points_at_the_bowl_page() -> None:
     now = datetime(2026, 12, 21, 12, tzinfo=UTC)
     [game] = find_cfb_missing(site, now)
     assert game.week == "postseason"
-    _, body = compose([game], [], still_open=0, aa_weeks={})
+    _, body = compose([game], [], still_open=[], aa_weeks={})
     assert "College football 2026 bowls and playoff (1)" in body
     assert "https://506sports.com/ncaaf.php?yr=2026&wk=B" in body
     assert "wk=?" not in body
@@ -221,7 +221,7 @@ def test_cfb_null_week_in_december_points_at_the_bowl_page() -> None:
 def test_cfb_null_week_in_season_points_at_the_season_index() -> None:
     site = _cfb_site([_cfb_row("2026-11-07T19:30:00-05:00", week=None)])
     [game] = find_cfb_missing(site, NOW)
-    _, body = compose([game], [], still_open=0, aa_weeks={})
+    _, body = compose([game], [], still_open=[], aa_weeks={})
     assert "week not listed" in body
     assert "506 Sports: https://506sports.com/ncaaf.php?yr=2026\n" in body
 
@@ -327,12 +327,12 @@ def test_find_missing_rejects_naive_now(tmp_path: Path) -> None:
 # -- message ---------------------------------------------------------------------------------
 
 
-def test_compose_lists_only_new_games_with_their_sources() -> None:
+def test_compose_lists_new_and_open_games_with_their_sources() -> None:
     cfb = find_cfb_missing(_cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), NOW)
     nfl = find_nfl_missing(_nfl_site([_nfl_row("2026-11-08T13:00:00-05:00")], []), NOW)
     aa_post = "https://awfulannouncing.com/college-football/2026-week-10-schedule.html"
-    subject, body = compose(cfb + nfl, [], still_open=3, aa_weeks={"2026-10": aa_post})
-    assert subject == "booth-review: 2 games with no crew"
+    subject, body = compose(cfb + nfl, [], still_open=cfb * 3, aa_weeks={"2026-10": aa_post})
+    assert subject == "booth-review: 5 games with no crew"
     assert "https://506sports.com/ncaaf.php?yr=2026&wk=10" in body
     assert aa_post in body
     assert "https://www.nbcsports.com/pressbox" in body
@@ -342,35 +342,35 @@ def test_compose_lists_only_new_games_with_their_sources() -> None:
     assert "https://www.paramountpressexpress.com/cbs-sports/" in body
     assert "- Michigan State at Michigan" in body
     assert "Sat Nov 7, 7:30 PM ET, Peacock" in body
-    assert "3 games from earlier emails still have no crew." in body
     assert "booth-review import 506 --season 2026 --league nfl" in body
-    assert "Bowls and playoffs show up only once their 506 page is imported" in body
+    assert "gh workflow run collect.yml -R benboro/booth-review-data -f mode=rebuild" in body
 
 
-def test_compose_counts_earlier_games_without_listing_them() -> None:
+def test_compose_reminders_only_lists_no_games() -> None:
     reminder = "reminder 2026 cfb week 11: save it https://x.test/"
-    _, body = compose([], [reminder], still_open=1, aa_weeks={})
+    earlier = find_cfb_missing(_cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), NOW)
+    subject, body = compose([], [reminder], still_open=earlier, aa_weeks={})
+    assert subject == "booth-review: 1 hand-save reminder"
     assert "Michigan" not in body
-    assert "1 game from earlier emails still has no crew." in body
 
 
 def test_compose_falls_back_to_aa_schedules_page() -> None:
     cfb = find_cfb_missing(_cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), NOW)
-    _, body = compose(cfb, [], still_open=0, aa_weeks={"2026-10": "reminded"})
+    _, body = compose(cfb, [], still_open=[], aa_weeks={"2026-10": "reminded"})
     assert "Awful Announcing: https://awfulannouncing.com/category/schedules" in body
 
 
 def test_compose_espn_cfb_links_the_commentators_page() -> None:
     site = _cfb_site([_cfb_row("2026-11-10T19:00:00-05:00", network=ESPN, week="11")])
     cfb = find_cfb_missing(site, NOW)
-    _, body = compose(cfb, [], still_open=0, aa_weeks={})
+    _, body = compose(cfb, [], still_open=[], aa_weeks={})
     assert "2026-27-espn-college-football-commentators-schedule/" in body
     assert body.index("KICKING OFF") < body.index("week 11")
 
 
 def test_compose_reminders_only() -> None:
     line = "reminder 2026 nfl week 10: save the 506 nfl week 10 page https://506sports.com/nfl.php"
-    subject, body = compose([], [line], still_open=0, aa_weeks={})
+    subject, body = compose([], [line], still_open=[], aa_weeks={})
     assert subject == "booth-review: 1 hand-save reminder"
     assert f"HAND-SAVE REMINDERS\n\n- {line}\n" in body
     assert "import 506" not in body
@@ -421,10 +421,10 @@ def test_run_emails_once_per_game_and_stage(tmp_path: Path) -> None:
     # After the game: the played stage is new.
     assert run_crew_alerts(paths, NOW + timedelta(days=2), **_kw(sent)) == 0
     assert len(sent.messages) == 2
-    assert "PLAYED, STILL NO CREW" in sent.messages[1][1]
+    assert "NO CREW, ALREADY PLAYED" in sent.messages[1][1]
 
 
-def test_run_second_email_lists_only_the_newly_flagged_game(tmp_path: Path) -> None:
+def test_run_second_email_lists_every_open_game_in_one_list(tmp_path: Path) -> None:
     first = _cfb_row("2026-11-07T19:30:00-05:00")
     paths = _write_sites(tmp_path, _cfb_site([first]), None)
     sent = _Sent()
@@ -434,8 +434,10 @@ def test_run_second_email_lists_only_the_newly_flagged_game(tmp_path: Path) -> N
     run_crew_alerts(paths, NOW + timedelta(hours=1), **_kw(sent))
     body = sent.messages[1][1]
     assert "- Ohio at Michigan" in body
-    assert "Michigan State" not in body
-    assert "1 game from earlier emails still has no crew." in body
+    assert "- Michigan State at Michigan" in body
+    assert body.count("Sources:") == 1
+    assert "college football 2026 week 10 (2)" in body.lower()
+    assert "EARLIER" not in body
 
 
 def test_run_emails_each_reminder_line_once(tmp_path: Path) -> None:
