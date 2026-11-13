@@ -19,7 +19,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 
 from booth_review.config import DataPaths
-from booth_review.errors import VaultStateError
+from booth_review.errors import PageRejectedError, ParseError, VaultStateError
 from booth_review.mlb.constants import MLB_REFRESH_CAP_DEFAULT
 from booth_review.mlb.layout import mlb_rr_path
 from booth_review.nfl.layout import nfl_rr_path
@@ -30,8 +30,9 @@ from booth_review.sources.ratingsref.lastmod import (
     lastmod_has_prefix,
     lastmod_ledger_exists,
     load_failures,
-    load_lastmods,
+    load_fetched_lastmods,
 )
+from booth_review.sources.ratingsref.parser import parse_record
 from booth_review.sources.ratingsref.sitemap import (
     SitemapEntry,
     parse_sitemap,
@@ -64,6 +65,23 @@ Windows = Sequence[tuple[date, date]]
 
 def _cfb_rr_path(season: int, telecast_id: str) -> str:
     return f"ratingsref/telecast/{season}/{telecast_id}.json"
+
+
+def _validate_record(body: bytes) -> None:
+    """Reject a refresh response that is not a parseable RR record.
+
+    Raises PageRejectedError, which `run_requests` counts as failed and moves
+    past; the cached file is then left as it was and the record's lastmod is
+    not advanced (RawCache.get_or_fetch).
+    """
+    # parse_record wraps only JSON syntax errors: a body that is not UTF-8
+    # (UnicodeDecodeError), carries an oversized integer (ValueError) or nests
+    # too deeply (RecursionError) must be rejected the same way, or it would
+    # abort the rest of the batch.
+    try:
+        parse_record(body)
+    except (ParseError, ValueError, RecursionError) as exc:
+        raise PageRejectedError("ratingsref record does not parse") from exc
 
 
 @dataclass(frozen=True)
@@ -329,18 +347,21 @@ class RatingsRefCollector:
         dry_run: bool,
         windows: Windows | None = None,
     ) -> RefreshSummary:
-        """Re-fetch RR records whose sitemap <lastmod> advanced or that are
-        newly listed, in any season 2014..current_season, frozen ones
-        included (D-07). New current-season records are uncapped; every
-        other qualifying record (including an advanced current-season
+        """Re-fetch RR records whose sitemap <lastmod> differs from the one
+        they were last fetched at, or that are newly listed, in any season
+        2014..current_season, frozen ones included (D-07). New current-season
+        records are uncapped; every other qualifying record (including an advanced current-season
         record) is capped at `cap` per run, selected deterministically:
         current-season records first (an advanced current-season record is
         most likely a revised viewership figure, and must not wait behind a
         mass revision of older seasons, WR-05), then by (lastmod,
         telecast_id) ascending; the remainder is backlog (D-08). A fetched
-        record overwrites its cached file (D-09).
+        record overwrites its cached file (D-09), but only if the response
+        parses as an RR record: a rejected body leaves the cached file and the
+        lastmod ledger as they were, so the record is tried again next run.
 
-        A record whose last fetch failed (a 4xx, recorded in the lastmod log)
+        A record whose last fetch failed (a 4xx, or a body rejected as not a
+        record, recorded in the lastmod log)
         at the lastmod the sitemap still lists is held back for
         FAILED_RETRY_AFTER (counted in `deferred_failed`, neither selected
         nor backlog), and after that sorts behind every other capped
@@ -394,7 +415,10 @@ class RatingsRefCollector:
 
         entries, _skipped = parse_sitemap(xml, league=self._league)
         entries, skipped_event, out_of_window = self._scope(entries, windows)
-        known = load_lastmods(self._paths)
+        # The lastmod each record was last fetched at, not the greatest one ever
+        # seen: when the sitemap's lastmod moves backwards, a record already
+        # fetched at that value must not qualify again on every run.
+        known = load_fetched_lastmods(self._paths)
 
         in_window = [e for e in entries if first_season <= e.season <= current_season]
         new_entries = [e for e in in_window if e.telecast_id not in known]
@@ -470,6 +494,12 @@ class RatingsRefCollector:
             def _on_failed(req: FetchRequest, status: int) -> None:
                 self._record_failure(entries_by_url[req.url], status)
 
+            def _on_rejected(req: FetchRequest) -> None:
+                # A body that does not parse is held back like a 4xx, so a
+                # record RR keeps serving badly cannot take the head of the
+                # capped queue every run.
+                self._record_failure(entries_by_url[req.url], None)
+
             batch = run_requests(
                 self._cache,
                 requests,
@@ -479,6 +509,8 @@ class RatingsRefCollector:
                 refresh=True,
                 on_fetched=_on_fetched,
                 on_failed=_on_failed,
+                on_rejected=_on_rejected,
+                validate=_validate_record,
             )
             summary = RefreshSummary(
                 **counts,
@@ -509,6 +541,6 @@ class RatingsRefCollector:
         with self._lock():
             append_lastmod(self._paths, entry, fetched_at=self._now())
 
-    def _record_failure(self, entry: SitemapEntry, status: int) -> None:
+    def _record_failure(self, entry: SitemapEntry, status: int | None) -> None:
         with self._lock():
             append_failure(self._paths, entry, status=status, failed_at=self._now())

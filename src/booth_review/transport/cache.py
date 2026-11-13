@@ -168,14 +168,69 @@ class Manifest:
                     yield json.loads(stripped)
 
     def latest_validators(self, url: str) -> Validators | None:
-        """The most recent successful (written) entry's etag/last_modified for `url`."""
-        latest: dict[str, Any] | None = None
-        for entry in self.entries():
-            if entry.get("url") == url and entry.get("path") is not None:
-                latest = entry
-        if latest is None:
+        """The most recent successful (written) entry's etag/last_modified for `url`.
+
+        A 304 whose confirmed bytes were rejected (an entry with no path and
+        status 304) clears them until a write made after it: the validators
+        described a body that is not acceptable, so the next request must be
+        unconditional. Callers then see `None` exactly as for a never-fetched
+        URL (AA crews re-checks report "rejected_body"; Retrosheet and Ratings
+        Reference re-download without a condition), and the 200 that follows
+        replaces the bad body.
+
+        With no rejected 304 for the URL, the last written line supplies the
+        validators, as for every other collector. After one, the comparison
+        uses each entry's `fetched_at`, not line order, because the vault
+        merges `ledger/*.jsonl` by union and two clones' lines can interleave:
+        only writes dated after the newest rejection count, the latest of them
+        wins, and writes that tie on that timestamp but disagree on the
+        validators are ambiguous, so none are returned and the next request is
+        unconditional. The timestamps have one-second resolution, so a write in
+        the same second as a rejection counts as older, which costs at most one
+        extra unconditional request.
+        """
+        written, latest_rejection = self._scan_validators(url)
+        if not written:
             return None
-        return Validators(etag=latest.get("etag"), last_modified=latest.get("last_modified"))
+        if not latest_rejection:
+            return _validators_of(written[-1])
+        newer = [e for e in written if _stamp(e) > latest_rejection]
+        if not newer:
+            return None
+        top = max(_stamp(e) for e in newer)
+        found = {_validators_of(e) for e in newer if _stamp(e) == top}
+        return found.pop() if len(found) == 1 else None
+
+    def validators_rejected(self, url: str) -> bool:
+        """Whether a rejected 304 cleared `url`'s validators and no later write restored them.
+
+        Tells "validators cleared because the cached body was rejected" apart from
+        "never had validators" for a caller that must report which it is.
+        """
+        written, latest_rejection = self._scan_validators(url)
+        return bool(latest_rejection) and not any(_stamp(e) > latest_rejection for e in written)
+
+    def _scan_validators(self, url: str) -> tuple[list[dict[str, Any]], str]:
+        """`url`'s written entries in line order, and the newest rejected-304 timestamp."""
+        written: list[dict[str, Any]] = []
+        latest_rejection = ""
+        for entry in self.entries():
+            if entry.get("url") != url:
+                continue
+            if entry.get("path") is not None:
+                written.append(entry)
+            elif entry.get("status") == 304:
+                latest_rejection = max(latest_rejection, _stamp(entry))
+        return written, latest_rejection
+
+
+def _stamp(entry: dict[str, Any]) -> str:
+    """An entry's `fetched_at`, or "" when it is missing or null."""
+    return str(entry.get("fetched_at") or "")
+
+
+def _validators_of(entry: dict[str, Any]) -> Validators:
+    return Validators(etag=entry.get("etag"), last_modified=entry.get("last_modified"))
 
 
 class FreezeGuard:
@@ -259,6 +314,10 @@ class RawCache:
         if path.exists():
             return path.read_bytes()
         return None
+
+    def validators_rejected(self, req: FetchRequest) -> bool:
+        """Whether ``req``'s validators were cleared by a rejected 304 (see Manifest)."""
+        return self._manifest.validators_rejected(req.url)
 
     def stored_validators(self, req: FetchRequest) -> Validators | None:
         """The validators a conditional re-fetch of ``req`` would send, or None

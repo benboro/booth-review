@@ -424,6 +424,7 @@ CrewsOutcome = Literal[
     "cached",
     "not_cached",
     "no_validator",
+    "rejected_body",
     "failed_before",
     "no_link",
     "stale_policy",
@@ -495,7 +496,10 @@ def fetch_week_crews(
         return CrewsFetchResult("not_cached", 0, url, None, ())
     if mode == "recheck" and cache.stored_validators(req) is None:
         # A scheduled re-check is conditional or not sent at all (adversarial panel F7).
-        return CrewsFetchResult("no_validator", 0, url, None, ())
+        # A rejected 304 clears the validators of a cached post that failed validation;
+        # say so, since only `collect aa --crews` (an unconditional fetch) replaces it.
+        reason: CrewsOutcome = "rejected_body" if cache.validators_rejected(req) else "no_validator"
+        return CrewsFetchResult(reason, 0, url, None, ())
     if budget < 1:
         return _result("no_budget", url)
     if dry_run:

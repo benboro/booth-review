@@ -160,6 +160,8 @@ def run_crews_fetch(
         items.append(aa_crews_skipped("not_cached"))
     elif result.outcome == "no_validator":
         items.append(aa_crews_skipped("no_validator"))
+    elif result.outcome == "rejected_body":
+        items.append(aa_crews_skipped("rejected_body"))
     elif result.outcome == "failed_before":
         items.append(aa_crews_skipped("failed_before"))
     if result.requests:

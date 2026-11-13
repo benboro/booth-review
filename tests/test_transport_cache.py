@@ -807,3 +807,149 @@ def test_manifest_redirect_location_only_when_set() -> None:
     )
     assert set(moved) == _MANIFEST_KEYS | {"redirect_location"}
     assert moved["redirect_location"] == "https://x.example/f"
+
+
+def _validators_entry(
+    status: int, *, path: str | None, etag: str | None, at: str = "2026-10-01T12:00:00Z"
+):
+    return cache_module.ManifestEntry(
+        url="https://example.test/a",
+        source="sports506",
+        season=2026,
+        kind="page",
+        fetched_at=at,
+        status=status,
+        etag=etag,
+        last_modified=None,
+        sha256=None if path is None else "x",
+        path=path,
+        bytes=None if path is None else 1,
+        final_url="https://example.test/a",
+    )
+
+
+def test_latest_validators_are_cleared_by_a_rejected_304_until_the_next_write(tmp_path) -> None:
+    manifest = cache_module.Manifest(tmp_path / "manifest.jsonl")
+    url = "https://example.test/a"
+    manifest.append(_validators_entry(200, path="p", etag='"e1"'))
+    assert manifest.latest_validators(url) == cache_module.Validators(
+        etag='"e1"', last_modified=None
+    )
+
+    # A 304 whose confirmed bytes were rejected leaves an entry with no path.
+    manifest.append(_validators_entry(304, path=None, etag=None, at="2026-10-01T12:02:00Z"))
+    assert manifest.latest_validators(url) is None
+
+    # A rejected 200 or a 4xx after it does not bring the old validators back.
+    manifest.append(_validators_entry(200, path=None, etag=None))
+    manifest.append(_validators_entry(404, path=None, etag=None))
+    assert manifest.latest_validators(url) is None
+
+    manifest.append(_validators_entry(200, path="p", etag='"e2"', at="2026-10-01T12:05:00Z"))
+    assert manifest.latest_validators(url) == cache_module.Validators(
+        etag='"e2"', last_modified=None
+    )
+
+
+def test_latest_validators_ignore_a_rejected_200_or_a_4xx(tmp_path) -> None:
+    manifest = cache_module.Manifest(tmp_path / "manifest.jsonl")
+    manifest.append(_validators_entry(200, path="p", etag='"e1"'))
+    manifest.append(_validators_entry(200, path=None, etag=None))
+    manifest.append(_validators_entry(404, path=None, etag=None))
+
+    assert manifest.latest_validators("https://example.test/a") == cache_module.Validators(
+        etag='"e1"', last_modified=None
+    )
+
+
+def test_latest_validators_do_not_depend_on_line_order_after_a_union_merge(tmp_path) -> None:
+    # Two clones collected the same bytes; one then rejected a 304 for them.
+    # The other clone's write is older than the rejection, wherever its line lands.
+    url = "https://example.test/a"
+    first = _validators_entry(200, path="p", etag='"bad"', at="2026-10-01T12:00:00Z")
+    second = _validators_entry(200, path="p", etag='"bad"', at="2026-10-01T12:01:00Z")
+    rejection = _validators_entry(304, path=None, etag=None, at="2026-10-01T12:02:00Z")
+    newer = _validators_entry(200, path="p", etag='"good"', at="2026-10-01T12:03:00Z")
+
+    for order in (
+        [first, rejection, second],
+        [first, second, rejection],
+        [rejection, second, first],
+    ):
+        manifest = cache_module.Manifest(tmp_path / f"m{id(order)}.jsonl")
+        for entry in order:
+            manifest.append(entry)
+        assert manifest.latest_validators(url) is None
+
+    # A write made after the rejection restores validators in any position.
+    for order in ([first, rejection, newer], [newer, first, rejection], [rejection, newer, first]):
+        manifest = cache_module.Manifest(tmp_path / f"n{id(order)}.jsonl")
+        for entry in order:
+            manifest.append(entry)
+        assert manifest.latest_validators(url) == cache_module.Validators(
+            etag='"good"', last_modified=None
+        )
+
+
+def test_latest_validators_keep_last_line_wins_without_a_rejection(tmp_path) -> None:
+    # No rejected 304: the last written line supplies the validators, whatever
+    # its timestamp says (a clock that stepped back must not change that).
+    manifest = cache_module.Manifest(tmp_path / "manifest.jsonl")
+    manifest.append(_validators_entry(200, path="p", etag=None, at="2026-10-01T12:00:01Z"))
+    manifest.append(_validators_entry(200, path="p", etag='"current"', at="2026-10-01T12:00:00Z"))
+
+    assert manifest.latest_validators("https://example.test/a") == cache_module.Validators(
+        etag='"current"', last_modified=None
+    )
+
+
+def test_latest_validators_after_a_rejection_treat_disagreeing_ties_as_ambiguous(tmp_path) -> None:
+    url = "https://example.test/a"
+    rejection = _validators_entry(304, path=None, etag=None, at="2026-10-01T12:00:00Z")
+    with_etag = _validators_entry(200, path="p", etag='"e1"', at="2026-10-01T12:01:00Z")
+    without = _validators_entry(200, path="p", etag=None, at="2026-10-01T12:01:00Z")
+    same = _validators_entry(200, path="p", etag='"e1"', at="2026-10-01T12:01:00Z")
+
+    for n, order in enumerate(([rejection, with_etag, without], [rejection, without, with_etag])):
+        manifest = cache_module.Manifest(tmp_path / f"a{n}.jsonl")
+        for entry in order:
+            manifest.append(entry)
+        assert manifest.latest_validators(url) is None
+
+    # Ties that agree are not ambiguous.
+    manifest = cache_module.Manifest(tmp_path / "b.jsonl")
+    for entry in (rejection, with_etag, same):
+        manifest.append(entry)
+    assert manifest.latest_validators(url) == cache_module.Validators(
+        etag='"e1"', last_modified=None
+    )
+
+
+def test_validators_rejected_tells_a_rejection_from_never_having_validators(tmp_path) -> None:
+    url = "https://example.test/a"
+    manifest = cache_module.Manifest(tmp_path / "manifest.jsonl")
+    assert manifest.validators_rejected(url) is False
+
+    manifest.append(_validators_entry(200, path="p", etag=None, at="2026-10-01T12:00:00Z"))
+    assert manifest.validators_rejected(url) is False
+
+    manifest.append(_validators_entry(304, path=None, etag=None, at="2026-10-01T12:02:00Z"))
+    assert manifest.validators_rejected(url) is True
+
+    manifest.append(_validators_entry(200, path="p", etag='"e2"', at="2026-10-01T12:05:00Z"))
+    assert manifest.validators_rejected(url) is False
+
+
+def test_a_null_fetched_at_never_outranks_a_real_timestamp(tmp_path) -> None:
+    url = "https://example.test/a"
+    manifest = cache_module.Manifest(tmp_path / "manifest.jsonl")
+    manifest.append(_validators_entry(200, path="p", etag='"e1"', at="2026-10-01T12:00:00Z"))
+    null_line = json.loads(_validators_entry(304, path=None, etag=None, at="x").to_json())
+    null_line["fetched_at"] = None
+    with (tmp_path / "manifest.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(null_line) + "\n")
+
+    # A rejection with no timestamp is older than any dated write, not newer.
+    assert manifest.latest_validators(url) == cache_module.Validators(
+        etag='"e1"', last_modified=None
+    )

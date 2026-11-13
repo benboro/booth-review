@@ -59,6 +59,7 @@ def run_requests(
     refresh: bool = False,
     on_fetched: Callable[[FetchRequest, CacheResult], None] | None = None,
     on_failed: Callable[[FetchRequest, int], None] | None = None,
+    on_rejected: Callable[[FetchRequest], None] | None = None,
     validate: Callable[[bytes], None] | None = None,
 ) -> BatchSummary:
     """Plan or run one batch of requests through `cache`.
@@ -83,6 +84,8 @@ def run_requests(
     `validate` checks each fetched response's bytes before it is cached
     (RawCache.get_or_fetch); a response it rejects with PageRejectedError is
     never written, is recorded as failed, and the batch continues.
+    `on_rejected` fires for each such rejection, so a caller that keeps a
+    failure log can hold the request back instead of retrying it every run.
     """
     if dry_run:
         return _plan_summary(cache, requests, source=source, season_label=season_label)
@@ -99,6 +102,8 @@ def run_requests(
         except PageRejectedError:
             failed += 1
             failed_urls.append(req.url)
+            if on_rejected is not None:
+                on_rejected(req)
             continue
         except FetchError as exc:
             status = exc.status_code
