@@ -240,7 +240,7 @@ def _nfl_responses(schedules: bytes) -> dict[str, tuple[int, bytes, dict[str, st
         _SIGNED: (200, _pq(), {}),
         f"https://ratingsreference.com/api/telecast/{_NFL_NEW}.json": (
             200,
-            json.dumps({"telecast": {"id": _NFL_NEW}}).encode(),
+            json.dumps({"telecast": {"id": _NFL_NEW, "event_date": "2025-09-07"}}).encode(),
             {},
         ),
         _WIKI_2026: (

@@ -14,9 +14,17 @@ Two vault files, always read together:
 `load_lastmods` folds both into one `{telecast_id: entry}` map, keeping for
 each id the entry with the greatest `lastmod` (ties: the later `fetched_at`),
 so neither file order nor a union merge's line order changes the result.
+`load_fetched_lastmods` keeps the entry fetched most recently instead (ties:
+the greater `lastmod`), with the same order independence; the refresh compares
+the sitemap against that one. "Most recently" is by each line's own `fetched_at`,
+so it assumes the clones that append (the job and local runs) keep roughly
+synchronized clocks: a clone running behind can write a newer fetch that sorts
+older, and the record then requalifies on every run until a fetch stamped after
+the older one lands (bounded by the skew).
 
-The log also records 4xx refresh failures (`"event": "failed"`, with the
-sitemap lastmod the fetch was attempted at), which `load_failures` reads so
+The log also records refresh failures (`"event": "failed"`, with the sitemap
+lastmod the fetch was attempted at): a 4xx (`status` is the code) or a body that
+did not parse as a record (`status` is null). `load_failures` reads them so
 the refresh can hold back a record that keeps failing instead of letting it
 take the head of the capped queue every run (WR-04).
 Appends happen one line per write, under the vault lock when the caller
@@ -27,7 +35,7 @@ commit's `git add` or a rebase's autostash.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -36,7 +44,10 @@ from booth_review.config import DataPaths
 from booth_review.errors import VaultStateError
 from booth_review.sources.ratingsref.sitemap import SitemapEntry
 
-_TIME_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_FETCHED_FMT = "%Y-%m-%dT%H:%M:%S.%fZ"
+"""`fetched_at` and `failed_at` keep microseconds: the ledger orders fetches and
+failures by them, and two clones can write one record within a second. Older lines (and the
+snapshot) have whole seconds; the reader accepts both."""
 _MIN_DT = datetime.min.replace(tzinfo=UTC)
 
 LastmodEntry = dict[str, str]
@@ -70,9 +81,10 @@ def _parse_lastmod(value: str) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
-def _entry_key(entry: LastmodEntry) -> tuple[bool, datetime, str]:
+def _entry_key(entry: LastmodEntry) -> tuple[bool, datetime, datetime]:
     parsed = _parse_lastmod(entry["lastmod"])
-    return (parsed is not None, parsed or _MIN_DT, entry.get("fetched_at", ""))
+    fetched = _parse_lastmod(entry.get("fetched_at", ""))
+    return (parsed is not None, parsed or _MIN_DT, fetched or _MIN_DT)
 
 
 def _require_entry(raw: Any, *, where: str) -> LastmodEntry:
@@ -85,19 +97,36 @@ def _require_entry(raw: Any, *, where: str) -> LastmodEntry:
     }
 
 
-def _merge(known: dict[str, LastmodEntry], telecast_id: str, entry: LastmodEntry) -> None:
+def _fetch_key(
+    entry: LastmodEntry,
+) -> tuple[bool, datetime, tuple[bool, datetime, datetime], str]:
+    """Order entries by when they were fetched; ties fall back to `_entry_key`.
+
+    The raw lastmod string is the last tiebreak: two spellings of one instant
+    (`...Z` and `...+00:00`) tie on every parsed field, and the refresh compares
+    the raw string, so without it the line order would pick the winner.
+    """
+    fetched = _parse_lastmod(entry.get("fetched_at", ""))
+    return (fetched is not None, fetched or _MIN_DT, _entry_key(entry), entry["lastmod"])
+
+
+def _merge(
+    known: dict[str, LastmodEntry],
+    telecast_id: str,
+    entry: LastmodEntry,
+    key: Callable[[LastmodEntry], Any],
+) -> None:
     current = known.get(telecast_id)
-    if current is None or _entry_key(entry) > _entry_key(current):
+    # Entries that tie on `key` still differ in spelling or record_url; comparing
+    # every retained field last keeps the winner independent of line order.
+    if current is None or (key(entry), sorted(entry.items())) > (
+        key(current),
+        sorted(current.items()),
+    ):
         known[telecast_id] = entry
 
 
-def load_lastmods(paths: DataPaths) -> dict[str, LastmodEntry]:
-    """Every tracked record's latest-known lastmod entry, from both files.
-
-    Raises VaultStateError on a file that isn't valid JSON / JSONL of the
-    expected shape, rather than treating the vault as having no lastmods
-    (which would make every record look new).
-    """
+def _load(paths: DataPaths, key: Callable[[LastmodEntry], Any]) -> dict[str, LastmodEntry]:
     known: dict[str, LastmodEntry] = {}
 
     if paths.rr_lastmod.is_file():
@@ -108,13 +137,35 @@ def load_lastmods(paths: DataPaths) -> dict[str, LastmodEntry]:
         if not isinstance(data, dict):
             raise VaultStateError("ledger/rr_lastmod.json: expected an object")
         for telecast_id, raw in data.items():
-            _merge(known, telecast_id, _require_entry(raw, where="ledger/rr_lastmod.json"))
+            _merge(known, telecast_id, _require_entry(raw, where="ledger/rr_lastmod.json"), key)
 
     for where, line in _log_lines(paths):
         if line.get("event", "fetched") == "fetched":
-            _merge(known, line["telecast_id"], _require_entry(line, where=where))
+            _merge(known, line["telecast_id"], _require_entry(line, where=where), key)
 
     return known
+
+
+def load_lastmods(paths: DataPaths) -> dict[str, LastmodEntry]:
+    """Every tracked record's greatest-lastmod entry, from both files.
+
+    Raises VaultStateError on a file that isn't valid JSON / JSONL of the
+    expected shape, rather than treating the vault as having no lastmods
+    (which would make every record look new).
+    """
+    return _load(paths, _entry_key)
+
+
+def load_fetched_lastmods(paths: DataPaths) -> dict[str, LastmodEntry]:
+    """Every tracked record's most recently fetched entry, from both files.
+
+    This is the lastmod a record was last fetched at, which is what a refresh
+    compares the sitemap against. It can be older than the greatest lastmod
+    `load_lastmods` returns when the sitemap's lastmod moved backwards; the
+    refresh must then treat the record as fetched at the sitemap's value, not
+    as advanced again on every run. Raises VaultStateError like `load_lastmods`.
+    """
+    return _load(paths, _fetch_key)
 
 
 def _log_lines(paths: DataPaths) -> Iterator[tuple[str, dict[str, Any]]]:
@@ -135,6 +186,11 @@ def _log_lines(paths: DataPaths) -> Iterator[tuple[str, dict[str, Any]]]:
             yield where, line
 
 
+def _failure_key(failure: FailedFetch) -> tuple[datetime, str, int]:
+    """Newest failure first; ties settle on lastmod then status, never on line order."""
+    return (failure.failed_at, failure.lastmod, -1 if failure.status is None else failure.status)
+
+
 def load_failures(paths: DataPaths) -> dict[str, FailedFetch]:
     """Each record's most recent failed refresh fetch (by `failed_at`)."""
     failures: dict[str, FailedFetch] = {}
@@ -144,17 +200,17 @@ def load_failures(paths: DataPaths) -> dict[str, FailedFetch]:
         lastmod, failed_at, status = line.get("lastmod"), line.get("failed_at"), line.get("status")
         if not isinstance(lastmod, str) or not isinstance(failed_at, str):
             raise VaultStateError(f"{where}: a failed line needs lastmod and failed_at")
-        try:
-            when = datetime.strptime(failed_at, _TIME_FMT).replace(tzinfo=UTC)
-        except ValueError as exc:
-            raise VaultStateError(f"{where}: failed_at is not a UTC timestamp") from exc
+        when = _parse_lastmod(failed_at)
+        if when is None:
+            raise VaultStateError(f"{where}: failed_at is not a UTC timestamp")
+        found = FailedFetch(
+            lastmod=lastmod,
+            failed_at=when,
+            status=status if isinstance(status, int) else None,
+        )
         current = failures.get(line["telecast_id"])
-        if current is None or when > current.failed_at:
-            failures[line["telecast_id"]] = FailedFetch(
-                lastmod=lastmod,
-                failed_at=when,
-                status=status if isinstance(status, int) else None,
-            )
+        if current is None or _failure_key(found) > _failure_key(current):
+            failures[line["telecast_id"]] = found
     return failures
 
 
@@ -172,7 +228,7 @@ def append_lastmod(paths: DataPaths, entry: SitemapEntry, *, fetched_at: datetim
             "event": "fetched",
             "telecast_id": entry.telecast_id,
             "lastmod": entry.lastmod,
-            "fetched_at": fetched_at.astimezone(UTC).strftime(_TIME_FMT),
+            "fetched_at": fetched_at.astimezone(UTC).strftime(_FETCHED_FMT),
             "record_url": entry.record_url,
         },
     )
@@ -181,14 +237,17 @@ def append_lastmod(paths: DataPaths, entry: SitemapEntry, *, fetched_at: datetim
 def append_failure(
     paths: DataPaths, entry: SitemapEntry, *, status: int | None, failed_at: datetime
 ) -> None:
-    """Append one record's failed-fetch line (a 4xx) to `ledger/rr_lastmod.jsonl`."""
+    """Append one record's failed-fetch line to `ledger/rr_lastmod.jsonl`.
+
+    `status` is the 4xx code, or None when the response was rejected as not an RR record.
+    """
     _append(
         paths,
         {
             "event": "failed",
             "telecast_id": entry.telecast_id,
             "lastmod": entry.lastmod,
-            "failed_at": failed_at.astimezone(UTC).strftime(_TIME_FMT),
+            "failed_at": failed_at.astimezone(UTC).strftime(_FETCHED_FMT),
             "status": status,
         },
     )

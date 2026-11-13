@@ -599,6 +599,34 @@ def _cache_post(paths: DataPaths, *, etag: str | None = '"p1"') -> None:
         fh.write(json.dumps(line) + "\n")
 
 
+def test_recheck_after_a_rejected_304_reports_the_rejected_body(vault_paths: DataPaths) -> None:
+    """A rejected 304 cleared the validators: say the cached post failed, send nothing."""
+    _policy(vault_paths, now=T_FRI)
+    _state(vault_paths, weeks={"2026-10": CURRENT})
+    _cache_post(vault_paths)
+    rejection = {
+        "url": CURRENT,
+        "source": "aa",
+        "season": 2026,
+        "kind": "page",
+        "fetched_at": "2026-11-06T22:00:00Z",
+        "status": 304,
+        "etag": None,
+        "last_modified": None,
+        "sha256": None,
+        "path": None,
+        "bytes": None,
+        "final_url": CURRENT,
+    }
+    with vault_paths.manifest.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rejection) + "\n")
+    server, vault = _Server(), _Vault()
+    items = _recheck(vault_paths, server, vault)
+    assert _kinds(items) == ["aa_crews_skipped_rejected_body"]
+    assert "http" not in items[0].line and "awfulannouncing" not in items[0].line
+    assert server.total == 0 and vault.calls == []
+
+
 def test_recheck_without_a_stored_validator_sends_nothing(vault_paths: DataPaths) -> None:
     """Adversarial panel F7: a re-check is conditional or not sent; never a plain GET."""
     _policy(vault_paths, now=T_FRI)

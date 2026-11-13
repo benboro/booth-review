@@ -22,7 +22,7 @@ from booth_review.sources.ratingsref.collector import (
     RatingsRefCollector,
 )
 from booth_review.sources.ratingsref.lastmod import load_failures, load_lastmods
-from booth_review.transport.cache import RawCache
+from booth_review.transport.cache import Manifest, RawCache
 from booth_review.transport.client import PoliteClient
 
 
@@ -53,8 +53,10 @@ def _sitemap_xml(entries: list[tuple[str, str]]) -> bytes:
     ).encode()
 
 
-def _record_body(telecast_id: str) -> bytes:
-    return json.dumps({"telecast": {"id": telecast_id}}).encode()
+def _record_body(telecast_id: str, *, note: str = "") -> bytes:
+    """A minimal body `parse_record` accepts; `note` makes two bodies differ."""
+    telecast = {"id": telecast_id, "event_date": "2025-09-06"}
+    return json.dumps({"telecast": telecast, "about": {"note": note}}).encode()
 
 
 def _write_lastmod(vault_paths, data: dict[str, dict[str, str]]) -> None:
@@ -139,7 +141,7 @@ def test_refresh_frozen_season_advanced_record_is_fetched_and_overwrites(
 
     cached_path = vault_paths.raw / "ratingsref" / "telecast" / "2019" / f"{slug}.json"
     cached_path.parent.mkdir(parents=True, exist_ok=True)
-    cached_path.write_bytes(b'{"stale": true}')
+    cached_path.write_bytes(_record_body(slug, note="stale"))
 
     _write_lastmod(
         vault_paths,
@@ -180,7 +182,7 @@ def test_refresh_frozen_season_advanced_record_is_fetched_and_overwrites(
     responses = {
         "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
         SITEMAP_URL: (200, sitemap_xml, {}),
-        _telecast_url(slug): (200, b'{"stale": false}', {}),
+        _telecast_url(slug): (200, _record_body(slug, note="fresh"), {}),
     }
     handle = mock_transport_factory(responses)
     cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
@@ -190,7 +192,7 @@ def test_refresh_frozen_season_advanced_record_is_fetched_and_overwrites(
 
     assert summary.advanced == 1
     assert summary.fetched == 1
-    assert cached_path.read_bytes() == b'{"stale": false}'
+    assert cached_path.read_bytes() == _record_body(slug, note="fresh")
 
     manifest_lines = [
         json.loads(line) for line in vault_paths.manifest.read_text(encoding="utf-8").splitlines()
@@ -496,3 +498,285 @@ def test_refresh_failure_at_an_older_lastmod_does_not_hold_the_record_back(
 def test_refresh_default_cap_constant_is_100_and_first_season_2014() -> None:
     assert REFRESH_CAP_DEFAULT == 100
     assert FIRST_SEASON == 2014
+
+
+# -- F1: a sitemap lastmod older than the ledger's greatest does not requalify forever ------
+
+
+def test_refresh_sitemap_lastmod_older_than_the_ledger_maximum_qualifies_only_once(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    slug = "cfb-team-a-team-b-2025-09-06"
+    _write_lastmod(
+        vault_paths,
+        {
+            slug: {
+                "lastmod": "2026-02-05T00:00:00+00:00",
+                "fetched_at": "2026-02-06T00:00:00Z",
+                "record_url": f"https://ratingsreference.com/telecast/{slug}",
+            }
+        },
+    )
+    sitemap_xml = _sitemap_xml([(slug, "2026-02-03T00:00:00+00:00")])  # moved backwards
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, sitemap_xml, {}),
+        _telecast_url(slug): (200, _record_body(slug), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    clock = {"now": datetime(2026, 10, 4, 14, 5, tzinfo=UTC)}
+
+    def _collector() -> RatingsRefCollector:
+        return RatingsRefCollector(cache, vault_paths, now=lambda: clock["now"])
+
+    first = _collector().refresh(current_season=2025, dry_run=False)
+    assert (first.qualifying, first.fetched) == (1, 1)
+
+    for _ in range(3):
+        clock["now"] += timedelta(hours=8)
+        handle.requests.clear()
+        again = _collector().refresh(current_season=2025, dry_run=False)
+        assert (again.qualifying, again.advanced, again.selected) == (0, 0, 0)
+        assert [r for r in handle.requests if "/api/telecast/" in r.url] == []
+
+
+def test_refresh_sitemap_lastmod_newer_than_the_last_fetch_still_qualifies(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    slug = "cfb-team-a-team-b-2025-09-06"
+    _write_lastmod(
+        vault_paths,
+        {
+            slug: {
+                "lastmod": "2026-02-05T00:00:00+00:00",
+                "fetched_at": "2026-02-06T00:00:00Z",
+                "record_url": f"https://ratingsreference.com/telecast/{slug}",
+            }
+        },
+    )
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, _sitemap_xml([(slug, "2026-02-09T00:00:00+00:00")]), {}),
+        _telecast_url(slug): (200, _record_body(slug), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    collector = RatingsRefCollector(cache, vault_paths)
+
+    summary = collector.refresh(current_season=2025, dry_run=False)
+
+    assert (summary.qualifying, summary.advanced, summary.fetched) == (1, 1, 1)
+    assert load_lastmods(vault_paths)[slug]["lastmod"] == "2026-02-09T00:00:00+00:00"
+
+
+# -- F3: a refresh response that does not parse never replaces a good record ----------------
+
+
+def test_refresh_rejected_body_leaves_the_cache_and_ledger_alone_and_the_batch_continues(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    bad = "cfb-team-a-team-b-2025-09-06"
+    good = "cfb-team-c-team-d-2025-09-13"
+    old = "2026-01-01T00:00:00+00:00"
+    new = "2026-02-01T00:00:00+00:00"
+    _write_lastmod(
+        vault_paths,
+        {
+            slug: {
+                "lastmod": old,
+                "fetched_at": "2026-01-02T00:00:00Z",
+                "record_url": f"https://ratingsreference.com/telecast/{slug}",
+            }
+            for slug in (bad, good)
+        },
+    )
+    bad_path = vault_paths.raw / "ratingsref" / "telecast" / "2025" / f"{bad}.json"
+    bad_path.parent.mkdir(parents=True, exist_ok=True)
+    bad_path.write_bytes(_record_body(bad, note="accepted"))
+
+    html_error_page = b"<html><body>Service temporarily unavailable</body></html>"
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (200, _sitemap_xml([(bad, new), (good, new)]), {}),
+        _telecast_url(bad): (200, html_error_page, {}),
+        _telecast_url(good): (200, _record_body(good), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    collector = RatingsRefCollector(cache, vault_paths)
+
+    summary = collector.refresh(current_season=2025, dry_run=False)
+
+    assert (summary.fetched, summary.failed) == (1, 1)
+    assert bad_path.read_bytes() == _record_body(bad, note="accepted")
+    ledger = load_lastmods(vault_paths)
+    assert ledger[bad]["lastmod"] == old  # not advanced, so it is tried again
+    assert ledger[good]["lastmod"] == new
+
+    manifest_lines = [
+        json.loads(line) for line in vault_paths.manifest.read_text(encoding="utf-8").splitlines()
+    ]
+    rejected = [line for line in manifest_lines if line["url"] == _telecast_url(bad)]
+    assert [line["path"] for line in rejected] == [None]
+
+    again = RatingsRefCollector(cache, vault_paths).refresh(current_season=2025, dry_run=True)
+    assert (again.qualifying, again.advanced) == (1, 1)
+
+
+def _stale_ledger(vault_paths, *slugs: str, lastmod: str = "2026-01-01T00:00:00+00:00") -> None:
+    _write_lastmod(
+        vault_paths,
+        {
+            slug: {
+                "lastmod": lastmod,
+                "fetched_at": "2026-01-02T00:00:00Z",
+                "record_url": f"https://ratingsreference.com/telecast/{slug}",
+            }
+            for slug in slugs
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "bad_body",
+    [
+        b"\x1f\x8b\x08\x00 gzip bytes \xff",
+        b'{"telecast": {"id": "x", "event_date": "2025-09-06"}, "n": ' + b"9" * 5000 + b"}",
+        b"[" * 100_000,
+    ],
+    ids=["not-utf8", "oversized-integer", "deep-nesting"],
+)
+def test_refresh_body_that_cannot_be_decoded_is_rejected_and_the_batch_continues(
+    vault_paths, mock_transport_factory, fake_clock, bad_body
+) -> None:
+    bad = "cfb-team-a-team-b-2025-09-06"
+    good = "cfb-team-c-team-d-2025-09-13"
+    _stale_ledger(vault_paths, bad, good)
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        # bad has the older lastmod, so it is requested first.
+        SITEMAP_URL: (
+            200,
+            _sitemap_xml([(bad, "2026-02-01T00:00:00+00:00"), (good, "2026-02-02T00:00:00+00:00")]),
+            {},
+        ),
+        _telecast_url(bad): (200, bad_body, {}),
+        _telecast_url(good): (200, _record_body(good), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+
+    summary = RatingsRefCollector(cache, vault_paths).refresh(current_season=2025, dry_run=False)
+
+    assert (summary.fetched, summary.failed) == (1, 1)
+    assert load_lastmods(vault_paths)[good]["lastmod"] == "2026-02-02T00:00:00+00:00"
+    assert load_lastmods(vault_paths)[bad]["lastmod"] == "2026-01-01T00:00:00+00:00"
+
+
+def test_refresh_rejected_record_is_held_back_so_it_cannot_starve_the_queue(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    bad = "cfb-team-a-team-b-2025-09-06"
+    good = "cfb-team-c-team-d-2025-09-13"
+    _stale_ledger(vault_paths, bad, good)
+    responses = {
+        "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+        SITEMAP_URL: (
+            200,
+            _sitemap_xml([(bad, "2026-02-01T00:00:00+00:00"), (good, "2026-02-02T00:00:00+00:00")]),
+            {},
+        ),
+        _telecast_url(bad): (200, b"<html>maintenance</html>", {}),
+        _telecast_url(good): (200, _record_body(good), {}),
+    }
+    handle = mock_transport_factory(responses)
+    cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+    clock = {"now": datetime(2026, 10, 4, 14, 5, tzinfo=UTC)}
+
+    def _collector() -> RatingsRefCollector:
+        return RatingsRefCollector(cache, vault_paths, now=lambda: clock["now"])
+
+    def _telecast_requests() -> list[str]:
+        return [r.url for r in handle.requests if "/api/telecast/" in r.url]
+
+    # Run 1: cap 1 goes to the older, bad record; the rejection is logged.
+    first = _collector().refresh(current_season=2025, cap=1, dry_run=False)
+    assert (first.fetched, first.failed) == (0, 1)
+    assert _telecast_requests() == [_telecast_url(bad)]
+    assert load_failures(vault_paths)[bad].status is None
+
+    # Run 2: the bad record is held back, so the valid one is no longer starved.
+    clock["now"] += timedelta(days=3)
+    handle.requests.clear()
+    second = _collector().refresh(current_season=2025, cap=1, dry_run=False)
+    assert (second.deferred_failed, second.fetched) == (1, 1)
+    assert _telecast_requests() == [_telecast_url(good)]
+
+    # Run 3, past the hold: the bad record is tried again.
+    clock["now"] += FAILED_RETRY_AFTER
+    handle.requests.clear()
+    third = _collector().refresh(current_season=2025, cap=1, dry_run=False)
+    assert third.deferred_failed == 0
+    assert _telecast_requests() == [_telecast_url(bad)]
+
+
+def test_refresh_304_that_confirms_an_unacceptable_cached_body_is_repaired_next_time(
+    vault_paths, mock_transport_factory, fake_clock
+) -> None:
+    slug = "cfb-team-a-team-b-2025-09-06"
+    url = _telecast_url(slug)
+    _stale_ledger(vault_paths, slug)
+    cached_path = vault_paths.raw / "ratingsref" / "telecast" / "2025" / f"{slug}.json"
+    cached_path.parent.mkdir(parents=True, exist_ok=True)
+    cached_path.write_bytes(b"<html>oops</html>")  # cached before refresh validated bodies
+    vault_paths.manifest.parent.mkdir(parents=True, exist_ok=True)
+    vault_paths.manifest.write_text(
+        json.dumps(
+            {
+                "url": url,
+                "source": "ratingsref",
+                "season": 2025,
+                "kind": "page",
+                "fetched_at": "2026-01-02T00:00:00Z",
+                "status": 200,
+                "etag": '"e1"',
+                "last_modified": None,
+                "sha256": "x",
+                "path": f"ratingsref/telecast/2025/{slug}.json",
+                "bytes": 17,
+                "final_url": url,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    sitemap = _sitemap_xml([(slug, "2026-02-01T00:00:00+00:00")])
+    clock = {"now": datetime(2026, 10, 4, 14, 5, tzinfo=UTC)}
+
+    def _run(status: int, body: bytes):
+        handle = mock_transport_factory(
+            {
+                "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
+                SITEMAP_URL: (200, sitemap, {}),
+                url: (status, body, {}),
+            }
+        )
+        cache = RawCache(vault_paths, _client(handle, fake_clock=fake_clock))
+        collector = RatingsRefCollector(cache, vault_paths, now=lambda: clock["now"])
+        summary = collector.refresh(current_season=2025, dry_run=False)
+        sent = [r for r in handle.requests if r.url == url]
+        return summary, sent
+
+    # Run 1: the conditional request is answered 304, which confirms the bad bytes.
+    summary, sent = _run(304, b"")
+    assert summary.failed == 1
+    assert sent[0].headers.get("if-none-match") == '"e1"'
+    assert Manifest(vault_paths.manifest).latest_validators(url) is None
+
+    # Run 2, past the hold: the request is unconditional, so the server's body replaces it.
+    clock["now"] += FAILED_RETRY_AFTER + timedelta(days=1)
+    summary, sent = _run(200, _record_body(slug))
+    assert summary.fetched == 1
+    assert "if-none-match" not in sent[0].headers
+    assert cached_path.read_bytes() == _record_body(slug)

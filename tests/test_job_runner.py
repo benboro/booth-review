@@ -246,7 +246,7 @@ def test_scheduled_job_catchup_from_backdated_state_sends_expected_requests(
     for slug in slugs:
         responses[f"https://ratingsreference.com/api/telecast/{slug}.json"] = (
             200,
-            json.dumps({"telecast": {"id": slug}}).encode(),
+            json.dumps({"telecast": {"id": slug, "event_date": "2025-09-06"}}).encode(),
             {},
         )
 
@@ -455,7 +455,11 @@ def test_scheduled_job_accepts_jsonl_only_lastmod_ledger_and_commits_it(
     responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
     responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
     responses[SITEMAP_URL] = (200, _sitemap_xml([(slug, "2026-09-25T00:00:00+00:00")]), {})
-    responses[f"https://ratingsreference.com/api/telecast/{slug}.json"] = (200, b"{}", {})
+    responses[f"https://ratingsreference.com/api/telecast/{slug}.json"] = (
+        200,
+        json.dumps({"telecast": {"id": slug, "event_date": "2026-09-12"}}).encode(),
+        {},
+    )
 
     handle = mock_transport_factory(responses)
     runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)
@@ -501,8 +505,16 @@ def test_scheduled_job_rr_backlog_over_cap_is_attention_exit4(
     responses = _cfbd_ok_responses(2026, include_teams_fbs=False)
     responses["https://ratingsreference.com/robots.txt"] = (404, b"nf", {})
     responses[SITEMAP_URL] = (200, sitemap_xml, {})
-    responses[f"https://ratingsreference.com/api/telecast/{slug_a}.json"] = (200, b"{}", {})
-    responses[f"https://ratingsreference.com/api/telecast/{slug_b}.json"] = (200, b"{}", {})
+    responses[f"https://ratingsreference.com/api/telecast/{slug_a}.json"] = (
+        200,
+        json.dumps({"telecast": {"id": slug_a, "event_date": "2026-09-12"}}).encode(),
+        {},
+    )
+    responses[f"https://ratingsreference.com/api/telecast/{slug_b}.json"] = (
+        200,
+        json.dumps({"telecast": {"id": slug_b, "event_date": "2026-09-12"}}).encode(),
+        {},
+    )
 
     handle = mock_transport_factory(responses)
     runtime = _runtime(paths, handle, now=lambda: now_value, fake_clock=fake_clock)

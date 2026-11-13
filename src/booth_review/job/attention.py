@@ -341,7 +341,9 @@ def aa_feed_blocked() -> AttentionItem:
 
 
 def aa_crews_skipped(
-    reason: Literal["policy", "robots", "not_cached", "no_validator", "failed_before", "error"],
+    reason: Literal[
+        "policy", "robots", "not_cached", "no_validator", "rejected_body", "failed_before", "error"
+    ],
 ) -> AttentionItem:
     """Phase 27: the crews post was not fetched; fixed lines, no URL or page text."""
     if reason == "robots":
@@ -369,6 +371,12 @@ def aa_crews_skipped(
         line = (
             "aa crews post not re-checked: no etag or last-modified is stored for it, so "
             "this run sent nothing, run booth-review collect aa --crews to fetch it again"
+        )
+    elif reason == "rejected_body":
+        # A rejected 304 cleared the validators: the cached post failed validation.
+        line = (
+            "aa crews post not re-checked: the cached copy failed validation, so this run "
+            "sent nothing, run booth-review collect aa --crews to replace it"
         )
     else:
         line = (

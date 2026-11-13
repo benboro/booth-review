@@ -205,6 +205,10 @@ def _refresh_sitemap_xml(entries: list[tuple[str, str]]) -> bytes:
     ).encode()
 
 
+def _refresh_record_body(slug: str) -> bytes:
+    return json.dumps({"telecast": {"id": slug, "event_date": "2025-09-06"}}).encode()
+
+
 def _refresh_telecast_url(slug: str) -> str:
     return f"https://ratingsreference.com/api/telecast/{slug}.json"
 
@@ -256,8 +260,8 @@ def test_refresh_ratingsref_live_run_commits_and_reports_zero_backlog(
     responses = {
         "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
         SITEMAP_URL: (200, sitemap_xml, {}),
-        _refresh_telecast_url(old_slug): (200, b'{"telecast": {}}', {}),
-        _refresh_telecast_url(new_slug): (200, b'{"telecast": {}}', {}),
+        _refresh_telecast_url(old_slug): (200, _refresh_record_body(old_slug), {}),
+        _refresh_telecast_url(new_slug): (200, _refresh_record_body(new_slug), {}),
     }
     handle = mock_transport_factory(responses)
     patched_client(handle)
@@ -288,7 +292,7 @@ def test_refresh_ratingsref_cap_override_reports_backlog_and_returns_4(
     responses = {
         "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
         SITEMAP_URL: (200, sitemap_xml, {}),
-        _refresh_telecast_url(slugs[0]): (200, b'{"telecast": {}}', {}),
+        _refresh_telecast_url(slugs[0]): (200, _refresh_record_body(slugs[0]), {}),
     }
     handle = mock_transport_factory(responses)
     patched_client(handle)
@@ -314,7 +318,7 @@ def test_refresh_ratingsref_no_commit_skips_commit(
     responses = {
         "https://ratingsreference.com/robots.txt": (404, b"nf", {}),
         SITEMAP_URL: (200, sitemap_xml, {}),
-        _refresh_telecast_url(slug): (200, b'{"telecast": {}}', {}),
+        _refresh_telecast_url(slug): (200, _refresh_record_body(slug), {}),
     }
     handle = mock_transport_factory(responses)
     patched_client(handle)

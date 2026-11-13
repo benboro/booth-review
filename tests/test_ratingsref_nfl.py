@@ -46,7 +46,7 @@ def _url(slug: str) -> str:
 
 
 def _body(slug: str) -> bytes:
-    return json.dumps({"telecast": {"id": slug}}).encode()
+    return json.dumps({"telecast": {"id": slug, "event_date": "2025-09-06"}}).encode()
 
 
 _MIXED = _sitemap_xml(

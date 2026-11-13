@@ -613,7 +613,8 @@ def test_aa_feed_attention_lines(builder, needle: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "reason", ["robots", "policy", "not_cached", "no_validator", "failed_before", "error"]
+    "reason",
+    ["robots", "policy", "not_cached", "no_validator", "rejected_body", "failed_before", "error"],
 )
 def test_aa_crews_skipped_lines(reason: str) -> None:
     item = aa_crews_skipped(reason)  # type: ignore[arg-type]
