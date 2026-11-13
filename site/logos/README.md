@@ -17,6 +17,7 @@ covered by this repository's MIT license.
   hand from ESPN's design site (https://espn.design/). Its only edit is a `viewBox` tightened
   to the drawn letters (24 24 292 72, from 0 0 340 120) with matching `width`/`height`, so it
   draws at the same 57 x 14 px as the Commons file it replaced.
+- Paramount+ (`paramount-plus.svg`) was saved by hand from Wikimedia Commons (`File:Paramount+_logo.svg`) and approved by the user on 2026-11-13. Its only edit is the removal of the unused SVG 1.1 `DOCTYPE` line.
 - Logos are rendered only through `<img>`, so no script inside a file can run.
 - Dark-theme variants are generated at build time by
   `src/booth_review/build/logos_dark.py` into `logos/dark/<name>.svg` (same viewBox,
