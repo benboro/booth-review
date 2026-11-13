@@ -32,7 +32,10 @@ model, and build phases; read the relevant section before starting a phase.
   exception is Ratings Reference: `booth-review refresh ratingsref [--league nfl|mlb]`
   (run by the scheduled job for college football and the NFL; MLB is hand-run only)
   re-fetches a record in any season, frozen ones included, when its sitemap `<lastmod>`
-  advanced or the sitemap newly lists it. Each league has its own cap per run: at most
+  differs from the lastmod it was last fetched at (a lastmod that moved backwards counts)
+  or the sitemap newly lists it. A refresh response that does not parse as a Ratings
+  Reference record is never cached; the record is held back for 6 days and tried
+  again. Each league has its own cap per run: at most
   100 such fetches for college football, 40 for the NFL and 40 for MLB, with
   current-season new records not counted and the rest carried over. For MLB, a record
   qualifies only if its game date falls inside the windows `booth-review mlb
@@ -70,9 +73,10 @@ model, and build phases; read the relevant section before starting a phase.
   nothing for MLB: after each 2026 MLB round ends, the user hand-saves its 506 page
   and imports it with `booth-review import 506 --season 2026 --league mlb [--force]`.
 - Once the scheduled job is live, run `git -C data/vault pull --rebase` before a local
-  collection command. Every `booth-review` command that writes to the vault holds a
-  vault lock and commits only the paths it touched, so a local run and the job never
-  clobber each other's in-progress files.
+  collection command. The vault lock serializes commits, pushes and ledger appends
+  across processes; it is not held for a whole run, and a commit sweeps in only the
+  paths its caller names (`commit_batch(paths=...)`), so a local run and the job do not
+  absorb each other's in-progress files.
 - The vault is private. Never copy its files into the public repo, test fixtures,
   commit messages, or logs; tests use synthetic 506 and CFBD fixtures.
 - Ratings Reference: read the per-telecast JSON records (`/api/telecast/<id>.json`)
