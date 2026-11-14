@@ -185,7 +185,13 @@ def test_fixture_build_file_suffixes_and_one_json_file(site_env: Path) -> None:
             continue
         by_suffix.setdefault(path.suffix, set()).add(path.relative_to(out).as_posix())
 
-    assert set(by_suffix) <= {".html", ".js", ".css", ".json", ".svg", ".woff2", ".txt"}
+    assert set(by_suffix) <= {".html", ".js", ".css", ".json", ".svg", ".png", ".woff2", ".txt"}
+    # The only raster is the MW+ mark: its light file, and the brand's dark file written to
+    # logos/dark/ (the dark-src/ copy itself is never published).
+    assert by_suffix[".png"] == {
+        "logos/mountain-west-network.png",
+        "logos/dark/mountain-west-network.png",
+    }
     assert by_suffix[".woff2"] == {
         "fonts/lm-roman-demi-latin-600-normal.woff2",
         "fonts/roboto-latin-400-normal.woff2",
