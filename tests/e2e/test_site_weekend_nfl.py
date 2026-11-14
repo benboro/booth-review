@@ -139,7 +139,7 @@ def test_cbs_window_is_four_sub_rows_by_booth_rank(
 ) -> None:
     _open(nfl_guarded_page, open_nfl_app)
     cells = _row_cells(nfl_guarded_page, "cbs")
-    assert [c["top"] for c in cells] == [0, 48, 96, 144]
+    assert [c["top"] for c in cells] == [0, 45, 90, 135]
     assert all(c["time"] == "1:00" for c in cells)
     # Rank 1 on top, rank 2 under it, the crewless games last; every crew visible.
     assert cells[0]["star"] is True
@@ -151,7 +151,7 @@ def test_cbs_window_is_four_sub_rows_by_booth_rank(
 def test_fox_window_reuses_top_sub_rows(nfl_guarded_page: Page, open_nfl_app: OpenNfl) -> None:
     _open(nfl_guarded_page, open_nfl_app)
     cells = _row_cells(nfl_guarded_page, "fox")
-    assert [c["top"] for c in cells] == [0, 48]
+    assert [c["top"] for c in cells] == [0, 45]
     assert all(c["time"] == "4:25" for c in cells)
 
 

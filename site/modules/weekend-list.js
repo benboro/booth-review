@@ -2,7 +2,7 @@
  * This weekend phone list (Phase 18, plan 09, D-08): the 480px-and-under layout. Games group by
  * kickoff time, each item a button with a network mark, two text lines and a 4px family edge;
  * the Time or network to be announced group and the ESPN+ and regional group come last. No time
- * axis and no Now line. It shares the model, options, control row, stamp line, source line and
+ * axis. It shares the model, options, control row, stamp line, source line and
  * mount lifecycle with weekend-view.js, so no copy string is duplicated.
  *
  * DOM safety (T-18-28): createElement, textContent and setAttribute only; no markup-injecting API.
