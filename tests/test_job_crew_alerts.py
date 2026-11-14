@@ -170,11 +170,34 @@ def _scheduled_and_telecast(telecast_network: int | None) -> dict[str, Any]:
     return site
 
 
-@pytest.mark.parametrize("network", [NO_NETWORK, None], ids=["unmapped-entry", "no-entry"])
-def test_cfb_crew_listed_with_the_network_still_tbd_covers_the_game(network: int | None) -> None:
-    """506 gave the crew while the network said "TBD", so the crew sits on a row with no
-    network and the schedule row on ESPN has none: the crew is known, nothing to alert."""
-    assert find_cfb_missing(_scheduled_and_telecast(network), NOW) == []
+def test_cfb_crew_on_a_row_with_a_null_network_covers_the_game() -> None:
+    """The crew sits on a row whose network is not known yet (null), and the schedule
+    row on ESPN has none: the crew is known, nothing to alert."""
+    assert find_cfb_missing(_scheduled_and_telecast(None), NOW) == []
+
+
+def test_cfb_crew_on_the_unmapped_entry_does_not_cover_the_game() -> None:
+    """The "unmapped" entry can be a 506 network name the crosswalk lacks ("XYZ Net"): a
+    different named network, so the crew-less ESPN row is still flagged."""
+    [game] = find_cfb_missing(_scheduled_and_telecast(NO_NETWORK), NOW)
+    assert (game.stage, game.network) == ("upcoming", "ESPN")
+
+
+def test_cfb_crew_on_a_rated_unmapped_telecast_does_not_cover_its_unrated_sibling() -> None:
+    """The shape the build ships: only rated telecasts point at "unmapped". Its crew does
+    not cover the game's crew-less unrated row on ESPN, which is flagged once played."""
+    kickoff = "2026-11-07T19:30:00-05:00"
+    site = _cfb_site([_cfb_row(kickoff, network=ESPN)])
+    site["telecasts"] = _cfb_block([_cfb_row(kickoff, network=NO_NETWORK, crew=CREW)])
+    [game] = find_cfb_missing(site, NOW)
+    assert (game.stage, game.network) == ("played", "ESPN")
+
+
+def test_cfb_crew_on_a_network_index_with_no_lookup_entry_does_not_cover_the_game() -> None:
+    """A network index past the lookup (stale or corrupt) is not "network not known yet":
+    the crew-less ESPN row is still flagged."""
+    [game] = find_cfb_missing(_scheduled_and_telecast(99), NOW)
+    assert (game.stage, game.network) == ("upcoming", "ESPN")
 
 
 def test_cfb_crew_on_another_named_network_does_not_cover_the_game() -> None:

@@ -15,8 +15,12 @@ College football games count only on networks a crew source covers (see
 `_cfb_covered`): a game with no network yet, or on ESPN+ and the other
 streaming-only or conference-digital outlets, is never flagged, since 506, AA
 and the press pages almost never list those crews. A game is not flagged either
-when one of its rows carries a main crew with no network: a source listed the
-crew with the network still "TBD", so the crew is known. Every NFL game counts.
+when one of its rows carries a main crew and has no network at all (network
+null), so the crew is known; this is a guard, since the build today never ships
+such a row beside another row of the same game. A crew on
+the site's "unmapped" network entry covers nothing: that entry can stand for a
+network name the crosswalk does not map, so it may be a different named network.
+Every NFL game counts.
 
 Limit: bowls, the CFB playoff and the NFL playoffs reach the site files only
 once their 506 page is imported, so until then neither stage can flag them.
@@ -235,23 +239,16 @@ def _cfb_week(raw: object, date: str) -> str:
     return CFB_POSTSEASON if int(date[5:7]) in _POSTSEASON_MONTHS else CFB_UNLISTED
 
 
-# lookups.networks id of the entry a telecast with no network points at
-# (build.site_data's "unmapped").
-_CFB_NO_NETWORK_ID = "unmapped"
-
-
-def _no_network(net: Mapping[str, Any] | None) -> bool:
-    """The row has no network: no lookup entry (a scheduled row), or the site
-    file's "unmapped" entry (a telecast)."""
-    return net is None or net.get("id") == _CFB_NO_NETWORK_ID
-
-
 def find_cfb_missing(data: Mapping[str, Any], now: datetime) -> list[MissingCrew]:
     """Current-season CFB telecasts on covered networks with no main crew, in a window.
 
-    A crew a source listed while the game's network was still "TBD" sits on a row with
-    no network; it covers the game's other rows, so the game is not flagged. A crew on
-    another named network does not.
+    A crew on a row whose network is null (not known yet) covers the game's other
+    rows, so the game is not flagged. That is a guard: today only a scheduled row can
+    have a null network, and it never ships beside another row of its game. A crew on
+    another named network does not cover, nor does one on the "unmapped" entry (the
+    site file cannot tell a TBD 506 network there from a 506 name the crosswalk lacks;
+    an unrated telecast with no network never ships, so only rated telecasts point at
+    it), nor one whose network index has no lookup entry.
     """
     season = _require_shape(data, CFB_SITE_DATA, _CFB_BLOCKS, _CFB_COLUMNS)
     lookups = data["lookups"]
@@ -266,11 +263,7 @@ def find_cfb_missing(data: Mapping[str, Any], now: datetime) -> list[MissingCrew
     crewed: set[str] = set()
     for block_name in _CFB_BLOCKS:
         for row in _rows(data[block_name]):
-            if (
-                row["season"] == season
-                and _has_main_crew(row["crew"])
-                and _no_network(_lookup(networks, row["network"]))
-            ):
+            if row["season"] == season and _has_main_crew(row["crew"]) and row["network"] is None:
                 crewed.add(_game_key(row)[0])
 
     found: dict[str, MissingCrew] = {}
