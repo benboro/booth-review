@@ -170,7 +170,7 @@ def test_fox_stack_rows_heights_and_two_lines(wk_page: Page) -> None:
     ]
     _mount(wk_page, games)
     assert wk_page.locator("#wk-host .wk-row").count() == 1
-    assert wk_page.evaluate("document.querySelector('#wk-host .wk-lane').offsetHeight") == 140
+    assert wk_page.evaluate("document.querySelector('#wk-host .wk-lane').offsetHeight") == 134
     for key in "abc":
         box = wk_page.locator(_cell(key)).bounding_box()
         assert box is not None
@@ -178,8 +178,9 @@ def test_fox_stack_rows_heights_and_two_lines(wk_page: Page) -> None:
         assert wk_page.locator(f"{_cell(key)} .wk-line").count() == 2
     top = {k: wk_page.evaluate(f"document.querySelector('{_cell(k)}').offsetTop") for k in "abc"}
     assert top["b"] == 0
-    assert top["a"] == 48
-    assert top["c"] == 96
+    # A 1px gap between sub-rows, the same as the rule between networks (user 2026-11-14).
+    assert top["a"] == 45
+    assert top["c"] == 90
 
 
 def test_axis_corner_ticks_and_cell_widths(wk_page: Page) -> None:
@@ -429,72 +430,24 @@ def test_day_tabs_second_tablist_and_counts(wk_page: Page) -> None:
     assert wk_page.locator(_cell("s")).count() == 1
 
 
-def test_now_line_only_on_todays_et_day(wk_page: Page) -> None:
-    games = [_known(key="a"), _known(key="f", date=FRI, kickoffMin=1200, home="F")]
-    _mount(wk_page, games, now="2026-10-31T13:00:00-04:00")
-    assert wk_page.locator("#wk-host .wk-now").count() == 1
-    assert wk_page.locator("#wk-host .wk-now-label").inner_text() == "Now"
-    assert _style(wk_page, "#wk-host .wk-now", "backgroundColor") == "rgb(27, 79, 92)"
-    _mount(wk_page, games, now="2026-10-30T09:00:00-04:00", day=SAT)
-    assert wk_page.locator("#wk-host .wk-now").count() == 0
-    # Outside the axis range on the same day: no line.
-    _mount(wk_page, games, now="2026-10-31T06:00:00-04:00")
-    assert wk_page.locator("#wk-host .wk-now").count() == 0
-
-
-def _intersects(a: dict[str, float], b: dict[str, float]) -> bool:
-    return (
-        a["x"] < b["x"] + b["width"]
-        and b["x"] < a["x"] + a["width"]
-        and a["y"] < b["y"] + b["height"]
-        and b["y"] < a["y"] + a["height"]
-    )
-
-
-def test_now_label_flips_right_of_the_line_near_the_axis_start(wk_page: Page) -> None:
-    # UI review fix 1: in the axis's first hour the label sits right of the line, clear of the
-    # sticky "All times ET" corner; later in the day it stays on the line's left.
-    games = [_known(key="a"), _known(key="b", kickoffMin=1170, home="Late")]
-    wk_page.clock.install(time="2026-10-31T12:05:00-04:00")
-    _mount(wk_page, games, live_clock=True)
-    corner = wk_page.locator("#wk-host .wk-corner").bounding_box()
-    label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
-    line = wk_page.locator("#wk-host .wk-now").bounding_box()
-    assert corner is not None and label is not None and line is not None
-    assert not _intersects(label, corner)
-    assert label["x"] >= line["x"] + line["width"]
-    assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
-    wk_page.evaluate("window.__wk.inst.destroy()")
-    for time in ("15:00", "15:20"):
-        wk_page.clock.set_system_time(f"2026-10-31T{time}:00-04:00")
-        _mount(wk_page, games, live_clock=True)
-        label = wk_page.locator("#wk-host .wk-now-label").bounding_box()
-        line = wk_page.locator("#wk-host .wk-now").bounding_box()
-        assert label is not None and line is not None
-        assert label["x"] + label["width"] <= line["x"]
-        # A tick label the Now label would cover hides; its hairline still shows.
-        assert not any(_intersects(label, t) for t in _shown_ticks(wk_page))
-        wk_page.evaluate("window.__wk.inst.destroy()")
-
-
-def _shown_ticks(page: Page) -> list[dict[str, float]]:
-    return page.locator("#wk-host .wk-tick").evaluate_all(  # type: ignore[no-any-return]
-        """ts => ts.filter((t) => getComputedStyle(t).visibility !== 'hidden').map((t) => {
-          const r = t.getBoundingClientRect();
-          return { x: r.x, y: r.y, width: r.width, height: r.height };
-        })"""
-    )
+def test_timeline_has_no_now_line(wk_page: Page) -> None:
+    # The Now line was removed (user 2026-11-14), even on today's ET day mid-axis.
+    _mount(wk_page, [_known(key="a")], now="2026-10-31T13:00:00-04:00")
+    assert wk_page.locator("#wk-host .wk-row").count() == 1
+    assert wk_page.locator("#wk-host .wk-now, #wk-host .wk-now-label").count() == 0
 
 
 _ROOT = "document.querySelector('#wk-host .wk-root')"
 
 
 def test_clock_tick_keeps_scroll_and_focus(wk_page: Page) -> None:
-    # WR-02: the minute rebuild on today keeps both sideways scrolls and the focused cell.
+    # WR-02: a minute rebuild keeps both sideways scrolls and the focused cell. The crew-less
+    # 1:01 pm kickoff turns from Crew TBA to Crew not listed on the tick, forcing the rebuild.
     wk_page.clock.install(time="2026-10-31T13:00:00-04:00")
     days = ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", FRI, SAT]
     games = [_known(key=f"d{n}", date=d, home=f"H{n}") for n, d in enumerate(days)]
     games.append(_known(key="late", kickoffMin=1380, home="Late"))
+    games.append(_game(key="flip", kickoffMin=781, home="Flip"))
     _mount(wk_page, games, width=800, host_width=420, live_clock=True)
     before = wk_page.evaluate(
         """() => {
@@ -837,9 +790,9 @@ def test_phone_groups_order_and_item_shape(phone_page: Page, theme: str) -> None
     assert tba.evaluate("e => getComputedStyle(e).fontWeight") == "400"
 
 
-def test_phone_has_no_axis_or_now_line(phone_page: Page) -> None:
+def test_phone_has_no_axis(phone_page: Page) -> None:
     _mount_phone(phone_page, _phone_games(), now="2026-10-31T13:00:00-04:00")
-    for sel in (".wk-axis", ".wk-now", ".wk-grid", ".wk-corner"):
+    for sel in (".wk-axis", ".wk-grid", ".wk-corner"):
         assert phone_page.locator(f"#wk-host {sel}").count() == 0
 
 

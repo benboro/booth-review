@@ -35,10 +35,7 @@ const RESIZE_DEBOUNCE_MS = 120;
 const TICK_MS = 60000;
 const ESPN_PRESS_ROOM = 'https://www.espnpressroom.com/';
 const ROW_HEAD_WIDTH = 96;
-const SUB_ROW_PITCH = 48;
-// The "Now" label's width in the caption face, and its gap from the line.
-const NOW_LABEL_WIDTH = 24;
-const NOW_LABEL_GAP = 4;
+const SUB_ROW_PITCH = 45;
 
 /** Small element helper: tag, class, text. */
 export function el(tag, cls, text) {
@@ -93,7 +90,7 @@ export function makeContext(model, opts, state) {
   const anyPick = model.games.some((g) => passes(g) !== null);
   const open = opts.onOpen ?? (() => {});
   return {
-    model, opts, state, theme, nowDate, nowParts: np, nowWall, passes, networksPicked, days, day,
+    model, opts, state, theme, nowDate, nowWall, passes, networksPicked, days, day,
     allDays, inDay, dayModel, anyPick, open,
     countFor(d) {
       return model.games.filter((g) => (g.date === d || g.date == null) && passes(g) === true).length;
@@ -639,43 +636,6 @@ function wireRoving(grid, lanes) {
   });
 }
 
-/** Whether the Now line shows: today is the shown day (or, on a whole-week page, a day with
- * grid rows) and the minute is on the axis. */
-function nowLineShows(ctx) {
-  const axis = ctx.dayModel.axis;
-  const { date, minutes } = ctx.nowParts;
-  if (!axis || minutes < axis.start || minutes > axis.end) return false;
-  return ctx.allDays ? ctx.dayModel.rows.some((r) => r.date === date) : date === ctx.day;
-}
-
-function buildNowLine(ctx, body, axisEl) {
-  const { axis, pxh } = ctx.dayModel;
-  const { date, minutes } = ctx.nowParts;
-  if (!nowLineShows(ctx)) return;
-  const x = ROW_HEAD_WIDTH + Math.round(((minutes - axis.start) * pxh) / 60);
-  const line = el('div', 'wk-now');
-  line.style.left = `${x}px`;
-  // A whole-week page draws the line through today's rows only.
-  const host = ctx.allDays
-    ? [...body.querySelectorAll('.wk-dayrows')].find((n) => n.dataset.date === date)
-    : body;
-  host.append(line);
-  const label = el('span', 'wk-now-label', 'Now');
-  // Too close to the axis start, the label flips right of the line, clear of the corner.
-  const room = NOW_LABEL_WIDTH + 2 * NOW_LABEL_GAP;
-  const flip = x - room < ROW_HEAD_WIDTH + NOW_LABEL_GAP;
-  if (flip) label.classList.add('is-right');
-  label.style.left = `${flip ? x + 1 : x - NOW_LABEL_GAP}px`;
-  axisEl.append(label);
-  // A tick label the Now label would cover hides; its hairline still marks the hour.
-  const from = (flip ? x + 1 + NOW_LABEL_GAP : x - room) - ROW_HEAD_WIDTH;
-  const to = from + NOW_LABEL_WIDTH + NOW_LABEL_GAP;
-  for (const tick of axisEl.querySelectorAll('.wk-tick')) {
-    const left = Number.parseFloat(tick.style.left);
-    if (left < to && from < left + TICK_LABEL_ROOM) tick.classList.add('is-covered');
-  }
-}
-
 /** The timeline: sticky axis and network column, one row per network. */
 export function buildGrid(ctx, api) {
   const { pxh, rows, laneWidth } = ctx.dayModel;
@@ -704,7 +664,6 @@ export function buildGrid(ctx, api) {
   } else {
     for (const row of rows) body.append(buildRow(row, ctx, lanes));
   }
-  buildNowLine(ctx, body, axisEl);
   grid.append(axisEl, body);
   scroller.append(grid);
   wireRoving(grid, lanes);
@@ -727,14 +686,11 @@ const MOUNTED = new WeakMap();
 const ORPHAN_FOCUS = new WeakMap();
 
 /**
- * What the clock changes in a render: every game's cell state, and the Now line's minute while
- * it shows on the grid. The minute timer rebuilds only when this changes (WR-02).
+ * What the clock changes in a render: every game's cell state. The minute timer rebuilds only
+ * when this changes (WR-02).
  */
-function clockKey(ctx, kind) {
-  const { minutes } = ctx.nowParts;
-  const nowLine = kind === 'grid' && nowLineShows(ctx);
-  const states = ctx.model.games.map((g) => cellState(g, ctx.nowWall)).join();
-  return `${nowLine ? minutes : ''}|${states}`;
+function clockKey(ctx) {
+  return ctx.model.games.map((g) => cellState(g, ctx.nowWall)).join();
 }
 
 /**
@@ -823,7 +779,7 @@ function mountNow(host, model, opts, buildBody, kind) {
     const tabs = host.querySelector('.wk-days');
     if (tabs && keepTabs) tabs.scrollLeft = keepTabs;
     shownDay = ctx.day;
-    shownClock = clockKey(ctx, kind);
+    shownClock = clockKey(ctx);
     if (focusId) {
       const target = [...host.querySelectorAll('[data-wk-id]')].find((n) => n.dataset.wkId === focusId);
       target?.focus({ preventScroll: true });
@@ -847,9 +803,9 @@ function mountNow(host, model, opts, buildBody, kind) {
   resizeObserver.observe(host);
   const stopTheme = onThemeChange(() => render());
   // A fixed Date is a test clock, and nothing in a past week moves with the clock; otherwise
-  // the view re-reads the clock every minute and rebuilds only when a cell or the Now line moved.
+  // the view re-reads the clock every minute and rebuilds only when a cell state changed.
   const tick = () => {
-    if (clockKey(makeContext(model, opts, state), kind) !== shownClock) render();
+    if (clockKey(makeContext(model, opts, state)) !== shownClock) render();
   };
   const clockTimer = opts.now instanceof Date || model.past ? null : setInterval(tick, TICK_MS);
 

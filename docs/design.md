@@ -231,15 +231,16 @@ records only where the site settles or applies them.
   a 96px label column (network logos centred in it, user 2026-11-11: the round marks get
   equal room on both sides instead of a gap before the lane; the phone rows' 56px logo slot
   centres too), the time scale runs 80-120 px/hour (80, not the spec's 88,
-  so a 15-hour day fits at 1440), cells are 44px tall on a 48px
-  row pitch, and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18). A day
+  so a 15-hour day fits at 1440), cells are 44px tall on a 45px
+  row pitch (a 1px gap between a network's sub-rows, the same as the rule between networks,
+  user 2026-11-14), and there is no Now line (removed, user 2026-11-14), and a game's block is 3h30 long for CFB and 3h15 for NFL (Phase 18). A day
   narrower than the module (the 120 cap, or floor rounding) stretches its lane to the
   module edge and runs the hour ticks on to the lane's end or midnight, so the rules never
   stop mid-module; a longer day keeps its scroll width (v2.1 polish, 18-UI-REVIEW 9, 11).
 - The NFL This weekend is one page per week (user 2026-11-09): no day tabs; the timeline runs
   one shared time axis with each day's network rows under a day heading (`.wk-dayband`, the
   phone group title's semibold sans, sticky left), in date order, so Thursday sits above
-  Sunday above Monday; the Now line runs through today's rows only. The map shows every game
+  Sunday above Monday. The map shows every game
   of the week, and the phone list titles each kickoff group with its day ("Thu. Nov. 12,
   8:15 pm"). An old `day=` link is dropped. CFB keeps its day tabs.
 - A CFB day tab always shows a count: the day's games with no pick, its matches under a pick
@@ -267,9 +268,7 @@ records only where the site settles or applies them.
   ring with a `--bg` keyline. This is a user-approved deviation from the accent ring in
   the Phase 18 context (D-21), because the ring has to read over every family fill in both
   themes (Phase 18).
-- The Now line (1px, `--accent`, labelled "Now") is the one use of the accent in this
-  view that is not a focus or changed-filter state; lead stars follow the stars rule above
-  (Phase 18).
+- Lead stars follow the stars rule above (Phase 18).
 
 - Weekend map (Phase 24): the This weekend tab has a Timeline | Map switch (default Timeline,
   URL `wview=map`), one segmented control left of the week stepper (32px visually, a 44px

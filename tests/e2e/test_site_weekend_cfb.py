@@ -483,9 +483,8 @@ def test_arrow_keys_rove_across_cells(wk: Callable[..., Page]) -> None:
     assert page.evaluate("document.activeElement.dataset.wkId") == start
 
 
-def test_now_line_and_crew_not_listed_follow_the_clock(wk: Callable[..., Page]) -> None:
+def test_crew_not_listed_follows_the_clock(wk: Callable[..., Page]) -> None:
     page = wk(now=AFTERNOON)
-    assert page.locator(".wk-now").count() == 1
     # Kickoff 12:00 has passed and no crew is listed.
     assert page.locator(FOX_NOON).locator(".wk-line2").inner_text() == "Crew not listed"
     # The 3:30 pm game is still ahead.

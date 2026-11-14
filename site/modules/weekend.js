@@ -74,7 +74,8 @@ const STREAMING_ROW = 'streaming';
 /** CFB's premium networks lead the timeline in this order; every other row follows in network
  *  precedence (user 2026-10-30). */
 const CFB_PREMIUM_ROWS = Object.freeze(['fox', 'abc', 'espn', 'nbc', 'cbs']);
-const SUB_ROW_PITCH = 48;
+/** A cell plus a 1px gap, the same as the rule between network rows (user 2026-11-14). */
+const SUB_ROW_PITCH = 45;
 const CELL_HEIGHT = 44;
 /** The sticky network column (UI-SPEC "Row header column: 96px wide"). */
 const ROW_HEAD_WIDTH = 96;
@@ -260,9 +261,9 @@ function tickLabel(min) {
   return `${hour12} ${h < 12 ? 'am' : 'pm'}`;
 }
 
-/** Row height in px: sub-rows x 48 - 4, minimum 44 (UI-SPEC "Sub-row stacking"). */
+/** Row height in px: sub-rows x 45 - 1, minimum 44 (UI-SPEC "Sub-row stacking", 1px gap). */
 export function rowHeight(subRows) {
-  return Math.max(CELL_HEIGHT, subRows * SUB_ROW_PITCH - 4);
+  return Math.max(CELL_HEIGHT, subRows * SUB_ROW_PITCH - (SUB_ROW_PITCH - CELL_HEIGHT));
 }
 
 // ---- Packing ----
