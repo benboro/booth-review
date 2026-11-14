@@ -19,6 +19,7 @@ from booth_review.resolve.networks import (
     NetworkTable,
     load_networks,
     load_primary_overrides,
+    network_unlisted,
     primary_network,
     split_outlets,
     strip_feed_marker,
@@ -552,3 +553,18 @@ def test_real_crosswalk_radio_never_outranks_a_tv_outlet() -> None:
     table = load_networks(REAL_REFERENCE)
     assert primary_network(["ESPNRM, ESPN"], 2014, table).network_id == "espn"
     assert primary_network(["ESPNM, ESPN2"], 2014, table).network_id == "espn2"
+
+
+# -- network_unlisted: a network a source has not announced yet --------------------------------
+
+
+@pytest.mark.parametrize("text", [None, "", "   ", "TBD", "tba", "T.B.D.", "TBA:", "TBD / TBA"])
+def test_network_unlisted_is_true_for_blank_and_tbd(text: str | None) -> None:
+    assert network_unlisted(text) is True
+
+
+@pytest.mark.parametrize(
+    "text", ["ESPN", "ESPN, TBD", "-", "CANCELLED", "POSTPONED TO 12/1", "PPV", "TBD Sports Net"]
+)
+def test_network_unlisted_is_false_for_names_and_status_text(text: str) -> None:
+    assert network_unlisted(text) is False

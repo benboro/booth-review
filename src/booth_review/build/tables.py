@@ -89,7 +89,7 @@ from booth_review.build.shipped import (
     shipped_expr,
 )
 from booth_review.build.sources import SeasonSources, load_all_sources, load_cfbd_venues
-from booth_review.build.telecasts import build_telecasts
+from booth_review.build.telecasts import build_telecasts, sole_media_networks
 from booth_review.build.venues import (
     empty_venues_frame,
     fill_venue_locations,
@@ -381,7 +381,15 @@ def assemble_tables(
                 media_by_game.setdefault(media.id, []).append(media.outlet)
 
     telecast_build = build_telecasts(
-        sources, games, resolver, index, overrides, networks, primary_overrides, media_by_game
+        sources,
+        games,
+        resolver,
+        index,
+        overrides,
+        networks,
+        primary_overrides,
+        media_by_game,
+        sole_media_networks((media for s in sources for media in s.media), networks),
     )
 
     # 04.19: second-source figures fill existing telecasts (never create one).
@@ -477,6 +485,7 @@ def assemble_tables(
         current_season=current_season,
         scheduled_networks=scheduled_networks,
         override_telecast_ids=frozenset(override_result.statuses),
+        network_unlisted_ids=telecast_build.network_unlisted,
     )
 
     # 04.19 D-13: ESPN Press Room booths fill the ESPN-family telecasts that
@@ -497,6 +506,7 @@ def assemble_tables(
         season_counts=aa.season_counts,
         current_season=current_season,
         scheduled_networks=scheduled_networks,
+        network_unlisted_ids=telecast_build.network_unlisted,
     )
     # The weekend stamp credits ESPN Press Room only for weeks where one of its crews landed
     # on a shown game: a backup-filled telecast or a scheduled row (18-REVIEW IN-01).

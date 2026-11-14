@@ -349,6 +349,7 @@ def _run(
     s506: dict[tuple[int, str], datetime] | None = None,
     season_counts: dict[int, dict[str, int]] | None = None,
     scheduled_networks: dict[int, str | None] | None = None,
+    network_unlisted_ids: frozenset[str] = frozenset(),
 ) -> CrewAaResult:
     return apply_crew_aa(
         pl.DataFrame(tels, schema=TELECASTS_SCHEMA),
@@ -364,6 +365,7 @@ def _run(
         s506_times=s506 if s506 is not None else {(SEASON, "10"): T_OLD},
         current_season=SEASON,
         scheduled_networks=scheduled_networks,
+        network_unlisted_ids=network_unlisted_ids,
     )
 
 
@@ -871,3 +873,113 @@ def test_a_newer_pages_time_wins() -> None:
     for pages in ([older, newer], [newer, older]):
         result = _run([], pages, scheduled_networks={})
         assert result.scheduled_kickoffs == {100: "2026-11-07T19:00:00-05:00"}
+
+
+# -- A side with no network yet defers to the side that names one ------------------------------
+
+_NO_NET = "100-unmapped"
+_UNLISTED = frozenset({_NO_NET})
+
+
+def _tbd_tel(**changes: object) -> dict[str, object]:
+    """Game 100's telecast as built from a 506 listing whose network said "TBD"."""
+    return _tel(telecast_id=_NO_NET, network_id=None, rated=False, plotted=False, **changes)
+
+
+def test_telecast_with_no_network_yet_agrees_with_aas_named_booth() -> None:
+    tels = [_tbd_tel(crew_matched=True, crew_source_label="506 Sports")]
+    tp = [_tp(_NO_NET, "avery-lane", 0), _tp(_NO_NET, "morgan-pike", 1)]
+    result = _run(tels, [_page([_booth(PBP_ANALYST)])], tp, network_unlisted_ids=_UNLISTED)
+    assert result.statuses == {_NO_NET: "agrees"}
+    assert result.counts["network_mismatch"] == 0 and result.counts["no_network"] == 0
+    assert result.unmatched_rows == [] and result.review_rows == []
+    tel = result.telecasts.to_dicts()[0]
+    assert tel["crew_aa"] is False and tel["crew_source_label"] == "506 Sports"
+
+
+def test_crewless_telecast_with_no_network_yet_takes_aas_booth() -> None:
+    result = _run([_tbd_tel()], [_page([_booth(PBP_ANALYST)])], network_unlisted_ids=_UNLISTED)
+    assert result.statuses == {_NO_NET: "filled"}
+    assert result.counts["network_mismatch"] == 0 and result.unmatched_rows == []
+    assert _crew_of(result, _NO_NET) == [("avery-lane", "pbp"), ("morgan-pike", "analyst")]
+
+
+def test_differing_crews_on_a_telecast_with_no_network_yet_are_still_reported() -> None:
+    """The network is no conflict, but two different named crews are."""
+    tels = [_tbd_tel(crew_matched=True)]
+    tp = [_tp(_NO_NET, "blair-tolley", 0), _tp(_NO_NET, "quinn-harrow", 1)]
+    result = _run(tels, [_page([_booth(PBP_ANALYST)])], tp, network_unlisted_ids=_UNLISTED)
+    assert result.counts["network_mismatch"] == 0 and result.unmatched_rows == []
+    assert result.counts["disagreements"] == 1
+    assert [(r["telecast_id"], r["relation"]) for r in result.review_rows] == [(_NO_NET, "differs")]
+
+
+def test_unmapped_network_name_is_not_a_missing_network() -> None:
+    """A telecast whose network is a name the crosswalk lacks is not "TBD": AA's
+    named network still mismatches it, as before."""
+    result = _run([_tbd_tel()], [_page([_booth(PBP_ANALYST)])])
+    assert result.counts["network_mismatch"] == 1 and result.statuses == {}
+    assert [row.reason for row in result.unmatched_rows] == ["network_mismatch"]
+
+
+def test_named_telecast_is_preferred_to_the_one_with_no_network_yet() -> None:
+    tels = [_tel(), _tbd_tel()]
+    result = _run(tels, [_page([_booth(PBP_ANALYST)])], network_unlisted_ids=_UNLISTED)
+    assert result.statuses == {"100-espn": "filled"}
+
+
+def test_booth_on_another_network_goes_to_the_telecast_with_no_network_yet() -> None:
+    tels = [_tel(), _tbd_tel()]
+    booth = _booth(PBP_ANALYST, network="ABC")
+    result = _run(tels, [_page([booth])], network_unlisted_ids=_UNLISTED)
+    assert result.statuses == {_NO_NET: "filled"}
+    assert result.counts["network_mismatch"] == 0 and result.unmatched_rows == []
+
+
+@pytest.mark.parametrize("network", ["TBD", "TBA", ""])
+def test_aa_booth_with_no_network_yet_goes_to_the_games_only_telecast(network: str) -> None:
+    result = _run([_tel()], [_page([_booth(PBP_ANALYST, network=network)])])
+    assert result.statuses == {"100-espn": "filled"}
+    assert result.counts["unmapped_network"] == 0 and result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == []
+
+
+def test_aa_booth_with_no_network_yet_is_not_placed_among_two_telecasts() -> None:
+    tels = [_tel(), _tel(network_id="abc")]
+    result = _run(tels, [_page([_booth(PBP_ANALYST, network="TBD")])])
+    assert result.statuses == {}
+    assert result.counts["no_network"] == 1
+    assert result.counts["unmapped_network"] == 0 and result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == [] and result.review_rows == []
+
+
+def test_booth_that_names_the_network_beats_a_later_one_that_does_not() -> None:
+    named = _page([_booth(PBP_ANALYST, pointer="invented:1")], T_OLD)
+    unnamed = _page([_booth(OTHER_BOOTH, network="TBD", pointer="invented:2")], T_NEW)
+    result = _run([_tel()], [named, unnamed])
+    assert _crew_of(result) == [("avery-lane", "pbp"), ("morgan-pike", "analyst")]
+
+
+def test_aa_booth_with_no_network_yet_fills_a_scheduled_game() -> None:
+    booth = _booth(PBP_ANALYST, network="TBD")
+    result = _run([], [_page([booth])], scheduled_networks={100: "espn"})
+    assert result.counts["scheduled_filled"] == 1 and 100 in result.scheduled_crews
+    assert result.unmatched_rows == []
+
+
+def test_scheduled_game_with_no_network_is_never_a_mismatch() -> None:
+    result = _run([], [_page([_booth(PBP_ANALYST)])], scheduled_networks={100: None})
+    assert result.scheduled_crews == {}
+    assert result.counts["no_network"] == 1 and result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == []
+
+
+def test_two_named_networks_are_still_a_mismatch() -> None:
+    telecast = _run([_tel()], [_page([_booth(PBP_ANALYST, network="ESPN2")])])
+    assert telecast.counts["network_mismatch"] == 1
+    assert [row.reason for row in telecast.unmatched_rows] == ["network_mismatch"]
+    scheduled = _run(
+        [], [_page([_booth(PBP_ANALYST, network="ESPN2")])], scheduled_networks={100: "espn"}
+    )
+    assert scheduled.counts["network_mismatch"] == 1
+    assert [row.reason for row in scheduled.unmatched_rows] == ["network_mismatch"]

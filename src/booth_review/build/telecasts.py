@@ -20,7 +20,7 @@ report the exact same evidence for the exact same input (T-03-29).
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -48,13 +48,14 @@ from booth_review.resolve.networks import (
     FeedType,
     NetworkTable,
     PrimaryResult,
+    network_unlisted,
     primary_network,
     split_outlets,
     strip_feed_marker,
 )
 from booth_review.resolve.overrides import GameOverride, pointer_for_listing, pointer_for_record
 from booth_review.resolve.teams import TeamResolver
-from booth_review.sources.cfbd.parser import CfbdGame
+from booth_review.sources.cfbd.parser import CfbdGame, CfbdMedia
 from booth_review.sources.ratingsref.parser import RRRecord
 from booth_review.sources.sports506.parser import Listing506
 
@@ -118,6 +119,10 @@ LISTING_LINKS_SCHEMA: dict[str, pl.DataType] = {
 
 _UNMAPPED_ID = "unmapped"
 
+# CFBD media types that name a game's network, in the order
+# build.weekend.schedule_networks reads them.
+_NETWORK_MEDIA_TYPES: tuple[str, ...] = ("tv", "web")
+
 _COUNT_KEYS: tuple[str, ...] = (
     "rr_records",
     "rr_parse_errors",
@@ -153,6 +158,42 @@ class TelecastBuild:
     counts: dict[int, dict[str, int]]
     unmatched_rows: list[UnmatchedRow]
     unresolved_rows: list[UnresolvedTeamRow]
+    # Unrated telecasts still without a network because their 506 listing gave
+    # none (blank or "TBD") and CFBD did not name exactly one. The AA and ESPN
+    # Press Room passes read such a telecast as "no network yet", never as a
+    # network that differs from theirs.
+    network_unlisted: frozenset[str] = frozenset()
+
+
+def sole_media_networks(media_rows: Iterable[CfbdMedia], table: NetworkTable) -> dict[int, str]:
+    """CFBD game id -> the one network CFBD's media rows name for the game.
+
+    A game's tv rows are read, or its web rows when it has no tv row (the order
+    build.weekend.schedule_networks uses, so the answer is always the network
+    the This weekend schedule row shows). The game is included only when every
+    outlet in those rows maps to one main-feed network. Rows that name two
+    networks, an alt-cast or Spanish feed, or an outlet the crosswalk does not
+    map leave the game out: nothing is picked among them.
+    """
+    rows: dict[int, dict[str, list[str]]] = {}
+    seasons: dict[int, int] = {}
+    for media in media_rows:
+        if not media.outlet or media.media_type not in _NETWORK_MEDIA_TYPES:
+            continue
+        rows.setdefault(media.id, {}).setdefault(media.media_type, []).append(media.outlet)
+        seasons[media.id] = media.season
+    found: dict[int, str] = {}
+    for game_id, by_type in rows.items():
+        texts = next(by_type[kind] for kind in _NETWORK_MEDIA_TYPES if kind in by_type)
+        picked = primary_network(texts, seasons[game_id], table)
+        if (
+            picked.network_id is not None
+            and len(picked.outlets) == 1
+            and not picked.unmapped
+            and picked.feed_type == "main"
+        ):
+            found[game_id] = picked.network_id
+    return found
 
 
 @dataclass
@@ -347,6 +388,7 @@ class _GameDelta:
     records_with_crew: int = 0
     duplicate_merges: int = 0
     unmapped_outlets: int = 0
+    network_unlisted: list[str] = field(default_factory=list)
 
 
 def _build_game_telecasts(
@@ -358,7 +400,10 @@ def _build_game_telecasts(
     networks_table: NetworkTable,
     primary_overrides: Mapping[int, str],
     media_outlets: Sequence[str],
+    media_network: str | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], dict[str, list[RRRecord]], _GameDelta]:
+    """`media_network` is the one network CFBD names for the game
+    (sole_media_networks), or None when it names none or several."""
     delta = _GameDelta()
 
     main_listings = [(ln, conf) for ln, conf in listings if ln.feed_kind == "main"]
@@ -367,18 +412,31 @@ def _build_game_telecasts(
     listing_primaries: dict[int, PrimaryResult] = {}
     for ln, _conf in listings:
         primary = _listing_primary(ln, season, networks_table)
-        delta.unmapped_outlets += len(primary.unmapped)
+        # "TBD" is no outlet name, so it is not an outlet the crosswalk lacks.
+        if not network_unlisted(ln.network_raw):
+            delta.unmapped_outlets += len(primary.unmapped)
         listing_primaries[id(ln)] = primary
 
+    # A main listing whose network 506 has not announced (blank or "TBD")
+    # defers to the one network CFBD names for the game. A listing that names
+    # a network keeps it, even when CFBD names another.
+    listing_networks: dict[int, str | None] = {}
+    for ln, _conf in main_listings:
+        own_network_id = listing_primaries[id(ln)].network_id
+        if own_network_id is None and network_unlisted(ln.network_raw):
+            own_network_id = media_network
+        listing_networks[id(ln)] = own_network_id
+
     # The (network, feed) key each main listing matches telecasts on: its own
-    # primary, except that a per-game primary override replaces a main-feed
+    # primary (or the CFBD network it deferred to), except that a per-game
+    # primary override replaces a main-feed
     # listing's network exactly as it does an RR record's (WR-05), so an
     # overridden game's listings (including every simulcast listing) still
     # find the rated telecast. listing_links keeps each listing's own network.
     listing_match_keys: dict[int, tuple[str | None, FeedType]] = {}
     for ln, _conf in main_listings:
         primary = listing_primaries[id(ln)]
-        match_network_id = primary.network_id
+        match_network_id = listing_networks[id(ln)]
         if primary.feed_type == "main" and game.id in primary_overrides:
             match_network_id = primary_overrides[game.id]
         listing_match_keys[id(ln)] = (match_network_id, primary.feed_type)
@@ -388,9 +446,7 @@ def _build_game_telecasts(
     # all.
     main_listings_by_order = sorted(main_listings, key=lambda item: item[0].source_row_index)
     fallback_network_id = (
-        listing_primaries[id(main_listings_by_order[0][0])].network_id
-        if main_listings_by_order
-        else None
+        listing_networks[id(main_listings_by_order[0][0])] if main_listings_by_order else None
     )
 
     # -- Group RR records by their effective primary network/feed --------------------------
@@ -481,6 +537,13 @@ def _build_game_telecasts(
         telecast_rows.append(row)
         if draft.records:
             records_by_telecast[telecast_id] = [record for record, _ in draft.records]
+        if (
+            draft.network_id is None
+            and not draft.records
+            and draft.matched_listing is not None
+            and network_unlisted(draft.matched_listing.network_raw)
+        ):
+            delta.network_unlisted.append(telecast_id)
         if draft.rated:
             delta.rated_telecasts += 1
             if row["crew_matched"]:
@@ -513,13 +576,17 @@ def build_telecasts(
     networks: NetworkTable,
     primary_overrides: Mapping[int, str],
     media_by_game: Mapping[int, Sequence[str]],
+    media_networks: Mapping[int, str] | None = None,
 ) -> TelecastBuild:
     """Match, merge, and attach every RR record and 506 listing in `sources`
     into telecasts (JOIN-02/05/06). `games` is the already FBS-scoped,
     season-type-filtered frame from build.games: a matched game missing from
     it is out of scope. `index` covers every division's games so matching
-    itself never presupposes scope.
+    itself never presupposes scope. `media_networks` (sole_media_networks)
+    gives the network of a main 506 listing that lists none, in any season.
     """
+    sole_networks = media_networks or {}
+    network_unlisted_ids: list[str] = []
     fbs_game_ids: set[int] = set(games["game_id"].to_list())
     unresolved_counts: dict[tuple[str, str], dict[str, int]] = {}
     unmatched: list[UnmatchedRow] = []
@@ -630,7 +697,9 @@ def build_telecasts(
                 networks_table=networks,
                 primary_overrides=primary_overrides,
                 media_outlets=list(media_by_game.get(game_id, ())),
+                media_network=sole_networks.get(game_id),
             )
+            network_unlisted_ids.extend(delta.network_unlisted)
             all_telecast_rows.extend(telecast_rows)
             all_listing_link_rows.extend(link_rows)
             records_by_telecast.update(telecast_records)
@@ -680,4 +749,5 @@ def build_telecasts(
         counts=counts,
         unmatched_rows=unmatched,
         unresolved_rows=unresolved_team_rows,
+        network_unlisted=frozenset(network_unlisted_ids),
     )

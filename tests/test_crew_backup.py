@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 import polars as pl
+import pytest
 
 from booth_review.build.crew_backup import (
     CREW_BACKUP_LABEL,
@@ -217,6 +218,7 @@ def _run(
     season_counts: dict[int, dict[str, int]] | None = None,
     current_season: int | None = None,
     scheduled_networks: dict[int, str | None] | None = None,
+    network_unlisted_ids: frozenset[str] = frozenset(),
 ) -> CrewBackupResult:
     return apply_crew_backup(
         pl.DataFrame(tels, schema=TELECASTS_SCHEMA),
@@ -231,6 +233,7 @@ def _run(
         season_counts=season_counts if season_counts is not None else _COUNTS,
         current_season=current_season,
         scheduled_networks=scheduled_networks,
+        network_unlisted_ids=network_unlisted_ids,
     )
 
 
@@ -429,6 +432,9 @@ def test_scheduled_booth_is_skipped_off_its_network_or_out_of_season() -> None:
     assert other.counts["network_mismatch"] == 1
     tba = _run([], booth, current_season=SEASON, scheduled_networks={100: None})
     assert tba.scheduled_crews == {}
+    # No network on the schedule is nothing to compare with: left alone, never a mismatch.
+    assert tba.counts["network_mismatch"] == 0 and tba.counts["no_network"] == 1
+    assert tba.unmatched_rows == []
     past = _run([], booth, current_season=SEASON + 1, scheduled_networks={100: "espn"})
     assert past.scheduled_crews == {}
     assert past.counts["no_telecast"] == 1
@@ -890,3 +896,103 @@ def test_loader_counts_rows_without_a_booth_and_pages_without_any(tmp_path: Any)
         "radio_dropped": 1,
         "pages_without_booths": 1,
     }
+
+
+# -- A side with no network yet defers to the side that names one ------------------------------
+
+_NO_NET = "100-unmapped"
+_UNLISTED = frozenset({_NO_NET})
+
+
+def _tbd_tel(**changes: object) -> dict[str, object]:
+    """Game 100's telecast as built from a 506 listing whose network said "TBD"."""
+    return _tel(100, telecast_id=_NO_NET, network_id=None, rated=False, plotted=False, **changes)
+
+
+def test_telecast_with_no_network_yet_agrees_with_the_named_booth() -> None:
+    tels = [_tbd_tel(crew_matched=True)]
+    tp = [_tp(_NO_NET, "avery-lane", 0), _tp(_NO_NET, "morgan-pike", 1)]
+    result = _run(
+        tels,
+        [_booth(("Avery Lane", "Morgan Pike"))],
+        tp,
+        current_season=SEASON,
+        network_unlisted_ids=_UNLISTED,
+    )
+    assert result.statuses == {_NO_NET: "agrees"}
+    assert result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == [] and result.review_rows == []
+
+
+def test_crewless_telecast_with_no_network_yet_takes_the_espn_booth() -> None:
+    result = _run(
+        [_tbd_tel()],
+        [_booth(("Avery Lane", "Morgan Pike"))],
+        current_season=SEASON,
+        network_unlisted_ids=_UNLISTED,
+    )
+    assert result.statuses == {_NO_NET: "filled"}
+    assert result.counts["network_mismatch"] == 0 and result.unmatched_rows == []
+
+
+def test_differing_crews_on_a_telecast_with_no_network_yet_are_still_reported() -> None:
+    tels = [_tbd_tel(crew_matched=True)]
+    tp = [_tp(_NO_NET, "blair-tolley", 0), _tp(_NO_NET, "casey-lorn", 1)]
+    result = _run(
+        tels,
+        [_booth(("Avery Lane", "Morgan Pike"))],
+        tp,
+        current_season=SEASON,
+        network_unlisted_ids=_UNLISTED,
+    )
+    assert result.statuses == {_NO_NET: "differs"}
+    assert result.counts["network_mismatch"] == 0 and result.unmatched_rows == []
+    assert [row["telecast_id"] for row in result.review_rows] == [_NO_NET]
+
+
+def test_unmapped_network_name_is_not_a_missing_network() -> None:
+    """Without the "no network yet" mark the telecast's null network is a name the
+    crosswalk lacks, and the booth's network still mismatches it."""
+    result = _run([_tbd_tel()], [_booth(("Avery Lane", "Morgan Pike"))], current_season=SEASON)
+    assert result.statuses == {}
+    assert result.counts["network_mismatch"] == 1
+    assert [row.reason for row in result.unmatched_rows] == ["network_mismatch"]
+
+
+def test_non_espn_booth_never_fills_a_telecast_with_no_network_yet() -> None:
+    result = _run(
+        [_tel(101, telecast_id="101-unmapped", network_id=None)],
+        [_booth(("Avery Lane", "Morgan Pike"), away="Riverbend", home="Lakeshore", network="CBS")],
+        current_season=SEASON,
+        network_unlisted_ids=frozenset({"101-unmapped"}),
+    )
+    assert result.statuses == {}
+    assert result.counts["not_espn_family"] == 1 and result.counts["network_mismatch"] == 0
+
+
+@pytest.mark.parametrize("network", ["TBD", "TBA", ""])
+def test_booth_with_no_network_yet_goes_to_the_games_only_telecast(network: str) -> None:
+    result = _run([_tel(100)], [_booth(("Avery Lane", "Morgan Pike"), network=network)])
+    assert result.statuses == {"100-espn": "filled"}
+    assert result.counts["unmapped_network"] == 0 and result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == []
+
+
+def test_booth_with_no_network_yet_is_not_placed_among_two_telecasts() -> None:
+    tels = [_tel(100), _tel(100, "abc")]
+    result = _run(tels, [_booth(("Avery Lane", "Morgan Pike"), network="TBD")])
+    assert result.statuses == {}
+    assert result.counts["no_network"] == 1
+    assert result.counts["unmapped_network"] == 0 and result.counts["network_mismatch"] == 0
+    assert result.unmatched_rows == []
+
+
+def test_booth_with_no_network_yet_fills_a_scheduled_espn_game() -> None:
+    result = _run(
+        [],
+        [_booth(("Avery Lane", "Morgan Pike"), network="TBD")],
+        current_season=SEASON,
+        scheduled_networks={100: "espn"},
+    )
+    assert result.counts["scheduled_filled"] == 1 and 100 in result.scheduled_crews
+    assert result.unmatched_rows == []

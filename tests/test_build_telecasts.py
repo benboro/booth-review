@@ -32,6 +32,7 @@ from booth_review.build.telecasts import (
     TELECASTS_SCHEMA,
     TelecastBuild,
     build_telecasts,
+    sole_media_networks,
 )
 from booth_review.config import DataPaths
 from booth_review.resolve.games import GameIndex
@@ -39,7 +40,7 @@ from booth_review.resolve.names import to_et_date
 from booth_review.resolve.networks import NetworkRow, NetworkTable
 from booth_review.resolve.overrides import GameOverride, load_game_overrides
 from booth_review.resolve.teams import TeamResolver, load_team_crosswalk
-from booth_review.sources.cfbd.parser import CfbdGame
+from booth_review.sources.cfbd.parser import CfbdGame, CfbdMedia
 from booth_review.sources.ratingsref.parser import RRClaim, RRRecord, RRTelecast
 from booth_review.sources.sports506.parser import Listing506
 
@@ -307,7 +308,15 @@ def _run(
     overrides: dict[tuple[str, int, str], GameOverride] | None = None,
     primary_overrides: dict[int, str] | None = None,
     media_by_game: dict[int, list[str]] | None = None,
+    media: list[CfbdMedia] | None = None,
 ) -> TelecastBuild:
+    table = _network_table(network_rows)
+    media_rows = media or []
+    if media_by_game is None:
+        media_by_game = {}
+        for row in media_rows:
+            if row.outlet:
+                media_by_game.setdefault(row.id, []).append(row.outlet)
     sources = [
         SeasonSources(
             season=2099,
@@ -315,7 +324,7 @@ def _run(
             listings=listings,
             rr_records=records,
             rr_parse_errors=0,
-            media=[],
+            media=media_rows,
             lines=[],
             rankings=[],
             wp_pregame=[],
@@ -329,9 +338,10 @@ def _run(
         _resolver(games),
         _index(games),
         overrides or {},
-        _network_table(network_rows),
+        table,
         primary_overrides or {},
-        media_by_game or {},
+        media_by_game,
+        sole_media_networks(media_rows, table),
     )
 
 
@@ -726,3 +736,211 @@ def test_primary_override_simulcast_listings_attach_to_the_rated_telecast() -> N
     assert result.listing_links["telecast_id"].to_list() == ["91-omega", "91-omega"]
     # listing_links still records each listing's own network.
     assert result.listing_links["network_id"].to_list() == ["alpha", "beta"]
+
+
+# -- A 506 listing with no network yet defers to the network CFBD names ---------------------
+
+_SIGMA_ROWS = [
+    _network_row("Net Sigma", "sigma"),
+    _network_row("Sigma Network", "sigma"),
+    _network_row("Net Tau", "tau"),
+    _network_row("Net Bravo", "bravo"),
+    _network_row("Sigma Stream", "sigma-stream"),
+    _network_row("Net Sigma Deportes", "sigma-deportes", feed_type="spanish"),
+]
+_CREW = ("Pat Example", "Jordan Sample")
+
+
+def _media(outlet: str, media_type: str = "tv", game_id: int = 1) -> CfbdMedia:
+    return CfbdMedia(
+        id=game_id,
+        season=2099,
+        week=5,
+        season_type="regular",
+        start_time=None,
+        is_start_time_tbd=False,
+        home_team="Home Team",
+        away_team="Away Team",
+        media_type=media_type,
+        outlet=outlet,
+    )
+
+
+@pytest.mark.parametrize("network_raw", ["TBD", "tba", "T.B.D.", "TBD / TBA", "  ", None])
+def test_listing_without_a_network_takes_the_one_cfbd_names(network_raw: str | None) -> None:
+    listing = _listing(network_raw=network_raw, crew_names=_CREW)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma"]
+    row = result.telecasts.row(0, named=True)
+    assert row["network_id"] == "sigma"
+    assert row["outlets"] == ["sigma"]
+    assert row["rated"] is False
+    assert row["crew_matched"] is True
+    assert row["crew_network_mismatch"] is False
+    assert row["s506_pointer"] is not None
+    assert result.listing_links["telecast_id"].to_list() == ["1-sigma"]
+    # listing_links still records the listing's own (missing) network.
+    assert result.listing_links["network_id"].to_list() == [None]
+    assert result.network_unlisted == frozenset()
+    # "TBD" is not an outlet the crosswalk lacks.
+    assert result.counts[2099]["unmapped_outlets"] == 0
+
+
+@pytest.mark.parametrize(
+    "media",
+    [
+        pytest.param([], id="no-cfbd-outlet"),
+        pytest.param([_media("Net Sigma"), _media("Net Tau")], id="two-tv-networks"),
+        pytest.param([_media("Net Sigma"), _media("Net Nowhere")], id="tv-outlet-unmapped"),
+        pytest.param([_media("Net Nowhere"), _media("Sigma Stream", "web")], id="tv-unmapped-web"),
+        pytest.param(
+            [_media("Sigma Stream", "web"), _media("Net Tau", "web")], id="two-web-networks"
+        ),
+        pytest.param([_media("Net Sigma Deportes")], id="spanish-feed-only"),
+        pytest.param([_media("Net Sigma", "radio")], id="radio-only"),
+    ],
+)
+def test_listing_without_a_network_stays_unmapped_unless_cfbd_names_one(
+    media: list[CfbdMedia],
+) -> None:
+    listing = _listing(network_raw="TBD", crew_names=_CREW)
+
+    result = _run(
+        games=[_game()], records=[], listings=[listing], network_rows=_SIGMA_ROWS, media=media
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-unmapped"]
+    row = result.telecasts.row(0, named=True)
+    assert row["network_id"] is None
+    assert row["crew_matched"] is True
+    # The crew passes read this telecast as "no network yet".
+    assert result.network_unlisted == frozenset({"1-unmapped"})
+
+
+@pytest.mark.parametrize(
+    "media",
+    [
+        pytest.param([_media("Net Sigma"), _media("Sigma Network")], id="two-names-one-network"),
+        pytest.param([_media("Net Sigma"), _media("Sigma Stream", "web")], id="tv-over-web"),
+        pytest.param([_media("Net Sigma"), _media("Net Tau", "radio")], id="radio-ignored"),
+    ],
+)
+def test_cfbd_rows_that_name_one_network_count_as_one(media: list[CfbdMedia]) -> None:
+    listing = _listing(network_raw="TBD", crew_names=_CREW)
+
+    result = _run(
+        games=[_game()], records=[], listings=[listing], network_rows=_SIGMA_ROWS, media=media
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma"]
+
+
+def test_web_row_names_the_network_when_cfbd_has_no_tv_row() -> None:
+    listing = _listing(network_raw="TBD", crew_names=_CREW)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Sigma Stream", "web")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma-stream"]
+
+
+def test_listing_that_names_a_network_keeps_it_when_cfbd_differs() -> None:
+    listing = _listing(network_raw="Net Bravo", crew_names=_CREW)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-bravo"]
+    row = result.telecasts.row(0, named=True)
+    assert row["network_id"] == "bravo"
+    # CFBD's outlet still reaches the hover union, as before.
+    assert row["outlets"] == ["bravo", "sigma"]
+    assert result.network_unlisted == frozenset()
+
+
+@pytest.mark.parametrize("network_raw", ["-", "CANCELLED", "POSTPONED TO 12/1", "Net Nowhere"])
+def test_status_text_and_unmapped_names_never_defer_to_cfbd(network_raw: str) -> None:
+    """Only a missing network defers: 506's "-" and status text say the game has no
+    telecast, and a name the crosswalk lacks is still a name."""
+    listing = _listing(network_raw=network_raw, crew_names=_CREW)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-unmapped"]
+    assert result.network_unlisted == frozenset()
+
+
+def test_listing_without_a_network_joins_the_rated_telecast_cfbd_names() -> None:
+    record = _rr_record(networks=["Net Sigma"])
+    listing = _listing(network_raw="TBD", crew_names=_CREW)
+
+    result = _run(
+        games=[_game()],
+        records=[record],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma"]
+    row = result.telecasts.row(0, named=True)
+    assert row["rated"] is True
+    assert row["crew_matched"] is True
+    # A direct match on the named network, not the leftover-listing fallback.
+    assert row["crew_network_mismatch"] is False
+
+
+def test_primary_override_still_wins_over_the_cfbd_network() -> None:
+    listing = _listing(network_raw="TBD", crew_names=_CREW)
+
+    result = _run(
+        games=[_game(id=77)],
+        records=[],
+        listings=[listing],
+        network_rows=_SIGMA_ROWS,
+        primary_overrides={77: "tau"},
+        media=[_media("Net Sigma", game_id=77)],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["77-tau"]
+
+
+def test_sole_media_networks_reads_tv_then_web_and_never_picks_among_several() -> None:
+    table = _network_table(_SIGMA_ROWS)
+    media = [
+        _media("Net Sigma", game_id=1),
+        _media("Sigma Stream", "web", game_id=1),
+        _media("Net Sigma", game_id=2),
+        _media("Net Tau", game_id=2),
+        _media("Sigma Stream", "web", game_id=3),
+        _media("Net Sigma", "radio", game_id=4),
+        _media("Net Sigma (alt-cast)", game_id=5),
+        _media("Net Sigma", game_id=6),
+        _media("Sigma Network", game_id=6),
+    ]
+
+    assert sole_media_networks(media, table) == {1: "sigma", 3: "sigma-stream", 6: "sigma"}

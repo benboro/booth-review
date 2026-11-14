@@ -46,7 +46,7 @@ NOW = datetime(2026, 11, 10, 1, 0, tzinfo=UTC)
 CREW = [{"feed": "main", "person": 0, "role": "pbp"}]
 
 _CFB_NAMES = ["date", "kickoff", "season", "week", "away_team", "home_team", "network", "crew"]
-PEACOCK, ESPN, ESPN_PLUS, CW, MWN = range(5)
+PEACOCK, ESPN, ESPN_PLUS, CW, MWN, NO_NETWORK = range(6)
 
 
 def _cfb_block(rows: list[dict[str, Any]]) -> dict[str, list[Any]]:
@@ -64,6 +64,7 @@ def _cfb_site(rows: list[dict[str, Any]], *, season: int = 2026) -> dict[str, An
                 {"family": "disney", "id": "espn-plus", "name": "ESPN+"},
                 {"family": "cw", "id": "cw", "name": "The CW"},
                 {"family": "conference", "id": "mountain-west-network", "name": "MWN"},
+                {"family": "other", "id": "unmapped", "name": "unmapped"},
             ],
         },
         "telecasts": _cfb_block([]),
@@ -158,6 +159,35 @@ def test_cfb_played_game_without_crew_is_flagged() -> None:
 def test_cfb_game_with_main_crew_is_not_flagged() -> None:
     site = _cfb_site([_cfb_row("2026-11-07T19:30:00-05:00", crew=CREW)])
     assert find_cfb_missing(site, NOW) == []
+
+
+def _scheduled_and_telecast(telecast_network: int | None) -> dict[str, Any]:
+    """One upcoming game: its schedule row (ESPN, no crew) and the telecast 506 listed
+    with a crew on `telecast_network`."""
+    kickoff = "2026-11-10T19:00:00-05:00"
+    site = _cfb_site([_cfb_row(kickoff, network=telecast_network, crew=CREW, week="11")])
+    site["telecasts_scheduled"] = _cfb_block([_cfb_row(kickoff, network=ESPN, week="11")])
+    return site
+
+
+@pytest.mark.parametrize("network", [NO_NETWORK, None], ids=["unmapped-entry", "no-entry"])
+def test_cfb_crew_listed_with_the_network_still_tbd_covers_the_game(network: int | None) -> None:
+    """506 gave the crew while the network said "TBD", so the crew sits on a row with no
+    network and the schedule row on ESPN has none: the crew is known, nothing to alert."""
+    assert find_cfb_missing(_scheduled_and_telecast(network), NOW) == []
+
+
+def test_cfb_crew_on_another_named_network_does_not_cover_the_game() -> None:
+    """Two different named networks are a real conflict: the ESPN row is still flagged."""
+    [game] = find_cfb_missing(_scheduled_and_telecast(PEACOCK), NOW)
+    assert (game.stage, game.network) == ("upcoming", "ESPN")
+
+
+def test_cfb_crewless_row_with_no_network_covers_nothing() -> None:
+    kickoff = "2026-11-10T19:00:00-05:00"
+    site = _cfb_site([_cfb_row(kickoff, network=NO_NETWORK, week="11")])
+    site["telecasts_scheduled"] = _cfb_block([_cfb_row(kickoff, network=ESPN, week="11")])
+    assert len(find_cfb_missing(site, NOW)) == 1
 
 
 def test_cfb_alt_feed_crew_alone_still_counts_as_missing() -> None:

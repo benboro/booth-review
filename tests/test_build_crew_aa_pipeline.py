@@ -14,7 +14,7 @@ from typing import Any
 
 import polars as pl
 import pytest
-from test_build_crew_backup_pipeline import _reference, _save_release
+from test_build_crew_backup_pipeline import _reference, _release, _save_release
 from test_cli_build import _seed_build_raw
 
 import booth_review.build.crew_aa as crew_aa_module
@@ -341,3 +341,121 @@ def test_building_twice_gives_identical_tables(
     assert first[0].equals(second[0])
     assert first[1].equals(second[1])
     assert first[0].filter(pl.col("crew_aa")).height == 1
+
+
+# -- A 506 listing whose network says "TBD" (the Sunday-move case, invented names) ------------
+
+_TBD_GAME = 500022  # Brightwater at Southmoor, 2025-11-15: no RR record, no 506 listing.
+_TBD_CREW = "Rex Quill, Sol Marsh"
+
+
+def _list_game_with_tbd_network(paths: DataPaths, *, cfbd_outlets: tuple[str, ...]) -> None:
+    """506 lists the game with a crew and network "TBD"; CFBD's media names `cfbd_outlets`;
+    Awful Announcing and ESPN Press Room both list the same crew on ECN."""
+    week = paths.raw / "sports506" / "2025" / "wk-01.html"
+    html = week.read_text(encoding="utf-8")
+    listing = (
+        "<h3>SATURDAY, NOVEMBER 15</h3><p></p>\n"
+        '<div id="cgame"><div id="cmatchup">Brightwater @ Southmoor</div>'
+        '<div id="ctime">12:00 PM</div><div id="cntwk">TBD</div>'
+        f'<div id="canncrs">{_TBD_CREW}</div></div>\n<p></p><p></p>\n'
+    )
+    marker = "<h3>SATURDAY, DECEMBER 6</h3>"
+    assert html.count(marker) == 1
+    week.write_text(html.replace(marker, listing + marker), encoding="utf-8")
+
+    media_path = paths.raw / "cfbd" / "media" / "2025.json"
+    media = json.loads(media_path.read_text(encoding="utf-8"))
+    media += [
+        {
+            "id": _TBD_GAME,
+            "season": 2025,
+            "week": 12,
+            "seasonType": "regular",
+            "startTime": "2025-11-15T17:00:00.000Z",
+            "isStartTimeTBD": False,
+            "homeTeam": "Southmoor",
+            "awayTeam": "Brightwater",
+            "mediaType": "tv",
+            "outlet": outlet,
+        }
+        for outlet in cfbd_outlets
+    ]
+    media_path.write_text(json.dumps(media), encoding="utf-8")
+
+    aa_line = (
+        "<h3><u>Saturday, November 15</u></h3>\n"
+        "<p><strong>Brightwater at Southmoor (12:00 p.m., ECN): </strong>"
+        "Rex Quill (play-by-play), Sol Marsh (analyst)</p>\n"
+    )
+    _save_aa(paths, _page().replace("</div></article>", aa_line + "</div></article>"))
+    _save_release(paths)
+    release_row = (
+        "<tr><td><strong>Sat, Nov 15</strong></td><td>Noon</td>"
+        f"<td><strong>Brightwater at Southmoor<br></strong>{_TBD_CREW}</td><td>ECN</td></tr>"
+    )
+    (release,) = (paths.raw / "espnpr" / "2025" / "releases").glob("*.html")
+    release.write_text(_release(release_row), encoding="utf-8")
+
+
+def _game_telecasts(paths: DataPaths, game_id: int) -> list[dict[str, Any]]:
+    frame = pl.read_parquet(paths.vault / "processed" / "telecasts.parquet")
+    return frame.filter(pl.col("game_id") == game_id).to_dicts()
+
+
+def _mismatch_rows(paths: DataPaths) -> list[dict[str, str]]:
+    _, unmatched = _csv(paths, "review_unmatched")
+    return [row for row in unmatched if row["reason"] == "network_mismatch"]
+
+
+def test_listing_with_tbd_network_takes_cfbds_and_raises_no_disagreement(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = _setup(git_vault, tmp_path, monkeypatch)
+    _list_game_with_tbd_network(git_vault, cfbd_outlets=("ECN",))
+    outcome = _build(git_vault, reference)
+
+    # One telecast, on the network CFBD names, carrying 506's crew.
+    (telecast,) = _game_telecasts(git_vault, _TBD_GAME)
+    assert telecast["telecast_id"] == f"{_TBD_GAME}-ecn"
+    assert telecast["network_id"] == "ecn"
+    assert telecast["rated"] is False
+    assert telecast["crew_matched"] is True
+    assert telecast["crew_network_mismatch"] is False
+    assert telecast["crew_aa"] is False and telecast["crew_backup"] is False
+    crew = _main_people(git_vault, telecast["telecast_id"])
+    assert crew["role"].to_list() == ["pbp", "analyst"]
+    assert crew["s506_pointer"].null_count() == 0
+
+    # AA lists the same people: an agreement (the page's second, with game 500001), and
+    # no source is reported against another.
+    assert outcome.counts["crew_aa_agreements"] == 2
+    assert outcome.counts["crew_aa_network_mismatch"] == 0
+    assert outcome.counts["crew_backup_network_mismatch"] == 0
+    assert _mismatch_rows(git_vault) == []
+    _, aa_rows = _csv(git_vault, "review_crew_aa_disagreements")
+    assert str(_TBD_GAME) not in {row["cfbd_game_id"] for row in aa_rows}
+    _, backup_rows = _csv(git_vault, "review_crew_backup_disagreements")
+    assert str(_TBD_GAME) not in {row["cfbd_game_id"] for row in backup_rows}
+
+
+def test_listing_with_tbd_network_stays_unmapped_when_cfbd_names_two_and_is_not_reported(
+    git_vault: DataPaths, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference = _setup(git_vault, tmp_path, monkeypatch)
+    _list_game_with_tbd_network(git_vault, cfbd_outlets=("ECN", "ECN2"))
+    outcome = _build(git_vault, reference)
+
+    # Nothing is picked among CFBD's two networks: the telecast keeps no network.
+    (telecast,) = _game_telecasts(git_vault, _TBD_GAME)
+    assert telecast["telecast_id"] == f"{_TBD_GAME}-unmapped"
+    assert telecast["network_id"] is None
+    assert telecast["crew_matched"] is True
+
+    # AA and ESPN Press Room name ECN; "TBD" against it is not a mismatch.
+    assert outcome.counts["crew_aa_agreements"] == 2
+    assert outcome.counts["crew_aa_network_mismatch"] == 0
+    assert outcome.counts["crew_backup_network_mismatch"] == 0
+    assert _mismatch_rows(git_vault) == []
+    _, aa_rows = _csv(git_vault, "review_crew_aa_disagreements")
+    assert str(_TBD_GAME) not in {row["cfbd_game_id"] for row in aa_rows}

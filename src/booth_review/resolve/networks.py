@@ -95,6 +95,23 @@ def _is_placeholder(text: str) -> bool:
     return bool(_PLACEHOLDER_RE.match(text))
 
 
+# A network a source has not announced yet ("TBD", "TBA", any case or punctuation).
+_UNLISTED_NAMES: frozenset[str] = frozenset({"tbd", "tba"})
+
+
+def network_unlisted(text: str | None) -> bool:
+    """True when a source's network text names no network yet: None, blank, or
+    nothing but "TBD"/"TBA" parts. Such a source defers to one that names the
+    network; the two never disagree. 506's "-" and its status text
+    ("CANCELLED", "POSTPONED") say the game has no telecast, and a name the
+    crosswalk does not map is still a name, so neither counts.
+    """
+    if text is None:
+        return True
+    parts = [part for part in _SEPARATOR_RE.split(text) if part.strip()]
+    return all(re.sub(r"[^a-z]", "", part.lower()) in _UNLISTED_NAMES for part in parts)
+
+
 # The same generic feed markers sports506.parser._classify_feed checks
 # (restated here rather than imported, since this module reads outlet text
 # from three sources, not just 506's network cell); a marker is read from a

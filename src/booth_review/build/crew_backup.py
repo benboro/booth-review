@@ -18,7 +18,10 @@ The 04.5 backup-crew rules, with the collector swapped for hand-save import
   names another set of people, a vault review row is written and counted;
   the build never fails over it.
 - The booth's network must be the telecast's: a booth whose network resolves
-  to another of the game's networks is skipped and counted, never moved.
+  to another of the game's networks is skipped and counted, never moved. A side
+  with no network yet ("TBD") defers to the side that names one and is never a
+  mismatch: a telecast whose 506 listing gave no network takes the game's booth,
+  and a booth with no network goes to the game's only main telecast.
 - Backup rows reach telecast_people with the 506 row shape (source
   `crew_backup`, feed main, crew_position, no 506 pointer). The page prints
   names without roles: the first is play-by-play, the rest take their
@@ -50,7 +53,7 @@ the only thing printed, and every error message is count-only.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, Final
@@ -69,7 +72,12 @@ from booth_review.people.registry import PeopleRegistry
 from booth_review.people.roles import Role
 from booth_review.resolve.diagnose import UnmatchedRow, UnresolvedTeamRow
 from booth_review.resolve.games import GameIndex
-from booth_review.resolve.networks import NetworkTable, primary_network, split_outlets
+from booth_review.resolve.networks import (
+    NetworkTable,
+    network_unlisted,
+    primary_network,
+    split_outlets,
+)
 from booth_review.resolve.overrides import GameOverride
 from booth_review.resolve.teams import TeamResolver
 from booth_review.sources.cfbd.parser import CfbdGame
@@ -132,6 +140,8 @@ _COUNT_KEYS: tuple[str, ...] = (
     "excluded_override",
     "unmapped_network",
     "network_mismatch",
+    # A booth or telecast with no network yet that matched nothing; never a mismatch.
+    "no_network",
     "no_telecast",
     "not_plotted",
     "not_espn_family",
@@ -368,6 +378,7 @@ def apply_crew_backup(
     season_counts: Mapping[int, Mapping[str, int]],
     current_season: int | None = None,
     scheduled_networks: Mapping[int, str | None] | None = None,
+    network_unlisted_ids: Collection[str] = frozenset(),
 ) -> CrewBackupResult:
     """Fill ESPN-family telecasts 506 and the overrides left crew-less with a
     saved ESPN Press Room booth (see module docstring). Run after
@@ -376,6 +387,8 @@ def apply_crew_backup(
     `current_season` lets unplotted telecasts of that season be filled, and
     `scheduled_networks` (CFBD game id -> the schedule's network) names the
     games with no telecast that may take a booth (18-13 F7).
+    `network_unlisted_ids` are the telecasts whose 506 listing gave no network
+    yet (TelecastBuild.network_unlisted).
     Inputs are not mutated; failures are count-only.
     """
     counts: dict[str, int] = dict.fromkeys(_COUNT_KEYS, 0)
@@ -433,7 +446,9 @@ def apply_crew_backup(
             continue
         counts["matched"] += 1
         chart = primary_network(split_outlets(booth.network_raw), booth.season, networks)
-        if chart.network_id is None:
+        # The page lists no network for the game yet: the booth defers to ours.
+        booth_unlisted = chart.network_id is None and network_unlisted(booth.network_raw)
+        if chart.network_id is None and not booth_unlisted:
             counts["unmapped_network"] += 1
             unmatched_rows.append(_unmatched(booth, "", "unmapped_network"))
             continue
@@ -446,24 +461,44 @@ def apply_crew_backup(
             ):
                 counts["no_telecast"] += 1
                 continue
-            if scheduled_networks[game.id] != chart.network_id:
+            scheduled = scheduled_networks[game.id]
+            if scheduled is None and not booth_unlisted:
+                # The schedule has no network to compare: nothing is placed or reported.
+                counts["no_network"] += 1
+                continue
+            if not booth_unlisted and scheduled != chart.network_id:
                 counts["network_mismatch"] += 1
                 unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
                 continue
-            if _family(chart.network_id, networks) != ESPN_FAMILY:
+            if _family(scheduled, networks) != ESPN_FAMILY:
                 counts["not_espn_family"] += 1
                 continue
             scheduled_targets.setdefault(game.id, []).append(saved)
             continue
-        target = next((tid for tid, nid in game_mains if nid == chart.network_id), None)
+        if booth_unlisted:
+            # No network from the page: the booth can only be the game's one main telecast's.
+            target = game_mains[0][0] if len(game_mains) == 1 else None
+        else:
+            target = next((tid for tid, nid in game_mains if nid == chart.network_id), None)
+            if target is None:
+                # A telecast whose 506 listing gave no network yet takes the booth's.
+                target = next(
+                    (tid for tid, nid in game_mains if nid is None and tid in network_unlisted_ids),
+                    None,
+                )
         if target is None:
-            counts["network_mismatch"] += 1
-            unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
+            if booth_unlisted:
+                counts["no_network"] += 1
+            else:
+                counts["network_mismatch"] += 1
+                unmatched_rows.append(_unmatched(booth, "", "network_mismatch"))
             continue
         if not info[target]["plotted"] and info[target]["season"] != current_season:
             counts["not_plotted"] += 1
             continue
-        if _family(info[target]["network_id"], networks) != ESPN_FAMILY:
+        # A telecast with no network yet is judged by the booth's network.
+        target_network = info[target]["network_id"] or chart.network_id
+        if _family(target_network, networks) != ESPN_FAMILY:
             counts["not_espn_family"] += 1
             continue
         targets.setdefault(target, []).append(saved)

@@ -14,6 +14,11 @@ coalesces them with 506's crews:
 - A 506 crew with the same people is kept and counted as an agreement. So is
   one that lists every AA person plus others (AA's parse drops reporters 506
   may list): a subset is no evidence against 506.
+- A side with no network yet defers to the side that names one, and is never a
+  network mismatch: a telecast whose 506 listing said "TBD" takes the booth AA
+  lists for the game, and a booth AA lists with no network ("TBD") goes to the
+  game's only main telecast. Only two different named networks are a mismatch;
+  a scheduled game whose network is unknown is left alone and not reported.
 - D-04: when AA's booth is a strict superset of 506's people, AA's whole booth
   wins whatever the page times say, and a review row is written.
 - D-02: otherwise the newer page wins, AA's `article:modified_time` (else the
@@ -52,6 +57,7 @@ from booth_review.resolve.games import GameIndex
 from booth_review.resolve.names import to_et_date
 from booth_review.resolve.networks import (
     NetworkTable,
+    network_unlisted,
     primary_network,
     split_outlets,
     strip_feed_marker,
@@ -105,6 +111,8 @@ _COUNT_KEYS: tuple[str, ...] = (
     "excluded_override",
     "unmapped_network",
     "network_mismatch",
+    # A booth or telecast with no network yet that matched nothing; never a mismatch.
+    "no_network",
     "no_telecast",
     "page_conflicts",
     "bad_url",
@@ -272,7 +280,8 @@ def load_506_times(paths: DataPaths) -> dict[tuple[int, str], datetime]:
 @dataclass(frozen=True)
 class _Cand:
     """One booth with the page it came from. `rank` is how it matched its
-    telecast: 0 on AA's primary network, higher for the outlet fallbacks."""
+    telecast: 0 on AA's primary network, higher for the outlet fallbacks, and
+    _DEFERRED_RANK when one side had no network yet."""
 
     booth: AaBooth
     page: AaPage
@@ -329,18 +338,25 @@ def _main_outlets(network_raw: str, season: int, networks: NetworkTable) -> froz
     return frozenset(ids)
 
 
+# The rank of a match made because one side listed no network yet.
+_DEFERRED_RANK: Final = 3
+
+
 def _pick_target(
     game_mains: Sequence[tuple[str, str | None]],
     network_id: str,
     aa_outlets: Collection[str],
     side_feeds: Collection[str],
     info: Mapping[str, Mapping[str, Any]],
+    unlisted: Collection[str] = frozenset(),
 ) -> tuple[str, int] | None:
     """(telecast id, rank) for the main telecast an AA booth belongs to: rank 0
     on AA's primary network; else rank 1, the one whose network is among AA's
     main outlets (AA "Peacock/NBCSN" picks NBCSN while we chart Peacock); else
     rank 2, the one that lists AA's network among its own outlets (a simulcast
-    AA names by its other channel). The fallbacks never use a network the game
+    AA names by its other channel); else rank 3, the one whose 506 listing gave
+    no network yet (`unlisted`), which defers to AA's. The outlet fallbacks never
+    use a network the game
     has an alt-cast or Spanish telecast on (`side_feeds`), since a telecast's
     outlets drop feed markers. A step that finds more than one telecast is
     ambiguous and matches nothing; an exact primary match is taken even when a
@@ -355,6 +371,7 @@ def _pick_target(
             for tid, _ in game_mains
             if simulcast_ok and network_id in (info[tid].get("outlets") or ())
         ],
+        [tid for tid, nid in game_mains if nid is None and tid in unlisted],
     )
     for rank, hits in enumerate(steps):
         if hits:
@@ -414,11 +431,13 @@ def apply_crew_aa(
     current_season: int | None = None,
     scheduled_networks: Mapping[int, str | None] | None = None,
     override_telecast_ids: Collection[str] = frozenset(),
+    network_unlisted_ids: Collection[str] = frozenset(),
 ) -> CrewAaResult:
     """Coalesce 506 and Awful Announcing main crews (see module docstring).
     Run after apply_crew_overrides, passing every telecast id it gave a status
-    (including `redundant`) as `override_telecast_ids`. Inputs are not mutated;
-    failures are count-only.
+    (including `redundant`) as `override_telecast_ids`, and the telecasts whose
+    506 listing gave no network yet (TelecastBuild.network_unlisted) as
+    `network_unlisted_ids`. Inputs are not mutated; failures are count-only.
     """
     counts: dict[str, int] = dict.fromkeys(_COUNT_KEYS, 0)
     new_counts = {season: dict(values) for season, values in season_counts.items()}
@@ -491,7 +510,9 @@ def apply_crew_aa(
                 continue
             counts["matched"] += 1
             chart = primary_network(split_outlets(booth.network_raw), booth.season, networks)
-            if chart.network_id is None:
+            # AA lists no network for the game yet: the booth defers to ours.
+            aa_unlisted = chart.network_id is None and network_unlisted(booth.network_raw)
+            if chart.network_id is None and not aa_unlisted:
                 counts["unmapped_network"] += 1
                 unmatched_rows.append(_unmatched(booth, "", "unmapped_network"))
                 continue
@@ -511,7 +532,13 @@ def apply_crew_aa(
                     counts["no_telecast"] += 1
                     continue
                 scheduled = scheduled_networks[game.id]
-                if scheduled == chart.network_id:
+                if aa_unlisted:
+                    rank = _DEFERRED_RANK
+                elif scheduled is None:
+                    # The schedule has no network to compare: nothing is placed or reported.
+                    counts["no_network"] += 1
+                    continue
+                elif scheduled == chart.network_id:
                     rank = 0
                 elif scheduled in aa_outlets:
                     rank = 1
@@ -521,8 +548,22 @@ def apply_crew_aa(
                     continue
                 scheduled_targets.setdefault(game.id, []).append(_Cand(booth, page, rank))
                 continue
+            if chart.network_id is None:
+                # No network from AA: the booth can only be the game's one main telecast's.
+                if len(game_mains) == 1:
+                    targets.setdefault(game_mains[0][0], []).append(
+                        _Cand(booth, page, _DEFERRED_RANK)
+                    )
+                else:
+                    counts["no_network"] += 1
+                continue
             picked = _pick_target(
-                game_mains, chart.network_id, aa_outlets, side_feeds.get(game.id, set()), info
+                game_mains,
+                chart.network_id,
+                aa_outlets,
+                side_feeds.get(game.id, set()),
+                info,
+                network_unlisted_ids,
             )
             if picked is None:
                 counts["network_mismatch"] += 1
