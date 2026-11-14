@@ -6429,6 +6429,13 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   margin-block: -2px;
 }
 
+/* The Mountain West network mark is drawn 24px high (its brand guide's minimum size); the
+   negative margin keeps it from growing the row. */
+.net-logo--tall {
+  height: 24px;
+  margin-block: -4px;
+}
+
 .net-name {
   font: var(--font-body);
 }
@@ -7989,6 +7996,13 @@ tr.is-matched > :first-child {
   max-width: 64px;
   object-fit: contain;
   vertical-align: middle;
+}
+
+/* The Mountain West brand guide sets a 24px minimum for the MW Rock, so it is drawn 24px high
+   on every surface; the negative margin keeps its margin box at the nominal height. */
+.cf-logo[data-cf="Mountain West"] {
+  height: 24px;
+  margin-block: calc((var(--cf-h) - 24px) / 2);
 }
 
 .cf-sep {

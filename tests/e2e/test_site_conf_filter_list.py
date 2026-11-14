@@ -101,8 +101,10 @@ def test_logo_rows_hold_one_area_sized_logo_and_independents_slot_is_empty(conf_
         assert row["alt"] == ""
         assert row["ariaHidden"] == "true"
         assert row["title"] == name
-        # Sized by area: 16px nominal times the logo's scale, in a 16px margin box.
-        assert row["imgH"] == pytest.approx(16 * row["scale"], abs=0.5)
+        # Sized by area: 16px nominal times the logo's scale, in a 16px margin box. The Mountain
+        # West Rock is the exception: its brand guide sets a 24px minimum, drawn in the same box.
+        expected_h = 24 if name == "Mountain West" else 16 * row["scale"]
+        assert row["imgH"] == pytest.approx(expected_h, abs=0.5)
         assert row["marginBox"] == pytest.approx(16, abs=0.01)
     assert rows["Big Ten"]["scale"] < 1 < rows["Pac-12"]["scale"]
 

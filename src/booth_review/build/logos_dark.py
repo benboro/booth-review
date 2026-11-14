@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import math
 import re
+from pathlib import Path
 
 from booth_review.errors import SiteBuildError
 
@@ -37,6 +38,14 @@ WHITE = "#FFFFFF"
 
 # Files whose light neutral letters sit on a dark backplate that rule 1 flips.
 FLIP_PAIR_FILES: frozenset[str] = frozenset({"abc.svg", "espnu.svg"})
+
+# Files shown in their own colours on dark: the Mountain West brand guide forbids changing the
+# logo's colours, so the dark folder holds the same bytes.
+NO_RECOLOR_FILES: frozenset[str] = frozenset({"mountain-west-conference.svg"})
+
+# A logo with the brand's own dark-background file keeps it in `dark-src/` beside the light
+# file; the build writes that file, byte for byte, to the dark folder (never published itself).
+DARK_SOURCE_DIR = "dark-src"
 
 NEUTRAL_CHROMA = 0.04
 DARK_NEUTRAL_L = 0.28
@@ -184,6 +193,18 @@ def _build_mapping(paints: set[str], *, flip_pair: bool) -> dict[str, str]:
     ):
         mapping[WHITE] = DARK_GROUND
     return mapping
+
+
+def dark_file_bytes(path: Path) -> bytes:
+    """The bytes the build writes to the dark folder for one source logo file: the recoloured
+    variant, or the file itself when it is in NO_RECOLOR_FILES."""
+    brand_dark = path.parent / DARK_SOURCE_DIR / path.name
+    if brand_dark.is_file():
+        return brand_dark.read_bytes()
+    data = path.read_bytes()
+    if path.name in NO_RECOLOR_FILES:
+        return data
+    return dark_variant(data, flip_pair=path.name in FLIP_PAIR_FILES)
 
 
 def dark_variant(source: bytes, *, flip_pair: bool = False) -> bytes:

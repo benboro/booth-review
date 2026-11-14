@@ -150,7 +150,9 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
   }
   if (entry) {
     const img = document.createElement('img');
+    // The Mountain West guide sets a 24px minimum, so a 24px-high entry gets the tall variant.
     img.className = entry.box === 'badge' ? 'net-logo net-logo--badge' : 'net-logo';
+    if (entry.height > 20) img.classList.add('net-logo--tall');
     img.dataset.logo = String(id);
     img.src = currentTheme() === 'dark' ? entry.darkFile : entry.file;
     watchTheme();

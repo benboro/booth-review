@@ -39,6 +39,8 @@ const LOGOS = new Map([
   ['peacock', { file: 'logos/peacock.svg', width: 56, height: 14, box: 'wordmark', darkFile: 'logos/dark/peacock.svg' }],
   ['prime', { file: 'logos/prime.svg', width: 45, height: 14, box: 'wordmark', darkFile: 'logos/dark/prime.svg' }],
   ['apple', { file: 'logos/apple.svg', width: 37, height: 14, box: 'wordmark', darkFile: 'logos/dark/apple.svg' }],
+  ['paramount-plus', { file: 'logos/paramount-plus.svg', width: 61, height: 14, box: 'wordmark', darkFile: 'logos/dark/paramount-plus.svg' }],
+  ['mountain-west-network', { file: 'logos/mountain-west-network.png', width: 31, height: 24, box: 'badge', darkFile: 'logos/dark/mountain-west-network.png' }],
   ['nbcsn', { file: 'logos/nbcsn.svg', width: 68, height: 14, box: 'wordmark', darkFile: 'logos/dark/nbcsn.svg' }],
 ]);
 
