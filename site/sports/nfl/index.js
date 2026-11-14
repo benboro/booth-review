@@ -605,6 +605,7 @@ export async function mount({ footerEl, search = '' } = {}) {
 export function unmount() {
   mounted = false;
   if (panel) panel.close();
+  teamBars.closeInfo();
   closeNflFilters();
   detachMedia();
   restoreFooter();

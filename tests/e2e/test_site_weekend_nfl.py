@@ -341,7 +341,7 @@ def test_finished_season_shows_the_past_week_stamp(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl, nfl_fixture_raw: dict[str, Any]
 ) -> None:
     # 18-13 F17: after the season (no weekend stamp, no upcoming games) the tab shows the latest
-    # played week, so its stamp is the past-week line, never "not posted yet ... Crew TBA".
+    # played week, so its saved-at line is the past-week one, never "not posted yet ... Crew TBA".
     raw = copy.deepcopy(nfl_fixture_raw)
     raw["freshness"]["weekend"] = None
     raw["upcoming"] = {key: [] for key in raw["upcoming"]}
@@ -349,7 +349,8 @@ def test_finished_season_shows_the_past_week_stamp(
     page.route("**/nfl-data.json*", lambda route: route.fulfill(json=raw))
     _open(page, open_nfl_app)
     assert page.locator(".wk-week").inner_text() == "Week 4"
-    assert page.locator(".wk-stamp").inner_text() == "Crews: 506 Sports, as saved."
+    assert page.locator(".wk-fresh").inner_text() == "Crews: 506 Sports, as saved."
+    assert page.locator(".wk-stamp").count() == 0
     assert page.locator(".wk-cell .wk-booth", has_text="Crew TBA").count() == 0
 
 

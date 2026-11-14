@@ -21,7 +21,6 @@ import {
 } from '../state.js';
 import { computePicks } from '../picks.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
-import { initBandInfo } from '../../../modules/band-info.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
 import { categoryColor } from '../palette.js';
 import { ACCENT, INK, MUTED, PAGE_BG, DIVIDER, SPECIAL, mixHex } from '../../../modules/palette.js';
@@ -338,20 +337,47 @@ function buildInfo(ctx) {
   button.setAttribute('aria-expanded', 'false');
   button.append(el('span', 'band-info-glyph', 'i'));
   button.firstChild.setAttribute('aria-hidden', 'true');
-  const note = el('div', 'band-note');
-  note.hidden = true;
-  for (const line of SEGMENT_NOTES) note.appendChild(el('p', null, line));
+  button.setAttribute('aria-haspopup', 'dialog');
+  // The legend row has no plot geometry to hang the button on as CFB does, so it sits in the row's flow.
+  button.classList.add('nfl-legend-info');
+  // Nine definitions are too much for a note beside the chart: they open in a modal, built like the
+  // game panel (same frame, close button, backdrop, Escape), so the page under it never moves.
+  const dialog = el('dialog', 'detail-panel info-modal');
+  dialog.setAttribute('aria-labelledby', 'nfl-special-info-title');
+  const inner = el('div', 'panel-inner');
+  const close = el('button', 'panel-close', '×');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Close');
+  const title = el('h2', null, 'Special game categories');
+  title.id = 'nfl-special-info-title';
+  const body = el('div', 'panel-body');
+  for (const line of SEGMENT_NOTES) body.appendChild(el('p', null, line));
   const foot = el('p');
   foot.append(document.createTextNode('Each game counts once. See '));
   const a = el('a', null, 'methodology');
   a.href = ctx.methodologyHref('nfl-special-games');
   a.rel = 'noopener noreferrer';
   foot.append(a, document.createTextNode(' for the full rules.'));
-  note.appendChild(foot);
-  // CFB positions .band-info absolutely inside the chart; style.css puts both in the legend row's flow.
-  button.classList.add('nfl-legend-info');
-  note.classList.add('nfl-legend-info-note');
-  return { button, note };
+  body.appendChild(foot);
+  inner.append(close, title, body);
+  dialog.appendChild(inner);
+
+  let downOnBackdrop = false;
+  button.addEventListener('click', () => {
+    if (dialog.open) return;
+    dialog.showModal();
+    button.setAttribute('aria-expanded', 'true');
+  });
+  close.addEventListener('click', () => dialog.close());
+  dialog.addEventListener('pointerdown', (ev) => {
+    downOnBackdrop = ev.target === dialog;
+  });
+  dialog.addEventListener('click', (ev) => {
+    if (ev.target === dialog && downOnBackdrop) dialog.close();
+    downOnBackdrop = false;
+  });
+  dialog.addEventListener('close', () => button.setAttribute('aria-expanded', 'false'));
+  return { button, dialog };
 }
 
 function setNote(title, hint) {
@@ -810,8 +836,8 @@ export function mount(container, ctx) {
   refs.legend = el('ul', 'legend-chips');
   refs.legend.setAttribute('aria-label', 'Special game categories: select to show or hide');
   const info = buildInfo(ctx);
-  legendRow.append(refs.legend, info.button, info.note);
-  initBandInfo(info);
+  refs.infoDialog = info.dialog;
+  legendRow.append(refs.legend, info.button, info.dialog);
   bindLegend();
   refs.chart = el('div', 'nfl-chart');
   refs.gd = el('div');
@@ -955,4 +981,9 @@ export function testModel() {
     pending: { ...drawn.pending },
     hover: drawn.rows.map((r) => hoverTextLines(hoverModel(s, r.label, r.bar, drawn.theme, drawn.pending))),
   };
+}
+
+/** Closes the info modal (the shell calls this when it leaves the NFL page). */
+export function closeInfo() {
+  if (refs.infoDialog?.open) refs.infoDialog.close();
 }

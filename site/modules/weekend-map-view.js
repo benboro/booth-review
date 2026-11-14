@@ -40,6 +40,7 @@ import {
   applyPick,
   buildCell,
   buildCompactTable,
+  buildFreshLine,
   buildSourceLine,
   buildStampLine,
   buildTbaStrip,
@@ -472,6 +473,7 @@ function buildMapBody(z) {
       buildTbaStrip(ctx, api),
       buildCompactTable(ctx),
       buildNotOnMap(ctx, api, model.notOnMap),
+      buildFreshLine(ctx),
       buildSourceLine(ctx),
     ];
     // The node is attached once the shell has swapped its children in; draw after that.

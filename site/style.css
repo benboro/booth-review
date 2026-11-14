@@ -3279,7 +3279,8 @@ html {
 
 html:has(#detail-panel[open]),
 html:has(#nfl-detail-panel[open]),
-html:has(#mlb-detail-panel[open]) {
+html:has(#mlb-detail-panel[open]),
+html:has(dialog.info-modal[open]) {
   overflow: hidden;
 }
 
@@ -3359,13 +3360,15 @@ dialog.detail-panel {
 @media (prefers-reduced-motion: no-preference) {
   #detail-panel[open],
   #nfl-detail-panel[open],
-  #mlb-detail-panel[open] {
+  #mlb-detail-panel[open],
+  dialog.info-modal[open] {
     animation: modal-in 120ms ease-out;
   }
 
   #detail-panel[open]::backdrop,
   #nfl-detail-panel[open]::backdrop,
-  #mlb-detail-panel[open]::backdrop {
+  #mlb-detail-panel[open]::backdrop,
+  dialog.info-modal[open]::backdrop {
     animation: scrim-in 120ms ease-out;
   }
 }
@@ -4686,16 +4689,60 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   font: var(--font-body);
 }
 
-/* NFL-only: the legend info button and its note sit in the legend row's flex
-   flow, not absolutely over a chart as in CFB (the legend row has no plot geometry). */
+/* NFL-only: the legend info button sits in the legend row's flex flow, not absolutely
+   over a chart as in CFB (the legend row has no plot geometry). It opens an info modal. */
 .nfl-legend-info {
   position: static;
 }
 
-.nfl-legend-info-note {
-  position: static;
-  flex-basis: 100%;
-  max-width: 420px;
+/* An info modal (the NFL Special games category definitions) is the game panel's frame with
+   its own content: one scroller, the sticky close button on the modal fill, the same backdrop. */
+dialog.info-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+dialog.info-modal .panel-inner {
+  padding: var(--space-lg);
+  flex: 1 1 auto;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+dialog.info-modal::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+
+[data-theme="dark"] dialog.info-modal::backdrop {
+  background: rgb(0 0 0 / 0.65);
+}
+
+dialog.info-modal .panel-close {
+  border: none;
+  background: var(--modal-bg);
+  color: inherit;
+  cursor: pointer;
+  font: var(--font-heading);
+  float: right;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+dialog.info-modal h2 {
+  margin: 0 0 var(--space-md) 0;
+  font: var(--font-heading);
+}
+
+dialog.info-modal .panel-body p {
+  margin: 0 0 var(--space-sm) 0;
+  font: var(--font-body);
+  line-height: 1.5;
+}
+
+dialog.info-modal .panel-body p:last-child {
+  margin-bottom: 0;
 }
 
 /* NFL-only: Viewership anchors its note under the button instead of over a chart. */
@@ -7334,8 +7381,19 @@ tr.is-matched > :first-child {
   color: var(--ink);
 }
 
+.wk-fresh {
+  margin: var(--space-md) 0 0;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
 .wk-source {
   margin-top: var(--space-md);
+}
+
+/* The saved-at line and the credits read as one block. */
+.wk-fresh + .wk-source {
+  margin-top: var(--space-xs);
 }
 
 .wk-source a {

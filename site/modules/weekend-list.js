@@ -9,7 +9,7 @@
  */
 
 import {
-  accessibleName, applyPick, buildSourceLine, buildStampLine, clock12, el,
+  accessibleName, applyPick, buildFreshLine, buildSourceLine, buildStampLine, clock12, el,
   mountWeekend, rivalryMark,
 } from './weekend-view.js';
 import { makeCaretIcon } from './icons.js';
@@ -149,7 +149,7 @@ function compactGroup(ctx) {
 function buildListBody(ctx, api) {
   const nodes = [buildStampLine(ctx), ...kickoffGroups(ctx)];
   for (const g of [tbaGroup(ctx, api), compactGroup(ctx)]) if (g) nodes.push(g);
-  nodes.push(buildSourceLine(ctx));
+  nodes.push(buildFreshLine(ctx), buildSourceLine(ctx));
   return nodes;
 }
 

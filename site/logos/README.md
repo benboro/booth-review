@@ -18,6 +18,18 @@ covered by this repository's MIT license.
   to the drawn letters (24 24 292 72, from 0 0 340 120) with matching `width`/`height`, so it
   draws at the same 57 x 14 px as the Commons file it replaced.
 - Paramount+ (`paramount-plus.svg`) was saved by hand from Wikimedia Commons (`File:Paramount+_logo.svg`) and approved by the user on 2026-11-13. Its only edit is the removal of the unused SVG 1.1 `DOCTYPE` line.
+- NFL Network (`nfl-network.svg`) was saved by hand by the user from English Wikipedia
+  (`File:NFL_Network_logo.svg`) and approved on 2026-11-14, with no edits. Unlike the other files,
+  that page marks it as a non-free logo used under Wikipedia's fair-use rationale, not as public
+  domain, so Wikipedia's rationale does not cover this site. Netflix (`netflix.svg`, from
+  `File:Netflix_2015_logo.svg`) was saved by hand from Wikimedia Commons (PD-textlogo) and approved
+  the same day, with no edits.
+- YouTube (`youtube.svg`, source file `YouTube_2024.svg`) and YouTube TV (`youtube-tv.svg`, source
+  file `YouTube_TV_logo_2024.svg`) were saved by hand by the user and approved on 2026-11-14; both are
+  Wikimedia Commons files tagged PD-textlogo and Trademarked. YouTube is unedited.
+  YouTube TV has two edits: an added `viewBox` equal to its width and height, and its one named
+  colour `red` written as `#ff0000` (the same colour) so the dark-variant build can read it. No
+  game uses the `youtube-tv` id yet.
 - Logos are rendered only through `<img>`, so no script inside a file can run.
 - Dark-theme variants are generated at build time by
   `src/booth_review/build/logos_dark.py` into `logos/dark/<name>.svg` (same viewBox,

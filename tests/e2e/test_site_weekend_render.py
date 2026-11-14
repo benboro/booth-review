@@ -632,6 +632,8 @@ def test_crew_not_listed_after_kickoff(wk_page: Page) -> None:
 
 
 def test_stamp_line_variants(wk_page: Page) -> None:
+    # The saved-at line sits at the bottom, just above the source line (user 2026-11-14); the
+    # line above the grid shows only when the week's crews are not posted, or no game matches.
     games = [_known(key="a")]
     fresh = {
         "crews_506_saved_at": "2026-10-30T01:14:00Z",
@@ -639,31 +641,48 @@ def test_stamp_line_variants(wk_page: Page) -> None:
         "espnpr_week": 9,
         "schedule_updated_at": "2026-10-30T22:00:00Z",
     }
+    stamp = wk_page.locator("#wk-host .wk-stamp")
+    line = wk_page.locator("#wk-host .wk-fresh")
     _mount(wk_page, games, model={"freshness": fresh})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
+    assert stamp.count() == 0
+    assert line.inner_text() == (
         "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET; ESPN Press Room week 9 saved "
         "Mon. Oct. 26; schedule updated Fri. Oct. 30, 6:00 pm ET"
     )
-    assert wk_page.locator("#wk-host .wk-stamp").get_attribute("aria-live") == "off"
+    assert (
+        wk_page.evaluate(
+            "() => document.querySelector('#wk-host .wk-fresh').nextElementSibling.className"
+        )
+        == "wk-source"
+    )
     only_506 = {"crews_506_saved_at": fresh["crews_506_saved_at"]}
     _mount(wk_page, games, model={"freshness": only_506})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
-        "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET"
-    )
+    assert stamp.count() == 0
+    assert line.inner_text() == "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET"
     sched = {"schedule_updated_at": fresh["schedule_updated_at"]}
     _mount(wk_page, games, model={"freshness": sched})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
-        "Crews for this week are not posted yet. Games show Crew TBA until they are. "
-        "Schedule updated Fri. Oct. 30, 6:00 pm ET"
+    assert stamp.inner_text() == (
+        "Crews for this week are not posted yet. Games show Crew TBA until they are."
     )
+    assert stamp.get_attribute("aria-live") == "off"
+    assert line.inner_text() == "Schedule updated Fri. Oct. 30, 6:00 pm ET"
     _mount(wk_page, games, model={"freshness": fresh, "past": True})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == (
-        "Crews: 506 Sports and ESPN Press Room, as saved."
-    )
+    assert stamp.count() == 0
+    assert line.inner_text() == "Crews: 506 Sports and ESPN Press Room, as saved."
     _mount(wk_page, games, model={"freshness": fresh, "past": True, "sport": "nfl"})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text() == "Crews: 506 Sports, as saved."
+    assert line.inner_text() == "Crews: 506 Sports, as saved."
     _mount(wk_page, games, model={"freshness": None})
-    assert wk_page.locator("#wk-host .wk-stamp").inner_text().startswith("Crews for this week")
+    assert stamp.inner_text().startswith("Crews for this week")
+    assert line.count() == 0
+
+
+def test_phone_list_keeps_the_saved_at_line_at_the_bottom(phone_page: Page) -> None:
+    fresh = {"crews_506_saved_at": "2026-10-30T01:14:00Z"}
+    _mount_phone(phone_page, [_known(key="a")], model={"freshness": fresh})
+    assert phone_page.locator("#wk-host .wk-stamp").count() == 0
+    line = phone_page.locator("#wk-host .wk-fresh")
+    assert line.inner_text() == "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET"
+    assert line.evaluate("e => e.nextElementSibling.className") == "wk-source"
 
 
 def test_zero_matches_replaces_stamp(wk_page: Page) -> None:
@@ -866,21 +885,22 @@ def test_phone_nfl_cbs_window_rank_one_first(phone_page: Page) -> None:
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_phone_network_name_without_logo_shows_whole(phone_page: Page, theme: str) -> None:
     # UI review fix 2: a network with no logo wraps its name in the 56px mark column instead of
-    # clipping it ("NFL Networl").
+    # clipping it ("NFL Networl"). NFL Network has had a logo since 2026-11-14, so the case uses a
+    # made-up id that has none.
     games = [
         _known(
             key="n",
             sport="nfl",
-            networkId="nfl-network",
-            networkName="NFL Network",
-            family="nfl-network",
+            networkId="sunday-ticket",
+            networkName="Sunday Ticket",
+            family="sunday-ticket",
             kickoffMin=570,
         ),
         _known(key="f", kickoffMin=570, home="F"),
     ]
     _mount_phone(phone_page, games, theme=theme, model={"sport": "nfl"})
     name = phone_page.locator('#wk-host .wk-item[data-wk-id="g:n"] .wk-item-mark .net-name')
-    assert name.inner_text() == "NFL Network"
+    assert name.inner_text() == "Sunday Ticket"
     fit = name.evaluate(
         "e => ({sw: e.scrollWidth, cw: e.clientWidth, sh: e.scrollHeight, ch: e.clientHeight,"
         " right: e.getBoundingClientRect().right,"
