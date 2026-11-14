@@ -164,7 +164,7 @@ def test_xmlns_alone_is_not_a_problem() -> None:
 
 def test_vendored_logos_lint_clean() -> None:
     files = _logo_svg_files()
-    assert len(files) == 25
+    assert len(files) == 29
     for path in files:
         assert lint_svg(path.read_bytes()) == [], path.name
 

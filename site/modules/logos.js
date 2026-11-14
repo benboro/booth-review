@@ -14,6 +14,9 @@ const ESPN_PLUS = { file: 'logos/espn-plus.svg', width: 70, height: 14, box: 'wo
 /**
  * @type {Map<string, {file: string, width: number, height: number, box: 'wordmark'|'badge', darkFile: string}>}
  */
+// One mark for both ids: college football says nfl-network, the NFL and MLB files say nfln.
+const NFL_NETWORK = { file: 'logos/nfl-network.svg', width: 51, height: 20, box: 'badge', darkFile: 'logos/dark/nfl-network.svg' };
+
 const LOGOS = new Map([
   ['abc', { file: 'logos/abc.svg', width: 20, height: 20, box: 'badge', darkFile: 'logos/dark/abc.svg' }],
   ['cbs', { file: 'logos/cbs.svg', width: 49, height: 14, box: 'wordmark', darkFile: 'logos/dark/cbs.svg' }],
@@ -37,10 +40,15 @@ const LOGOS = new Map([
   ['tnt', { file: 'logos/tnt.svg', width: 20, height: 20, box: 'badge', darkFile: 'logos/dark/tnt.svg' }],
   ['big-ten-network', { file: 'logos/big-ten-network.svg', width: 33, height: 20, box: 'badge', darkFile: 'logos/dark/big-ten-network.svg' }],
   ['peacock', { file: 'logos/peacock.svg', width: 56, height: 14, box: 'wordmark', darkFile: 'logos/dark/peacock.svg' }],
-  ['prime', { file: 'logos/prime.svg', width: 45, height: 14, box: 'wordmark', darkFile: 'logos/dark/prime.svg' }],
+  ['prime', { file: 'logos/prime.svg', width: 34, height: 20, box: 'badge', darkFile: 'logos/dark/prime.svg' }],
+  ['netflix', { file: 'logos/netflix.svg', width: 52, height: 14, box: 'wordmark', darkFile: 'logos/dark/netflix.svg' }],
   ['apple', { file: 'logos/apple.svg', width: 37, height: 14, box: 'wordmark', darkFile: 'logos/dark/apple.svg' }],
   ['paramount-plus', { file: 'logos/paramount-plus.svg', width: 61, height: 14, box: 'wordmark', darkFile: 'logos/dark/paramount-plus.svg' }],
   ['mountain-west-network', { file: 'logos/mountain-west-network.png', width: 31, height: 24, box: 'badge', darkFile: 'logos/dark/mountain-west-network.png' }],
+  ['youtube', { file: 'logos/youtube.svg', width: 65, height: 14, box: 'wordmark', darkFile: 'logos/dark/youtube.svg' }],
+  ['youtube-tv', { file: 'logos/youtube-tv.svg', width: 79, height: 14, box: 'wordmark', darkFile: 'logos/dark/youtube-tv.svg' }],
+  ['nfl-network', NFL_NETWORK],
+  ['nfln', NFL_NETWORK],
   ['nbcsn', { file: 'logos/nbcsn.svg', width: 68, height: 14, box: 'wordmark', darkFile: 'logos/dark/nbcsn.svg' }],
 ]);
 

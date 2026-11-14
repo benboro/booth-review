@@ -318,20 +318,48 @@ def test_legend_chip_hides_segment(app: Page) -> None:
     )
 
 
-def test_info_note_lists_definitions_and_closes_on_escape(app: Page) -> None:
+def test_info_modal_lists_definitions_and_leaves_the_page_alone(app: Page) -> None:
     _vm(app)
     button = app.locator("#nfl-view-special .legend-row button.band-info")
-    note = app.locator("#nfl-view-special .legend-row .band-note")
+    dialog = app.locator("#nfl-view-special dialog.info-modal")
     assert button.get_attribute("aria-label") == "About these categories"
-    assert note.is_hidden()
+    assert dialog.is_hidden()
+    # Opening it must not move the page (user 2026-11-14): it is a centred modal, not a row.
+    box = (
+        "() => [document.querySelector('#nfl-view-special .nfl-chart').getBoundingClientRect().top,"
+        " document.documentElement.scrollHeight]"
+    )
+    before = app.evaluate(box)
     button.click()
-    assert note.is_visible()
-    lines = note.locator("p").all_inner_texts()
+    assert dialog.is_visible()
+    assert app.evaluate(box) == before
+    # The page behind it is locked like it is under the game panel: a wheel over the backdrop
+    # must not scroll the document.
+    app.mouse.move(20, 250)
+    app.mouse.wheel(0, 600)
+    app.wait_for_timeout(150)
+    assert app.evaluate("() => window.scrollY") == 0
+    assert button.get_attribute("aria-expanded") == "true"
+    assert dialog.locator("h2").inner_text() == "Special game categories"
+    rect = dialog.bounding_box()
+    # Centred like the game panel: within the page's reserved scrollbar gutter (up to 15px wide).
+    view = app.evaluate("() => [window.innerWidth, window.innerHeight]")
+    assert rect
+    assert abs((rect["x"] + rect["width"] / 2) - view[0] / 2) <= 8
+    assert abs((rect["y"] + rect["height"] / 2) - view[1] / 2) <= 1
+    lines = dialog.locator(".panel-body p").all_inner_texts()
     assert lines[:9] == NOTE_LINES
     assert lines[9] == "Each game counts once. See methodology for the full rules."
-    assert note.locator("a").get_attribute("href") == "methodology.html#nfl-special-games"
+    assert dialog.locator("a").get_attribute("href") == "methodology.html#nfl-special-games"
     app.keyboard.press("Escape")
-    assert note.is_hidden()
+    assert dialog.is_hidden()
+    assert button.get_attribute("aria-expanded") == "false"
+    button.click()
+    app.mouse.click(5, 5)  # the backdrop
+    assert dialog.is_hidden()
+    button.click()
+    dialog.locator(".panel-close").click()
+    assert dialog.is_hidden()
 
 
 def test_no_standalone_label_anywhere(app: Page) -> None:

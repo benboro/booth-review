@@ -346,7 +346,11 @@ export function buildControls(ctx, api) {
 
 const EMPTY = () => document.createDocumentFragment();
 
-/** The freshness line above the grid, or the zero-match line under an active pick (D-16). */
+/**
+ * The line above the grid, shown only when the reader needs it: the zero-match line under an
+ * active pick (D-16), or the note that this week's crews are not posted yet. Otherwise nothing:
+ * when the crews and schedule were saved is in buildFreshLine, at the bottom (user 2026-11-14).
+ */
 export function buildStampLine(ctx) {
   const { model } = ctx;
   const p = el('p', 'wk-stamp');
@@ -357,6 +361,18 @@ export function buildStampLine(ctx) {
       + `Try another ${ctx.allDays ? 'week' : 'day'} or clear a filter.`;
     return p;
   }
+  const f = model.freshness ?? {};
+  if (!model.past && !f.crews_506_saved_at && !f.crews_espnpr_saved_at) {
+    p.textContent = 'Crews for this week are not posted yet. Games show Crew TBA until they are.';
+    return p;
+  }
+  return EMPTY();
+}
+
+/** When the crews and the schedule were saved: a quiet line just above the source line. */
+export function buildFreshLine(ctx) {
+  const { model } = ctx;
+  const p = el('p', 'wk-fresh');
   if (model.past) {
     // ESPN Press Room is a college-football crew backup only; the NFL has no such source.
     p.textContent = model.sport === 'nfl'
@@ -365,18 +381,19 @@ export function buildStampLine(ctx) {
     return p;
   }
   const f = model.freshness ?? {};
-  const schedule = f.schedule_updated_at ? `schedule updated ${etStamp(f.schedule_updated_at)}` : null;
   const segments = [];
   if (f.crews_506_saved_at) segments.push(`506 Sports saved ${etStamp(f.crews_506_saved_at)}`);
   if (f.crews_espnpr_saved_at) {
     const week = f.espnpr_week != null ? ` week ${f.espnpr_week}` : '';
     segments.push(`ESPN Press Room${week} saved ${etStamp(f.crews_espnpr_saved_at, { withTime: false })}`);
   }
+  const updated = f.schedule_updated_at ? `updated ${etStamp(f.schedule_updated_at)}` : null;
   if (segments.length) {
-    p.textContent = `Crews: ${[...segments, ...(schedule ? [schedule] : [])].join('; ')}`;
+    p.textContent = `Crews: ${[...segments, ...(updated ? [`schedule ${updated}`] : [])].join('; ')}`;
+  } else if (updated) {
+    p.textContent = `Schedule ${updated}`;
   } else {
-    p.textContent = 'Crews for this week are not posted yet. Games show Crew TBA until they are.'
-      + `${schedule ? ` ${schedule[0].toUpperCase()}${schedule.slice(1)}` : ''}`;
+    return EMPTY();
   }
   return p;
 }
@@ -675,7 +692,7 @@ function buildDesktopBody(ctx, api) {
   const nodes = [buildStampLine(ctx)];
   const m = ctx.dayModel;
   if (m.axis && m.rows.length) nodes.push(buildGrid(ctx, api));
-  nodes.push(buildTbaStrip(ctx, api), buildCompactTable(ctx), buildSourceLine(ctx));
+  nodes.push(buildTbaStrip(ctx, api), buildCompactTable(ctx), buildFreshLine(ctx), buildSourceLine(ctx));
   return nodes;
 }
 

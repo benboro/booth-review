@@ -47,10 +47,17 @@ records only where the site settles or applies them.
 - Light mode is the default. Dark mode is reached by the theme toggle at the top right
   of the header, optically centred on the header links (Phase 17).
 - The CFB, NFL and MLB pages share one visual system.
+- The NFL Special games legend's info button opens a centred modal (`dialog.info-modal`, the
+  game panel's frame, close button, backdrop and Escape), not a note in the page flow: nine
+  definitions are too many for a note beside the chart, and opening it must not move the page
+  (user 2026-11-14).
 - This weekend is the sixth CFB tab and the fifth NFL tab (NFL behind its site flag): a
-  control row (week stepper, day tabs), a one-line freshness stamp, the timeline grid, a
-  collapsible Time TBA strip, the CFB ESPN+ and regional table, and a source line that
-  credits only the sources the sport uses. Below 480px the grid becomes a list grouped by
+  control row (week stepper, day tabs), the timeline grid, a collapsible Time TBA strip, the
+  CFB ESPN+ and regional table, a saved-at line (when the crews and the schedule were saved)
+  and a source line that credits only the sources the sport uses. Nothing sits between the
+  controls and the grid unless the reader needs it: the "crews not posted yet" note or the
+  "no games match your picks" line (user 2026-11-14: the saved-at stamp above the grid was
+  clutter, on both sports). Below 480px the grid becomes a list grouped by
   kickoff (Phase 18).
 - Ground (Phase 26, owner's pick 2026-10-27, option c, green-gray): light page `#F5F7F6`,
   surface `#EBEFED`, rules `#DAE0DD` and `#C0C9C5`, land `#E8EDEA`, ink `#1E2321`, muted

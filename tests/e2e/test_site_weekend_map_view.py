@@ -49,7 +49,8 @@ _MOUNT = """async (arg) => {
   const weeks = [8, 9, 10].map((n) => ({ label: 'Week ' + n, number: n }));
   window.__wm.model = {
     sport: 'cfb', weekLabel: 'Week 9', weekNumber: 9, weeks, isLatestWeek: false,
-    games: arg.games, day: arg.day, past: false, missing: false, freshness: null, links: {},
+    games: arg.games, day: arg.day, past: false, missing: false,
+    freshness: arg.freshness ?? null, links: {},
   };
   window.__wm.inst = V.renderWeekendMap(host, window.__wm.model, window.__wm.opts);
   return true;
@@ -119,6 +120,15 @@ def _mount(page: Page, **kw: Any) -> None:
     arg.update(kw)
     page.evaluate(_MOUNT, arg)
     assert page.evaluate(_READY)
+
+
+def test_saved_at_line_sits_above_the_source_line(map_page: Page) -> None:
+    _mount(map_page, freshness={"crews_506_saved_at": "2026-10-30T01:14:00Z"})
+    root = "#wk-host .wk-root"
+    assert map_page.locator(f"{root} .wk-stamp").count() == 0
+    line = map_page.locator(f"{root} .wk-fresh")
+    assert line.inner_text() == "Crews: 506 Sports saved Thu. Oct. 29, 9:14 pm ET"
+    assert line.evaluate("e => e.nextElementSibling.className") == "wk-source"
 
 
 def test_mounts_shell_in_ui_spec_order(map_page: Page) -> None:
