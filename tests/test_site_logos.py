@@ -76,8 +76,22 @@ def _manifest_rows() -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
-def _logo_files() -> list[Path]:
+def _logo_svg_files() -> list[Path]:
     return sorted(LOGO_DIR.glob("*.svg"))
+
+
+def _logo_files() -> list[Path]:
+    """Every network logo: the SVGs plus the Mountain West PNG (never recoloured)."""
+    return sorted([*LOGO_DIR.glob("*.svg"), *LOGO_DIR.glob("*.png")])
+
+
+def _dims(path: Path) -> tuple[float, float]:
+    """Aspect source: an SVG's viewBox, or a PNG's IHDR width and height."""
+    if path.suffix == ".png":
+        data = path.read_bytes()
+        assert data[:8] == b"\x89PNG\r\n\x1a\n", path.name
+        return float(int.from_bytes(data[16:20], "big")), float(int.from_bytes(data[20:24], "big"))
+    return _view_box(path)
 
 
 def _view_box(path: Path) -> tuple[float, float]:
@@ -149,10 +163,18 @@ def test_xmlns_alone_is_not_a_problem() -> None:
 
 
 def test_vendored_logos_lint_clean() -> None:
-    files = _logo_files()
+    files = _logo_svg_files()
     assert len(files) == 25
     for path in files:
         assert lint_svg(path.read_bytes()) == [], path.name
+
+
+def test_network_png_is_small_rgba_and_alone() -> None:
+    pngs = sorted(LOGO_DIR.glob("*.png"))
+    assert [p.name for p in pngs] == ["mountain-west-network.png"]
+    data = pngs[0].read_bytes()
+    assert len(data) < MAX_BYTES
+    assert data[25] == 6  # RGBA
 
 
 def test_manifest_matches_files() -> None:
@@ -167,6 +189,11 @@ def test_manifest_matches_files() -> None:
         assert row["sha256"] == hashlib.sha256(files[row["file"]].read_bytes()).hexdigest(), row[
             "file"
         ]
+        if row["file"].endswith(".png"):
+            # The brand's own dark-background file sits in dark-src/ and ships unchanged.
+            dark = LOGO_DIR / "dark-src" / row["file"]
+            assert row["dark_sha256"] == hashlib.sha256(dark.read_bytes()).hexdigest()
+            assert _dims(dark) == _dims(files[row["file"]]), row["file"]
 
 
 def test_logos_js_matches_files_and_sizes() -> None:
@@ -182,8 +209,9 @@ def test_logos_js_matches_files_and_sizes() -> None:
             assert file == row["file"]
             assert dark_file == file
             assert box == row["render_box"]
-            assert height == (14 if box == "wordmark" else 20)
-            vb_w, vb_h = _view_box(LOGO_DIR / file)
+            # The Mountain West network PNG is drawn 24px high (its brand guide's minimum).
+            assert height == (14 if box == "wordmark" else 24 if file.endswith(".png") else 20)
+            vb_w, vb_h = _dims(LOGO_DIR / file)
             assert abs(width - round(height * vb_w / vb_h)) <= 1, net_id
 
 

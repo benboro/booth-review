@@ -26,6 +26,16 @@ covered by this repository's MIT license.
   and the trademark notice is unchanged.
 - The manifest and this notice are not copied into the built site.
 
+- The Mountain West Network (MW+) mark is two PNGs from the conference's own dark-background
+  MW+ logo (the Rock with its white outline plus a "+"), saved by hand by the user and downscaled
+  from 1236x960 to 309x240 with no other change. `dark-src/mountain-west-network.png` is that file
+  with its white plus; the build copies it byte for byte to `logos/dark/` and it is never published
+  itself. `mountain-west-network.png` is the light-theme file: the same pixels with the plus
+  recoloured to the Rock's own purple (#6A4EA0, at the user's request) so it shows on a light
+  ground. Neither file is recoloured by the dark pipeline, which the brand guide forbids. Both are
+  drawn 24px high (the guide's minimum size). The guide asks for conference authorization for
+  third-party use; the user chose to use it without asking.
+
 # Conference logos
 
 The conference marks are trademarks owned by their conferences. They are shown only to
@@ -45,6 +55,11 @@ are not covered by this repository's MIT license.
   shield was removed and the box tightened to the shield.
 - Dark-theme variants are built into `logos/dark/conf/<name>.svg` the same way as the
   network variants, and `dark_sha256` records each one's hash.
+- The Mountain West conference mark is shown in its own colours on dark: its 2026-27 brand
+  guide forbids changing the logo's colours, so the build copies the same bytes into
+  `logos/dark/conf/` instead of recolouring it. The guide also sets a 24px minimum, so the style
+  sheet draws it 24px high on every surface. The guide asks that third-party use be authorized
+  by the conference office; the user chose to use it without asking.
 - A game shows the logo its conference used in that game's season: SEC changes logo in
   2024, Conference USA in 2023 and the Pac-12 in 2026. Every other conference uses one
   logo for all games. `site/modules/conf-logos.js` holds the season ranges.

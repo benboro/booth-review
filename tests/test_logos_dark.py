@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from test_site_conf_logos import conf_files, conf_rows
-from test_site_logos import _logo_files, _manifest_rows, lint_svg
+from test_site_logos import _logo_files, _logo_svg_files, _manifest_rows, lint_svg
 
 from booth_review.build import logos_dark
 from booth_review.build.logos_dark import (
@@ -119,7 +119,7 @@ def test_white_on_lifted_backplate_stays_white() -> None:
     assert 'fill="#fff"' in out.lower() or 'fill="#ffffff"' in out.lower()
 
 
-@pytest.mark.parametrize("path", _logo_files(), ids=lambda p: p.name)
+@pytest.mark.parametrize("path", _logo_svg_files(), ids=lambda p: p.name)
 def test_every_source_variant(path) -> None:  # type: ignore[no-untyped-def]
     source = path.read_bytes()
     flip = path.name in FLIP_PAIR_FILES
@@ -141,18 +141,18 @@ def test_manifest_dark_sha256() -> None:
     assert rows
     for row in rows:
         path = next(p for p in _logo_files() if p.name == row["file"])
-        expected = hashlib.sha256(
-            dark_variant(path.read_bytes(), flip_pair=path.name in FLIP_PAIR_FILES)
-        ).hexdigest()
+        expected = hashlib.sha256(logos_dark.dark_file_bytes(path)).hexdigest()
         assert row["dark_sha256"] == expected, row["file"]
 
 
 @pytest.mark.parametrize("path", conf_files(), ids=lambda p: p.name)
 def test_every_conf_variant_matches_manifest(path) -> None:  # type: ignore[no-untyped-def]
     source = path.read_bytes()
-    first = dark_variant(source)
-    assert first == dark_variant(source)
+    first = logos_dark.dark_file_bytes(path)
+    assert first == logos_dark.dark_file_bytes(path)
     assert lint_svg(first) == []
+    if path.name in logos_dark.NO_RECOLOR_FILES:
+        assert first == source  # the brand guide forbids changing the logo's colours
     row = next(r for r in conf_rows() if r["file"] == path.name)
     assert row["dark_sha256"] == hashlib.sha256(first).hexdigest()
 
@@ -161,6 +161,8 @@ def test_every_conf_variant_matches_manifest(path) -> None:  # type: ignore[no-u
 def test_every_conf_variant_meets_the_dark_contrast(path) -> None:  # type: ignore[no-untyped-def]
     """Review LOW: the conference dark variants pass the same 3.0:1 gate as the network logos,
     against every dark background a logo sits on."""
+    if path.name in logos_dark.NO_RECOLOR_FILES:
+        pytest.skip("shown in its own colours (brand guide)")
     for paint in logos_dark._paints(dark_variant(path.read_bytes()).decode()):
         low = min(contrast(paint, bg) for bg in DARK_BACKGROUNDS)
         assert low >= 3.0, f"{path.name}: {paint} only {low:.2f}:1"
@@ -181,12 +183,11 @@ def test_build_writes_a_dark_variant_for_every_logo(
     )
     for logo in _logo_files():
         built = out / "logos" / "dark" / logo.name
-        expected = dark_variant(logo.read_bytes(), flip_pair=logo.name in FLIP_PAIR_FILES)
-        assert built.read_bytes() == expected
+        assert built.read_bytes() == logos_dark.dark_file_bytes(logo)
         assert f"logos/dark/{logo.name}" in result.files
     for logo in conf_files():
         built = out / "logos" / "dark" / "conf" / logo.name
-        assert built.read_bytes() == dark_variant(logo.read_bytes())
+        assert built.read_bytes() == logos_dark.dark_file_bytes(logo)
         assert f"logos/dark/conf/{logo.name}" in result.files
         # A conference file never lands in the flat network dark folder.
         assert not (out / "logos" / "dark" / logo.name).exists()

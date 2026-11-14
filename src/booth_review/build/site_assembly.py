@@ -49,7 +49,9 @@ COPY_SUFFIXES = frozenset({".html", ".js", ".css"})
 # Suffixes allowed only in one top-level folder: the vendored fonts (.woff2) and their OFL
 # texts (.txt) under fonts/, and the linted network logos (.svg) under logos/. A stray note
 # or sketch elsewhere under site/ is never published.
-FOLDER_COPY_SUFFIXES = frozenset({("fonts", ".woff2"), ("fonts", ".txt"), ("logos", ".svg")})
+FOLDER_COPY_SUFFIXES = frozenset(
+    {("fonts", ".woff2"), ("fonts", ".txt"), ("logos", ".svg"), ("logos", ".png")}
+)
 BUILD_MARKER = ".booth-review-site"
 VERSION_TOKEN = "__SITE_DATA_VERSION__"
 FOOTER_TOKEN = "<!-- booth-review:footer -->"
@@ -646,6 +648,8 @@ def _copy_site_source(
         relative = path.relative_to(site_src)
         if any(part.startswith(".") for part in relative.parts):
             continue
+        if logos_dark.DARK_SOURCE_DIR in relative.parts:
+            continue  # brand dark files reach the build only as logos/dark/<name>
         if not _copy_allowed(relative):
             continue
         if sports is not None and _is_disabled_sport_module(relative, sports):
@@ -674,21 +678,18 @@ def _assemble_into(
     bodies = dict(sport_bodies or {})
     ids = _ordered_sports(bodies)
     copied = _copy_site_source(site_src, stage, sports=frozenset(ids))
-    for logo in sorted((site_src / "logos").glob("*.svg")):
+    for logo in sorted((site_src / "logos").glob("*.svg")) + sorted(
+        (site_src / "logos").glob("*.png")
+    ):
         dark_rel = Path("logos") / "dark" / logo.name
-        atomic_write_bytes(
-            stage / dark_rel,
-            logos_dark.dark_variant(
-                logo.read_bytes(), flip_pair=logo.name in logos_dark.FLIP_PAIR_FILES
-            ),
-        )
+        atomic_write_bytes(stage / dark_rel, logos_dark.dark_file_bytes(logo))
         copied.append(dark_rel.as_posix())
     # Conference logos (Phase 28) and game marks (the title-game emblem) get their own dark
     # folders so neither can collide with a network file of the same name.
     for sub in ("conf", "marks"):
         for logo in sorted((site_src / "logos" / sub).glob("*.svg")):
             dark_rel = Path("logos") / "dark" / sub / logo.name
-            atomic_write_bytes(stage / dark_rel, logos_dark.dark_variant(logo.read_bytes()))
+            atomic_write_bytes(stage / dark_rel, logos_dark.dark_file_bytes(logo))
             copied.append(dark_rel.as_posix())
     atomic_write_bytes(stage / "site-data.json", body)
     for sid in ids[1:]:
