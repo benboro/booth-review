@@ -5313,7 +5313,6 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .crews-network .net-mark {
   max-width: 100%;
   min-width: 0;
-  vertical-align: top;
 }
 
 .crews-network.has-more .net-mark {
@@ -6408,6 +6407,10 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
   display: inline-flex;
   align-items: center;
   gap: var(--space-sm);
+  /* An inline-flex box sits on the text baseline by its logo's bottom edge, which lifts the logo
+     2-5px above a one-line row's centre; middle centres it on the text instead (user
+     2026-11-13). The multi-lane This weekend row heads are flex columns and keep their top. */
+  vertical-align: middle;
 }
 
 .net-dot {
