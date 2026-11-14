@@ -970,12 +970,30 @@ def test_non_espn_booth_never_fills_a_telecast_with_no_network_yet() -> None:
     assert result.counts["not_espn_family"] == 1 and result.counts["network_mismatch"] == 0
 
 
-@pytest.mark.parametrize("network", ["TBD", "TBA", ""])
+@pytest.mark.parametrize("network", ["TBD", "TBA"])
 def test_booth_with_no_network_yet_goes_to_the_games_only_telecast(network: str) -> None:
     result = _run([_tel(100)], [_booth(("Avery Lane", "Morgan Pike"), network=network)])
     assert result.statuses == {"100-espn": "filled"}
     assert result.counts["unmapped_network"] == 0 and result.counts["network_mismatch"] == 0
     assert result.unmatched_rows == []
+
+
+@pytest.mark.parametrize("network", ["", "   ", "|", ",", " / "])
+def test_booth_with_an_empty_network_cell_is_still_unmapped_and_reviewed(network: str) -> None:
+    """Only a network that says "TBD" defers: an empty Press Room cell may be a table
+    layout the parser misread, so the booth is never placed by guesswork."""
+    result = _run([_tel(100)], [_booth(("Avery Lane", "Morgan Pike"), network=network)])
+    assert result.statuses == {}
+    assert result.counts["unmapped_network"] == 1 and result.counts["no_network"] == 0
+    assert [row.reason for row in result.unmatched_rows] == ["unmapped_network"]
+    scheduled = _run(
+        [],
+        [_booth(("Avery Lane", "Morgan Pike"), network=network)],
+        current_season=SEASON,
+        scheduled_networks={100: "espn"},
+    )
+    assert scheduled.scheduled_crews == {}
+    assert scheduled.counts["unmapped_network"] == 1
 
 
 def test_booth_with_no_network_yet_is_not_placed_among_two_telecasts() -> None:

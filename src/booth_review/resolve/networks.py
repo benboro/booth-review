@@ -99,16 +99,22 @@ def _is_placeholder(text: str) -> bool:
 _UNLISTED_NAMES: frozenset[str] = frozenset({"tbd", "tba"})
 
 
-def network_unlisted(text: str | None) -> bool:
+def network_unlisted(text: str | None, *, blank: bool = True) -> bool:
     """True when a source's network text names no network yet: None, blank, or
     nothing but "TBD"/"TBA" parts. Such a source defers to one that names the
     network; the two never disagree. 506's "-" and its status text
     ("CANCELLED", "POSTPONED") say the game has no telecast, and a name the
     crosswalk does not map is still a name, so neither counts.
+
+    `blank=False` is for a source whose empty cell may be a misread layout
+    (ESPN Press Room): text with no part at all (None, whitespace, separators
+    only) is then False, and only a written "TBD"/"TBA" counts.
     """
     if text is None:
-        return True
+        return blank
     parts = [part for part in _SEPARATOR_RE.split(text) if part.strip()]
+    if not parts:
+        return blank
     return all(re.sub(r"[^a-z]", "", part.lower()) in _UNLISTED_NAMES for part in parts)
 
 

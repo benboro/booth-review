@@ -568,3 +568,14 @@ def test_network_unlisted_is_true_for_blank_and_tbd(text: str | None) -> None:
 )
 def test_network_unlisted_is_false_for_names_and_status_text(text: str) -> None:
     assert network_unlisted(text) is False
+
+
+@pytest.mark.parametrize("text", [None, "", "   ", "|", ", ,", " / "])
+def test_network_unlisted_blank_false_needs_a_written_tbd(text: str | None) -> None:
+    assert network_unlisted(text, blank=False) is False
+    assert network_unlisted(text) is True
+
+
+@pytest.mark.parametrize("text", ["TBD", "tba", "TBD / TBA"])
+def test_network_unlisted_blank_false_still_reads_a_written_tbd(text: str) -> None:
+    assert network_unlisted(text, blank=False) is True

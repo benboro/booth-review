@@ -159,9 +159,10 @@ class TelecastBuild:
     unmatched_rows: list[UnmatchedRow]
     unresolved_rows: list[UnresolvedTeamRow]
     # Unrated telecasts still without a network because their 506 listing gave
-    # none (blank or "TBD") and CFBD did not name exactly one. The AA and ESPN
-    # Press Room passes read such a telecast as "no network yet", never as a
-    # network that differs from theirs.
+    # none (blank or "TBD") and either CFBD did not name exactly one or another
+    # main listing of the game already names it. The AA and ESPN Press Room
+    # passes read such a telecast as "no network yet", never as a network that
+    # differs from theirs.
     network_unlisted: frozenset[str] = frozenset()
 
 
@@ -419,11 +420,23 @@ def _build_game_telecasts(
 
     # A main listing whose network 506 has not announced (blank or "TBD")
     # defers to the one network CFBD names for the game. A listing that names
-    # a network keeps it, even when CFBD names another.
+    # a network keeps it, even when CFBD names another. When another main
+    # listing of the game already names CFBD's network on its main feed, the
+    # one without a network stays as it is: it may be a second broadcast, and
+    # joining the named listing's telecast would drop its crew.
+    named_network_ids = {
+        primary.network_id
+        for primary in (listing_primaries[id(ln)] for ln, _conf in main_listings)
+        if primary.network_id is not None and primary.feed_type == "main"
+    }
     listing_networks: dict[int, str | None] = {}
     for ln, _conf in main_listings:
         own_network_id = listing_primaries[id(ln)].network_id
-        if own_network_id is None and network_unlisted(ln.network_raw):
+        if (
+            own_network_id is None
+            and network_unlisted(ln.network_raw)
+            and media_network not in named_network_ids
+        ):
             own_network_id = media_network
         listing_networks[id(ln)] = own_network_id
 

@@ -21,7 +21,8 @@ The 04.5 backup-crew rules, with the collector swapped for hand-save import
   to another of the game's networks is skipped and counted, never moved. A side
   with no network yet ("TBD") defers to the side that names one and is never a
   mismatch: a telecast whose 506 listing gave no network takes the game's booth,
-  and a booth with no network goes to the game's only main telecast.
+  and a booth whose network says "TBD" goes to the game's only main telecast.
+  A booth with an empty network cell is still counted unmapped and reviewed.
 - Backup rows reach telecast_people with the 506 row shape (source
   `crew_backup`, feed main, crew_position, no 506 pointer). The page prints
   names without roles: the first is play-by-play, the rest take their
@@ -446,8 +447,12 @@ def apply_crew_backup(
             continue
         counts["matched"] += 1
         chart = primary_network(split_outlets(booth.network_raw), booth.season, networks)
-        # The page lists no network for the game yet: the booth defers to ours.
-        booth_unlisted = chart.network_id is None and network_unlisted(booth.network_raw)
+        # The page says the network is "TBD": the booth defers to ours. An empty
+        # network cell is not that (it may be a table layout the parser misread),
+        # so it stays unmapped and goes to review.
+        booth_unlisted = chart.network_id is None and network_unlisted(
+            booth.network_raw, blank=False
+        )
         if chart.network_id is None and not booth_unlisted:
             counts["unmapped_network"] += 1
             unmatched_rows.append(_unmatched(booth, "", "unmapped_network"))

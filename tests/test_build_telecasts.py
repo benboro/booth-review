@@ -944,3 +944,61 @@ def test_sole_media_networks_reads_tv_then_web_and_never_picks_among_several() -
     ]
 
     assert sole_media_networks(media, table) == {1: "sigma", 3: "sigma-stream", 6: "sigma"}
+
+
+def test_listing_without_a_network_stays_put_when_another_listing_names_cfbds_network() -> None:
+    """506 lists the game twice, once on CFBD's network and once as "TBD". The second may
+    be another broadcast: it keeps its own telecast and crew instead of joining the
+    named listing's telecast, where its crew would be dropped."""
+    named = _listing(network_raw="Net Sigma", crew_names=_CREW, source_row_index=0)
+    unnamed = _listing(network_raw="TBD", crew_names=("Robin Post",), source_row_index=1)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[named, unnamed],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma", "1-unmapped"]
+    assert result.telecasts["crew_matched"].to_list() == [True, True]
+    assert result.listing_links["telecast_id"].to_list() == ["1-sigma", "1-unmapped"]
+    assert result.network_unlisted == frozenset({"1-unmapped"})
+
+
+def test_listing_without_a_network_defers_when_another_listing_names_a_different_one() -> None:
+    named = _listing(network_raw="Net Bravo", crew_names=_CREW, source_row_index=0)
+    unnamed = _listing(network_raw="TBD", crew_names=("Robin Post",), source_row_index=1)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[named, unnamed],
+        network_rows=_SIGMA_ROWS,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-bravo", "1-sigma"]
+    assert result.telecasts["crew_matched"].to_list() == [True, True]
+    assert result.network_unlisted == frozenset()
+
+
+def test_alt_feed_sibling_on_cfbds_network_does_not_block_the_deferral() -> None:
+    """A sibling listing on the network's alt feed has its own alt telecast, which the
+    listing without a network would never join, so that listing still takes CFBD's."""
+    rows = [*_SIGMA_ROWS, _network_row("Sigma Alt", "sigma", feed_type="alt")]
+    alt = _listing(network_raw="Sigma Alt", crew_names=("Robin Post",), source_row_index=0)
+    unnamed = _listing(network_raw="TBD", crew_names=_CREW, source_row_index=1)
+
+    result = _run(
+        games=[_game()],
+        records=[],
+        listings=[alt, unnamed],
+        network_rows=rows,
+        media=[_media("Net Sigma")],
+    )
+
+    assert result.telecasts["telecast_id"].to_list() == ["1-sigma", "1-sigma-alt"]
+    assert result.telecasts["crew_matched"].to_list() == [True, True]
+    assert result.network_unlisted == frozenset()
