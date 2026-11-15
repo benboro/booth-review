@@ -59,8 +59,8 @@ function item(game, ctx, { showTime = false } = {}) {
   const booth = el('span', 'wk-booth', line.text);
   booth.style.fontWeight = String(line.weight);
   l2.append(booth);
-  // The matchup's own wrapper is as tall as its visible lines, so the ranked badge inside it
-  // centres on line 1, or lines 1-2 when the matchup wraps (user feedback 2026-11-03). Every
+  // The matchup's own wrapper is as tall as its lines, so the ranked badge inside it centres
+  // on line 1, or on all of them when the matchup wraps (user feedback 2026-11-03). Every
   // row gets the wrapper; only a row with a mark gives up room for it (user 2026-11-11).
   const mu = el('span', 'wk-item-mu');
   mu.append(l1);

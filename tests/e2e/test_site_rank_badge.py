@@ -430,7 +430,7 @@ def test_nfl_weekend_never_shows_the_badge(wk_page: Page) -> None:  # noqa: F811
 
 _PHONE_CENTRE_JS = """(sel) => {
   // The ranked badge against the matchup lines it centres on: the matchup line's box is
-  // exactly the lines the 2-line clamp shows, and its top is the first line's top.
+  // exactly the matchup's lines, and its top is the first line's top.
   const row = document.querySelector(sel);
   const l1 = row.querySelector('.wk-item-l1');
   const badge = row.querySelector('.rk-badge');
@@ -456,13 +456,13 @@ _PHONE_CENTRE_JS = """(sel) => {
     [
         ("Away", "Home", 1, False),
         ("Southern Mississippi", "Louisiana-Monroe", 2, False),
-        # Long enough for three lines, so the 2-line clamp cuts it: the badge centres on the
-        # two lines that show.
+        # Long enough for three lines: nothing is cut (no line clamp since user 2026-11-14), and
+        # the badge centres on all three.
         (
             "Southern Mississippi Golden Eagles of Hattiesburg",
-            "Louisiana-Monroe Warhawks of Monroe",
-            2,
-            True,
+            "Louisiana-Monroe Warhawks",
+            3,
+            False,
         ),
     ],
 )
@@ -474,7 +474,7 @@ def test_phone_row_badge_centres_on_the_matchup_lines(
     clipped: bool,
 ) -> None:
     """User feedback 2026-11-03: at 390px the phone row's badge centres vertically on the
-    matchup's visible lines (line 1, or lines 1-2 when it wraps), never on the booth line or
+    matchup's lines (line 1, or all of them when it wraps), never on the booth line or
     the whole row, and never rides above the first line. It stays in the reserved 28px, and no
     row changes height."""
     _mount_phone(
@@ -493,9 +493,18 @@ def test_phone_row_badge_centres_on_the_matchup_lines(
     assert got["badgeRight"] == pytest.approx(got["rowRight"] - 6, abs=0.5)
     assert got["badgeLeft"] >= got["rowRight"] - 28 - 0.01
     assert got["h"] == pytest.approx(got["bare"], abs=0.01)
-    plain = phone_page.locator(sel % "o").bounding_box()
-    assert plain is not None
-    assert got["h"] == pytest.approx(plain["height"], abs=0.01)
+    plain = phone_page.locator(sel % "o")
+    box = plain.bounding_box()
+    assert box is not None
+    plain_lines = plain.locator(".wk-item-l1").evaluate(
+        "e => Math.round(e.getBoundingClientRect().height"
+        " / parseFloat(getComputedStyle(e).lineHeight))"
+    )
+    # A plain row uses the badge's room (user 2026-11-11), so a long matchup may need fewer
+    # lines there; with as many lines, the two rows are the same height.
+    assert plain_lines <= lines
+    if plain_lines == lines:
+        assert got["h"] == pytest.approx(box["height"], abs=0.01)
 
 
 def test_cell_badge_never_rides_above_the_matchup_line(wk_page: Page) -> None:  # noqa: F811

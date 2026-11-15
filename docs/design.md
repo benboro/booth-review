@@ -387,11 +387,12 @@ records only where the site settles or applies them.
 - Sizes and places: the This weekend timeline cell puts it 18px high at the top right (6px in,
   its top the matchup line's top, so it never rides above it), and the cell never grows;
   the phone list rows set it 18px at the right, 6px in, centred vertically on the matchup lines
-  (line 1, or lines 1-2 when the matchup wraps, the lines the 2-line clamp shows; never the
-  booth line or the whole row, so it never sits above the first line) (user feedback
-  2026-11-03); the ESPN+ and regional table and
-  Matched games set it 18px inline after the matchup's last word on one line, and once the
-  matchup wraps it centres vertically on the matchup lines, as the card, the phone rows and
+  (line 1, or all of them when the matchup wraps; never the booth line or the whole row, so it
+  never sits above the first line) (user feedback 2026-11-03). The phone matchup has no line
+  clamp: a matchup that needs three lines grows the row rather than being cut, and no ellipsis
+  is drawn (iPhone Safari drew one after a complete two-line matchup; user 2026-11-14). The
+  ESPN+ and regional table and Matched games set it 18px inline after the matchup's last word
+  on one line, and once the matchup wraps it centres vertically on the matchup lines, as the card, the phone rows and
   the modal title do (user decision 2026-11-03), its left edge 6px after the longest line's
   right edge, the same gap as on one line, not at the cell's right edge (user feedback
   2026-11-03); the map hover card draws it 25.5px at the top right, and a ranked card keeps
