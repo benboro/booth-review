@@ -19,8 +19,8 @@ _TOKEN_COLOR_JS = (
 
 TRIGGERS = ["Announcers", "Seasons", "Category", "Team"]
 # The fixed filter set (D-10): Booths on every view. Grouped Broadcast, Matchup, Calendar (Phase 26).
-BAR = ["Announcers", "Booths", "Team", "Category", "Seasons"]
-CFB_ONLY = ["Networks", "Role", "Conference", "Bowls/Playoffs", "Kickoff", "School", "Game"]
+BAR = ["Announcers", "Networks", "Booths", "Team", "Category", "Seasons"]
+CFB_ONLY = ["Role", "Conference", "Bowls/Playoffs", "Kickoff", "School", "Game"]
 
 
 @pytest.fixture
@@ -58,7 +58,7 @@ def test_trigger_order_and_labels(app: Page) -> None:
         " [...g.querySelectorAll('.filter-label')].map(l => l.textContent)])",
     )
     assert groups == [
-        ["Broadcast", ["Announcers", "Booths"]],
+        ["Broadcast", ["Announcers", "Networks", "Booths"]],
         ["Matchup", ["Team", "Category"]],
         ["Calendar", ["Seasons"]],
     ]
@@ -68,7 +68,7 @@ def test_trigger_order_and_labels(app: Page) -> None:
     text = app.inner_text("#nfl-toolbar")
     for label in CFB_ONLY:
         assert label not in text
-    for key in ("announcers", "seasons", "category", "team"):
+    for key in ("announcers", "networks", "seasons", "category", "team"):
         assert app.get_attribute(f"#nfl-trigger-{key}", "aria-haspopup") == "dialog"
         assert app.get_attribute(f"#nfl-trigger-{key}", "aria-expanded") == "false"
 
@@ -212,7 +212,7 @@ def test_clear_all_filters_resets_url(app: Page) -> None:
 
 def test_keyboard_reaches_each_trigger_and_enter_opens(app: Page) -> None:
     app.focus("#nfl-trigger-announcers")
-    for key in ("booths", "team", "category", "seasons"):
+    for key in ("networks", "booths", "team", "category", "seasons"):
         app.keyboard.press("Tab")
         assert app.evaluate("document.activeElement.id") == f"nfl-trigger-{key}"
     app.keyboard.press("Enter")
@@ -385,7 +385,7 @@ def test_booths_trigger_is_visible_and_enabled_on_every_view(
     """D-10: Booths is part of the fixed NFL filter set, on all four views."""
     page = nfl_guarded_page
     open_nfl_app(page, "?sport=nfl")
-    for view in ("special", "scatter", "crews", "viewership"):
+    for view in ("teams", "scatter", "crews", "viewership"):
         page.evaluate("v => window.__nflTestHooks.setState({ view: v })", view)
         page.wait_for_function("v => window.__nflTestHooks.getState().view === v", arg=view)
         trigger = page.locator("#nfl-trigger-booths")
@@ -413,7 +413,7 @@ def test_booth_pick_narrows_tables_and_changes_special_and_scatter(
         page.evaluate("k => window.__nflTestHooks.setState({ booths: [k] })", key)
         page.wait_for_function("window.__nflTestHooks.getState().booths.length === 1")
         assert sorted(page.evaluate("window.__nflTestHooks.getTableIndexes()")) == expected, view
-    for view in ("special", "scatter"):
+    for view in ("teams", "scatter"):
         page.evaluate("v => window.__nflTestHooks.setState({ view: v, booths: [] })", view)
         page.wait_for_function("v => window.__nflTestHooks.getState().view === v", arg=view)
         before = page.evaluate("v => JSON.stringify(window.__nflTestHooks.getViewModel(v))", view)

@@ -346,7 +346,8 @@ def test_default_state(run: Callable[[str], Any], nfl_fixture_raw: dict) -> None
     assert "network" not in s and "cseason" not in s and s["booths"] == []
     assert (s["metric"], s["adjusted"], s["viewY"]) == ("margin", False, "mean")
     assert s["hiddenSegments"] == [] and s["hiddenCategories"] == []
-    assert s["view"] == "special" and s["teams"] == [] and s["selection"] is None
+    assert s["view"] == "teams" and s["teams"] == [] and s["selection"] is None
+    assert s["special"] is False and s["networks"] is None
 
 
 def test_perseason_and_csort_state(run: Callable[[str], Any]) -> None:
@@ -617,7 +618,7 @@ def test_booth_games_and_state_clean(run: Callable[[str], Any], nfl_fixture_raw:
     assert dirty["hiddenSegments"] == ["agotw"] and dirty["hiddenCategories"] == ["snf"]
     assert dirty["metric"] == "margin"
     assert got["count"] == 1
-    assert got["garbage"] == "special"
+    assert got["garbage"] == "teams"
 
 
 def test_table_games_and_filter_count(run: Callable[[str], Any]) -> None:
@@ -863,7 +864,7 @@ def test_decode_never_throws(run: Callable[[str], Any]) -> None:
     out, d = got["out"], got["d"]
     assert out[0] == d and out[1]["seasons"] == d["seasons"]
     assert out[2]["teams"] == [] and out[3]["cats"] == ["tnf"]
-    assert out[4]["seasons"] == d["seasons"] and out[5]["view"] == "special"
+    assert out[4]["seasons"] == d["seasons"] and out[5]["view"] == "teams"
     assert out[6]["seasons"] == d["seasons"] and out[7] == d
     for k in (10, 11, 12, 13, 14, 15):
         assert out[k] == d

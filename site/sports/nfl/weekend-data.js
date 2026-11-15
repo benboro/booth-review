@@ -2,8 +2,8 @@
  * NFL data adapter for the This weekend tab (Phase 18, plan 08). Turns the played `games` block
  * and the `upcoming` block into the `WeekendGame` list `modules/weekend.js` lays out, and runs
  * the NFL master-filter picks (Team, Announcers, Booths) over them with the same predicate
- * (`gamePasses`) every other NFL view uses. Seasons and Category are ignored on this view
- * (D-20, D-21).
+ * (`gamePasses`) every other NFL view uses, the Networks pick included. Seasons and Category
+ * are ignored on this view (D-20, D-21).
  *
  * `upcoming` rows never enter `model.cols`, so no other NFL view changes its counts. DOM-free.
  */
@@ -85,7 +85,7 @@ const ALL_SEASONS = Object.freeze([-Infinity, Infinity]);
 
 const upcomingFacades = new WeakMap();
 
-/** A `gamePasses`-shaped model over the upcoming columns (Team is the only filter that reads it). */
+/** A `gamePasses`-shaped model over the upcoming columns (Team and Networks are the filters that read it). */
 function upcomingFacade(model) {
   const hit = upcomingFacades.get(model);
   if (hit) return hit;
@@ -96,10 +96,12 @@ function upcomingFacade(model) {
     n,
     franchises: model.franchises,
     slots: model.slots,
+    networks: model.networks,
     cols: {
       season: u.season,
       home: u.home,
       away: u.away,
+      network: u.network ?? new Array(n).fill(null),
       slot: u.slot.map((s) => s ?? 0),
       standalone: no(),
       agotw: no(),
@@ -247,9 +249,9 @@ export function nflHasCrewPick(state) {
 }
 
 /**
- * Whether a weekend game passes the NFL master filter: Team through `gamePasses` (played rows on
- * the model, upcoming rows on the upcoming facade), then an Announcers pick (any seat) and a
- * Booths pick. Seasons and Category are ignored (D-20, D-21).
+ * Whether a weekend game passes the NFL master filter: Team and Networks through `gamePasses`
+ * (played rows on the model, upcoming rows on the upcoming facade), then an Announcers pick (any
+ * seat) and a Booths pick. Seasons and Category are ignored (D-20, D-21).
  * @param {object} model - a `prepareNfl` result.
  * @param {object} state - shaped like `defaultNflState(model)`.
  * @param {object} game - from `nflWeekendGames`.
@@ -276,6 +278,28 @@ export function nflWeekendPasses(model, state, game) {
     }
   }
   return true;
+}
+
+/**
+ * The Networks list's counts on This weekend: the shown week's games (played and upcoming) per
+ * network index that pass every weekend pick except Networks itself, in `model.net` index
+ * order. Seasons and Category play no part here, as on the tab.
+ * @param {object} model
+ * @param {object} state
+ * @param {number|null} week
+ * @returns {Int32Array}
+ */
+export function nflWeekendNetworkFacets(model, state, week) {
+  const counts = new Int32Array(model.net.lookups.networks.length);
+  if (week == null) return counts;
+  const index = new Map(model.net.ids.map((id, k) => [id, k]));
+  const open = { ...state, networks: null };
+  for (const game of nflWeekendGames(model, week)) {
+    if (!nflWeekendPasses(model, open, game)) continue;
+    const k = index.get(game.networkId ?? 'tba');
+    if (k !== undefined) counts[k] += 1;
+  }
+  return counts;
 }
 
 /**

@@ -205,12 +205,12 @@ def test_table_selection_and_panel(cfb: Page) -> None:
     cfb.locator("#nfl-clear-selection").click()
     assert cfb.evaluate("window.__nflTestHooks.getTableIndexes()") == []
 
-    cfb.focus("#nfl-tab-special")
+    cfb.focus("#nfl-tab-teams")
     cfb.evaluate("window.__nflTestHooks.openGame(0)")
     assert cfb.evaluate("document.getElementById('nfl-detail-panel').open") is True
     cfb.keyboard.press("Escape")
     assert cfb.evaluate("document.getElementById('nfl-detail-panel').open") is False
-    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-special"
+    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-teams"
 
 
 # --------------------------------------------------------- fetch and URL
@@ -242,15 +242,15 @@ def test_tab_order_labels_and_default(cfb: Page) -> None:
     _mount_nfl(cfb)
     tabs = cfb.locator("#nfl-chart-tabs [role=tab]")
     assert tabs.all_inner_texts() == [
-        "Special games",
+        "Team games",
         "Crews",
         "Viewership",
         "Scatter",
         "This weekend",
     ]
-    assert cfb.locator("#nfl-tab-special").get_attribute("aria-selected") == "true"
+    assert cfb.locator("#nfl-tab-teams").get_attribute("aria-selected") == "true"
     assert cfb.url.endswith("?sport=nfl")
-    for view in ("special", "crews", "viewership", "scatter", "weekend"):
+    for view in ("teams", "crews", "viewership", "scatter", "weekend"):
         assert (
             cfb.locator(f"#nfl-view-{view}").get_attribute("aria-labelledby") == f"nfl-tab-{view}"
         )
@@ -259,19 +259,19 @@ def test_tab_order_labels_and_default(cfb: Page) -> None:
 
 def test_tab_keyboard(cfb: Page) -> None:
     _mount_nfl(cfb)
-    cfb.focus("#nfl-tab-special")
+    cfb.focus("#nfl-tab-teams")
     cfb.keyboard.press("ArrowRight")
     assert cfb.evaluate("document.activeElement.id") == "nfl-tab-crews"
-    assert cfb.locator("#nfl-tab-special").get_attribute("aria-selected") == "true"
+    assert cfb.locator("#nfl-tab-teams").get_attribute("aria-selected") == "true"
     cfb.keyboard.press("Enter")
     assert cfb.locator("#nfl-tab-crews").get_attribute("aria-selected") == "true"
     assert "view=crews" in cfb.url
     assert cfb.locator("#nfl-view-crews").is_visible()
-    assert not cfb.locator("#nfl-view-special").is_visible()
+    assert not cfb.locator("#nfl-view-teams").is_visible()
     cfb.keyboard.press("End")
     assert cfb.evaluate("document.activeElement.id") == "nfl-tab-weekend"
     cfb.keyboard.press("Home")
-    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-special"
+    assert cfb.evaluate("document.activeElement.id") == "nfl-tab-teams"
 
 
 @pytest.mark.parametrize(
@@ -281,7 +281,7 @@ def test_tab_keyboard(cfb: Page) -> None:
         ("?sport=nfl&view=viewership", "viewership"),
         ("?sport=nfl&view=fox", "crews"),
         ("?sport=nfl&view=agotw", "viewership"),
-        ("?sport=nfl&view=bogus", "special"),
+        ("?sport=nfl&view=bogus", "teams"),
     ],
 )
 def test_initial_view_from_search(cfb: Page, query: str, tab: str) -> None:
@@ -291,7 +291,7 @@ def test_initial_view_from_search(cfb: Page, query: str, tab: str) -> None:
     assert cfb.locator(f"#nfl-tab-{tab}").get_attribute("aria-selected") == "true"
     assert cfb.locator(f"#nfl-view-{tab}").is_visible()
     assert cfb.evaluate(f"window.__nflTestHooks.getViewModel('{tab}')")["view"] == tab
-    if tab != "special" and "view=bogus" not in query:
+    if tab != "teams" and "view=bogus" not in query:
         assert (
             f"view={tab}" in cfb.url and "view=fox" not in cfb.url and "view=agotw" not in cfb.url
         )
@@ -320,7 +320,7 @@ def test_headline_shows_count_and_season_range(
     # The headline is visible on every NFL view; Crews and Viewership title the module by tab label.
     page.evaluate("() => window.__nflTestHooks.setState({ seasons: null })")
     for view, title in (
-        ("special", None),
+        ("teams", None),
         ("crews", "Crews"),
         ("viewership", "Viewership"),
         ("scatter", None),
@@ -359,7 +359,7 @@ def test_crews_subtitle_is_the_seasons_range(
 # ------------------------------------------------- views load without errors
 
 
-@pytest.mark.parametrize("view", ["crews", "viewership", "scatter", "special"])
+@pytest.mark.parametrize("view", ["crews", "viewership", "scatter", "teams"])
 def test_view_ready_without_console_errors(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
 ) -> None:
@@ -367,7 +367,7 @@ def test_view_ready_without_console_errors(
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
-    open_nfl_app(page, f"?sport=nfl&view={view}" if view != "special" else "?sport=nfl")
+    open_nfl_app(page, f"?sport=nfl&view={view}" if view != "teams" else "?sport=nfl")
     assert page.evaluate("window.__nflTestHooks.failed") is False
     assert page.locator(f"#nfl-view-{view}").is_visible()
     assert errors == []
@@ -410,7 +410,7 @@ def test_booth_chip_caption_and_empty(
 # ------------------------------------------------- selection row and filter bar
 
 
-@pytest.mark.parametrize("view", ["special", "crews", "viewership", "scatter"])
+@pytest.mark.parametrize("view", ["teams", "crews", "viewership", "scatter"])
 def test_count_line_and_booths_on_every_tab(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None], view: str
 ) -> None:

@@ -356,7 +356,7 @@ export function render(ctx) {
   const empty = built.totalRows === 0;
   const signature = JSON.stringify([
     built.perSeason, built.mode, state.csort, state.seasons, state.teams, state.cats,
-    state.people, state.booths, state.perseason, state.adjusted,
+    state.networks, state.people, state.booths, state.perseason, state.adjusted,
   ]);
   renderCrewsTable(refs.tableHost, {
     ts,

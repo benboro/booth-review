@@ -1438,8 +1438,9 @@ body.app {
 }
 
 /* The NFL bar is the same ledger with its own fixed widths: 148px entries (Announcers 250px),
-   groups left-aligned and split by the same 1px rule. One row from 1024px, Broadcast on its own
-   row from 768px, one group per row below. Widths depend on the viewport only. */
+   groups left-aligned and split by the same 1px rule. One row from 1200px (six entries need
+   1166px), Broadcast on its own row from 768px, one group per row below. Widths depend on the
+   viewport only. */
 @media (min-width: 481px) {
   #nfl-toolbar .fgroup-row .filter-trigger {
     flex: 0 0 148px;
@@ -1477,7 +1478,7 @@ body.app {
     }
   }
 
-  @media (min-width: 1024px) {
+  @media (min-width: 1200px) {
     #nfl-toolbar {
       flex-wrap: nowrap;
     }
@@ -1977,7 +1978,7 @@ input[type="checkbox"] {
 }
 
 .family-item > .check-row,
-#filter-networks .check-row {
+:is(#filter-networks, .nfl-filter-networks) .check-row {
   padding: 0;
 }
 
@@ -2142,13 +2143,14 @@ input[type="checkbox"] {
 
 /* D-28: the Networks popover fits its visible rows. The count column is fixed so a count
    change alone never changes the width. */
-#pop-networks {
+#pop-networks,
+#nfl-pop-networks {
   width: max-content;
   min-width: 240px;
   max-width: min(360px, calc(100vw - 16px));
 }
 
-#filter-networks .option-count {
+:is(#filter-networks, .nfl-filter-networks) .option-count {
   flex: none;
   width: 7ch;
   min-width: 0;
@@ -2160,6 +2162,7 @@ input[type="checkbox"] {
   }
 
   #pop-networks,
+  #nfl-pop-networks,
   #pop-conference,
   #pop-school,
   #pop-announcers {
@@ -2229,7 +2232,7 @@ input[type="checkbox"] {
    the label itself contributes none here. (Needs the `#filter-networks`
    prefix to out-specificity the generic rule above -- a bare `.network-list
    label` rule loses to it regardless of source order.) */
-#filter-networks .network-list label {
+:is(#filter-networks, .nfl-filter-networks) .network-list label {
   margin-bottom: 0;
 }
 
@@ -4687,6 +4690,54 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-published-note {
   color: var(--muted);
   font: var(--font-body);
+}
+
+/* The key to the two fills of a network's group on the NFL all-games bars (solid = special
+   games, light = other games). A caption, not a control: neutral marks, since it reads for
+   every network colour. */
+.nfl-shade-key {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin: 0;
+  font: var(--font-caption);
+  color: var(--muted);
+}
+
+.nfl-shade-key[hidden] {
+  display: none;
+}
+
+.nfl-shade-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nfl-shade-key-mark {
+  width: 18px;
+  height: 10px;
+}
+
+.nfl-shade-key-mark.is-solid {
+  background: var(--muted);
+}
+
+.nfl-shade-key-mark.is-light {
+  background: color-mix(in srgb, var(--muted) 25%, transparent);
+}
+
+/* The all-games season table has short network heads, so it is as wide as its content
+   (numeric columns only as wide as their numbers) instead of stretching Season across the
+   module. */
+.games-table.nfl-network-table {
+  width: auto;
+}
+
+/* The shared 1% numeric-cell width would stretch an auto-width table back out to the module. */
+.games-table.nfl-network-table :is(td, th).num {
+  width: auto;
 }
 
 /* NFL-only: the legend info button sits in the legend row's flex flow, not absolutely

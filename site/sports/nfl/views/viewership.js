@@ -141,11 +141,11 @@ function shownFrom(present, hidden) {
   return present.filter((id) => !h.has(id));
 }
 
-/** The series the chart and legend draw: under a pick, Category or Team each point is recounted to its matched games. */
+/** The series the chart and legend draw: under a pick, Category, Team or Networks each point is recounted to its matched games. */
 function recountedSeries(model, state) {
   const threshold = lowNThreshold(model);
   const picks = computePicks(model, state);
-  const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0;
+  const subset = picks.hasPick || state.cats.length > 0 || state.teams.length > 0 || state.networks != null;
   const series = viewershipSeries(model, state);
   if (subset) {
     const viewers = model.cols.viewers;

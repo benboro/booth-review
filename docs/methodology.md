@@ -337,9 +337,23 @@ Each venue pulls color from the networks that aired its games, and the network w
 
 <!-- nfl:start -->
 
+## NFL: Games by network
+
+The first NFL tab, Team games, counts every regular-season game of each franchise, once per team, and groups a team's games by the network that carried them. These are assignments, not quality: the bars say where the league and its partners put a team's games, not how good the team is.
+
+**Network groups.** Networks are grouped by family, in the colors the college football page uses: FOX, CBS, NBC with Peacock, ABC with ESPN and ESPN+, and Other (NFL Network, Prime Video, Netflix, YouTube and Yahoo). The hover names each network of a family with its count. A game with no network listed yet is counted as Network TBA until its listing arrives.
+
+**Special games.** Inside a network's group the solid part is that network's special games and the light part is its other games, mostly regional Sunday-afternoon games. A special game is one the Special games view counts (next section): a game in a solo slot, Fox AGOTW, CBS late national, or a game played abroad. A Network TBA game is drawn in one pale tone whether or not it is special.
+
+**Special games only.** The toggle swaps the networks for the eight special-game categories of the next section.
+
+**Filters.** Seasons, Networks, Category, Announcers and Booths narrow what each bar counts: a bar holds the team's games that pass all of them. Team does not change any count; it keeps the picked teams' bars bright and fades the rest. With no narrowing filter every team has about the same total (a full schedule), so the bars rank by special games, the order the Special games view has with every category shown. Once a filter narrows them they rank by their total. An Announcers or Booths pick narrows the bars to the games it matches, and the count in the chart's heading follows. A click on a bar lists exactly the games the bar counts in Matched games and breaks them down by season.
+
+**The Networks filter** applies on every NFL tab. On this tab a legend chip turns a network family on or off in that filter, and a double-click shows only that family, as on the college football page. With Special games only on, the bars count only the special games on the picked networks. On Scatter the other networks' games fade, or disappear with Hide on. On Crews a pick of whole network groups (Fox only) keeps the booths of those groups; a pick that keeps only some of a booth's games (ESPN without ABC) recounts each booth from the games left and shows Raw values. On Viewership each point is recounted from the games left and shows Viewers. On This weekend the week's games on the picked networks are ringed. The counts beside the Networks list's rows are the games each network has under the other filters on the tab in view (on This weekend, that week's games). A Networks pick alone does not fill Matched games.
+
 ## NFL: Special games
 
-The NFL view counts how often each franchise plays in a special game. These are assignments, not quality: a special game says where the league scheduled a team, not how good the team is. Only regular-season games are counted.
+With Special games only on, the first NFL tab counts how often each franchise plays in a special game. These are assignments, not quality: a special game says where the league scheduled a team, not how good the team is. Only regular-season games are counted.
 
 **Solo slot.** A game is in a solo slot when no other NFL game kicks off within three hours of it, judged by kickoff times alone. A gap of exactly three hours fails. Slot names (Thursday night, Sunday night, Monday night, Thanksgiving, Christmas, Black Friday, Saturday, International) are labels only and never decide whether a game is in a solo slot. A Monday doubleheader keeps its Monday night label but neither game is in a solo slot.
 
@@ -406,7 +420,7 @@ The chart draws one line per category, with season on the x axis and mean viewer
 
 The residual setting fits viewers on game quality within each category and Nielsen era. A point shows how a season compared with other seasons of the same category and era, not how categories compare with each other. Categories with too few games for a fit show no residual. Points with fewer than 8 games are marked low n. A missing figure stays missing and is never shown as 0.
 
-Seasons trims the points drawn, one point per category and season in both settings. Residual is never pooled across seasons. A Category, Team, Announcers or Booths pick switches the view to Viewers, recomputed from the picked games' figures, with a short reason above the chart.
+Seasons trims the points drawn, one point per category and season in both settings. Residual is never pooled across seasons. A Category, Team, Networks, Announcers or Booths pick switches the view to Viewers, recomputed from the picked games' figures, with a short reason above the chart.
 
 ## NFL: Window-level viewership
 

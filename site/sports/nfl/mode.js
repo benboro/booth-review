@@ -17,17 +17,19 @@ export const REASONS = Object.freeze({
 const has = (list) => Array.isArray(list) && list.length > 0;
 
 /**
- * Crews mode. Team and Category picks, and an Announcers pick classified 'subset'
- * (see picks.js classifyAnnouncers), force Raw; Seasons, Booths and a PBP-voice
- * ('rowfilter') Announcers pick are row filters and never do.
+ * Crews mode. Team and Category picks, an Announcers pick classified 'subset'
+ * (see picks.js classifyAnnouncers) and a Networks pick that keeps only some of a booth
+ * season's games (`networkCuts`, picks.js networksCutRows) force Raw; Seasons, Booths, a
+ * PBP-voice ('rowfilter') Announcers pick and a Networks pick of whole booth seasons are row
+ * filters and never do.
  */
-export function crewsMode(state, { announcers = 'none' } = {}) {
+export function crewsMode(state, { announcers = 'none', networkCuts = false } = {}) {
   const stored = state.adjusted ? 'adjusted' : 'raw';
   if (stored === 'raw') return { stored, effective: 'raw', forced: false, reason: null };
   if (has(state.teams)) {
     return { stored, effective: 'raw', forced: true, reason: REASONS.crewsTeam };
   }
-  if (has(state.cats) || announcers === 'subset') {
+  if (has(state.cats) || announcers === 'subset' || networkCuts) {
     return { stored, effective: 'raw', forced: true, reason: REASONS.crewsSubset };
   }
   return { stored, effective: 'adjusted', forced: false, reason: null };
@@ -35,7 +37,7 @@ export function crewsMode(state, { announcers = 'none' } = {}) {
 
 /**
  * Viewership mode (Residual vs Viewers). A Category pick wins over the other reason;
- * Team, Announcers and Booths picks cut inside each category season.
+ * Team, Networks, Announcers and Booths picks cut inside each category season.
  */
 export function viewershipMode(state) {
   const stored = state.viewY === 'resid' ? 'resid' : 'mean';
@@ -43,7 +45,7 @@ export function viewershipMode(state) {
   if (has(state.cats)) {
     return { stored, effective: 'mean', forced: true, reason: REASONS.viewershipCategory };
   }
-  if (has(state.teams) || has(state.people) || has(state.booths)) {
+  if (has(state.teams) || has(state.people) || has(state.booths) || state.networks != null) {
     return { stored, effective: 'mean', forced: true, reason: REASONS.viewershipSubset };
   }
   return { stored, effective: 'resid', forced: false, reason: null };

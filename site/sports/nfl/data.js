@@ -4,6 +4,45 @@
  * prepareNfl(raw) turns nfl-data.json into a model; gameRow(model, i) yields
  * the shared GameRow shape. Missing values stay null, never 0.
  */
+import { sortNetworks } from '../../modules/network.js';
+import { TBA_NETWORK } from '../../modules/weekend-data.js';
+
+/** The family key of the synthetic Network TBA entry: its own chip, apart from Other. */
+export const TBA_FAMILY = 'tba';
+
+/**
+ * The Networks filter's view of the networks, in the shape the shared selection helpers read
+ * (`toggleFamilyNetworks`, `familyOnlyPatch` and the rest of modules/select.js): the shipped
+ * networks, plus a Network TBA entry when a game or an upcoming game has no network yet.
+ * Families follow the booth picker's order (`lookups.network_groups`: Fox, CBS, NBC, ESPN/ABC,
+ * then the rest), each family's networks follow network precedence (ABC before ESPN, NBC before
+ * Peacock), and Network TBA is last.
+ */
+function networkFacade(networks, networkGroups, hasTba) {
+  const list = hasTba ? [...networks, { ...TBA_NETWORK, family: TBA_FAMILY }] : [...networks];
+  const families = [];
+  const note = (family) => {
+    if (!families.includes(family)) families.push(family);
+  };
+  for (const g of networkGroups) for (const m of g.members || []) note(networks[m].family);
+  for (const net of networks) note(net.family);
+  // The catch-all family reads last among the shipped ones, as on the CFB legend.
+  if (families.includes('other')) families.push(...families.splice(families.indexOf('other'), 1));
+  if (hasTba) families.push(TBA_FAMILY);
+  const networksByFamily = new Map();
+  for (const family of families) {
+    const members = list.map((net, idx) => ({ id: net.id, idx })).filter((e) => list[e.idx].family === family);
+    networksByFamily.set(family, sortNetworks(members).map((e) => e.idx));
+  }
+  return {
+    lookups: { networks: list },
+    primaryNetworks: list.map((_, idx) => idx),
+    families,
+    networksByFamily,
+    ids: list.map((net) => net.id),
+    tbaIndex: hasTba ? networks.length : null,
+  };
+}
 
 /** Category codes in model.category (D-24 precedence). */
 export const CATEGORY_CODES = Object.freeze({
@@ -152,6 +191,8 @@ export function prepareNfl(raw) {
 
   const franchiseIndex = new Map(franchises.map((f, k) => [f.id, k]));
   const personIndex = new Map(people.map((p, k) => [p.id, k]));
+  const hasTba = (cols.network || []).some((v) => v == null)
+    || (raw.upcoming?.network ?? []).some((v) => v == null);
 
   return {
     n,
@@ -172,6 +213,7 @@ export function prepareNfl(raw) {
     seasonWeeks,
     networkGroups,
     groupOfNetwork,
+    net: networkFacade(networks, networkGroups, hasTba),
     viewCategories,
     booths,
     viewership,

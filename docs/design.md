@@ -47,10 +47,17 @@ records only where the site settles or applies them.
 - Light mode is the default. Dark mode is reached by the theme toggle at the top right
   of the header, optically centred on the header links (Phase 17).
 - The CFB, NFL and MLB pages share one visual system.
-- The NFL Special games legend's info button opens a centred modal (`dialog.info-modal`, the
+- The NFL Team games legend's info button opens a centred modal (`dialog.info-modal`, the
   game panel's frame, close button, backdrop and Escape), not a note in the page flow: nine
   definitions are too many for a note beside the chart, and opening it must not move the page
-  (user 2026-11-14).
+  (user 2026-11-14). Its content follows the tab's toggle: the network notes with "Special
+  games only" off, the nine category definitions with it on.
+- The first NFL tab, Team games (the owner's pick of name, 2026-11-14, over Games, By network
+  and TV slate), is every game by team; "Special games only", a checkbox
+  in the module header tools like Crews' Per season, shows the old Special games tab. Links:
+  the tab is the default view and writes no `view`; the toggle is `special=1`. A bare
+  `?sport=nfl` opens with the toggle off, and the old tab's name, `view=special`, opens with
+  it on.
 - This weekend is the sixth CFB tab and the fifth NFL tab (NFL behind its site flag): a
   control row (week stepper, day tabs), the timeline grid, a collapsible Time TBA strip, the
   CFB ESPN+ and regional table, a saved-at line (when the crews and the schedule were saved)
@@ -125,9 +132,14 @@ records only where the site settles or applies them.
   Announcer and School both picked, both controls are accented; untouched controls stay
   neutral (Phase 12).
 
-- The NFL bar is the same ledger: Broadcast (Announcers 250px, Booths), Matchup (Team, Category)
-  and Calendar (Seasons), 148px entries, one row from 1024px, and the same count line and phone
-  panel. NFL has no compare mode, so its count line never shows person or booth chips on desktop
+- The NFL bar is the same ledger: Broadcast (Announcers 250px, Networks, Booths), Matchup
+  (Team, Category) and Calendar (Seasons), 148px entries, and the same count line and phone
+  panel. It is one row from 1200px (six entries need 1166px; it was 1024px before Networks was
+  added) and Broadcast takes its own row below that (user 2026-11-14, over narrower entries
+  that would have kept one row at 1024px). Networks is the CFB filter: the same
+  family-nested list (tri-state family box, caret, counts, Only / All), the same value line
+  (the checked network names, "None" for an empty pick) and the same `networks` link param,
+  with Network TBA as its own row for games with no network yet. NFL has no compare mode, so its count line never shows person or booth chips on desktop
   (the pick already shows its name); the phone Filters sheet keeps them in its people strip; MLB has no bar and takes the count line's chip shape, and its Matched games sits in the same module frame as CFB's (Phase 26).
 
 ## Copy
@@ -160,6 +172,11 @@ records only where the site settles or applies them.
   `--muted` rule on the left of Thursday night, Fox AGOTW, Special games and Flexed, with
   trimmed spanner rules over "Solo slots" and "Sunday windows" (Silver Bulletin is the
   reference). Every other table keeps booktabs rules (Phase 17.1).
+- With "Special games only" off the same table has one column per network family under a
+  "Games by network" spanner, then Games (their sum) and Special games, with the same 1px
+  rules before the first network, Games and Special games. A family the Networks filter turns
+  off reads as a dash, as a chip-hidden category does. Its heads are short, so the table is as
+  wide as its content rather than the module.
 - A header with a tooltip gets a dotted underline in `--muted` and no icon (Phase 17.1).
 - The CFB chart tooltip shows the primary network only; the other outlets are listed in the
   panel's "Also on" line, which never lists ESPN Radio, since a game with a primary network
@@ -201,6 +218,32 @@ records only where the site settles or applies them.
   the legend chip's colour dot, the count right-aligned in tabular semibold figures.
   International (any window) and Flexed cut across the categories, so they show only
   while every chip is on.
+- The NFL all-games bars ("Special games only" off) are the CFB Bars' stacked bars
+  (`stackedTraces` in `site/modules/bar-chart.js`), one group per network family in the shared
+  family colour with the Bars' 3px page-colour gap between groups (2px on a phone), and no
+  in-bar text. Inside a group the solid part is the network's special games and the light part
+  (the family colour at 25%) its other games: the Bars' rated and unrated look, so solid always
+  means the notable subset (user 2026-11-14, over special in a darker shade with the other
+  games in the full colour, which turned NBC, ESPN and Other plum, navy and charcoal). A family
+  is one group in one colour (user 2026-11-14). Rejected: the CFB channel shades, where ESPN's
+  lighter blue read as "not special", and one piece per network in the family colour, whose
+  small pieces vanish under the gaps on a phone. The hover
+  names each network of a family ("ABC 4, ESPN 24") and each group's special games; it does not
+  split them by category, which the toggle does. Groups follow the booth picker's order (Fox,
+  CBS, NBC, ESPN/ABC), then Other, then Network TBA, a pale neutral (the muted tone at 45% on
+  the page) a clear step lighter than Other's grey, drawn in one tone whether special or not.
+- The legend row with the toggle off: the family chips (the CFB legend's rules: a click turns
+  the family on or off in the Networks filter, a double-click shows only it, a family with no
+  games under the other filters is dotted), then a caption-sized key in neutral marks,
+  "Special games" (solid) and "Not special" (light), then the info button. The key says
+  "Not special", not "Other games", because Other is a network chip beside it.
+- The all-games bars rank by special games (ties by name) while no filter narrows them,
+  because every team then has about the same total. That is the Special games bars' order with
+  every category chip on, so the rows keep their places when the toggle flips; a hidden
+  category chip re-ranks the Special games bars only. Once Networks, Category, Announcers or
+  Booths narrows the all-games bars they rank by their total. Team only
+  fades the other teams' bars, as on the Special games bars. A faded row is drawn in tones
+  mixed toward the page, not translucent, so piece borders never add up to a darker line.
 
 - When a filter is active, lead stars take the same outline as the enlarged dots, at the
   same weight: dark in light mode, light in dark mode.

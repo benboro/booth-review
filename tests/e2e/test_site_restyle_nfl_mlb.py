@@ -19,12 +19,13 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 NFL_GROUPS = [
-    ("Broadcast", ["Announcers", "Booths"]),
+    ("Broadcast", ["Announcers", "Networks", "Booths"]),
     ("Matchup", ["Team", "Category"]),
     ("Calendar", ["Seasons"]),
 ]
 NFL_DEFAULTS = {
     "announcers": "Any",
+    "networks": "All",
     "booths": "Any",
     "team": "Any",
     "category": "All",
@@ -150,7 +151,7 @@ def test_nfl_nothing_moves_across_picks_and_this_weekend(
         _set(page, {"people": [], "teams": [], "cats": []})
     _set(page, {"view": "weekend"})
     assert _snap(page) == base, "this weekend"
-    _set(page, {"view": "special", **LONG_PICK})
+    _set(page, {"view": "teams", **LONG_PICK})
     assert _snap(page) == base, "back with a long pick"
 
 
@@ -189,7 +190,8 @@ def test_nfl_bar_rows_depend_only_on_the_viewport(
     page = nfl_guarded_page
     rows_js = """() => new Set([...document.querySelectorAll('#nfl-toolbar .filter-trigger')]
       .map((b) => Math.round(b.getBoundingClientRect().top))).size"""
-    for width, rows in ((1440, 1), (1024, 1), (800, 2), (600, 3)):
+    # Six fixed-width entries need 1166px, so the bar is one row from 1200px.
+    for width, rows in ((1440, 1), (1200, 1), (1024, 2), (800, 2), (600, 3)):
         _open(page, open_nfl_app, width)
         assert page.evaluate(rows_js) == rows, width
         _set(page, LONG_PICK)

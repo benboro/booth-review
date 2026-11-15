@@ -3,8 +3,10 @@
 // A pooled row is one play-by-play voice + analyst pair per network group; shipped booth
 // season rows pool across the Seasons range (exactly, from each season's n, mean and SE).
 // A pick that cuts inside a booth season (Team, Category, an Announcers pick that matches
-// another seat) recounts each row from its matched games and forces Raw.
-import { classifyAnnouncers, computePicks, boothKeyOf, crewsScopeRows } from './picks.js';
+// another seat, a Networks pick that keeps only some of a booth's games) recounts each row from
+// its matched games and forces Raw. A Networks pick that keeps or drops whole booth seasons
+// (Fox only) is a row filter and keeps Adjusted.
+import { classifyAnnouncers, computePicks, boothKeyOf, crewsScopeRows, networksCutRows } from './picks.js';
 import { lowNThreshold, crewsMode } from './mode.js';
 import { NFL_NATURAL_DIR } from './state.js';
 import { defaultSort, rankRunOf, sortCrewRows } from '../../modules/crew-groups.js';
@@ -98,13 +100,14 @@ export function buildNflCrewRows(model, state) {
   const scope = crewsScopeRows(model, state);
   const announcers = classifyAnnouncers(model, state, scope);
   const picks = computePicks(model, state);
+  const networkCuts = networksCutRows(model, state, scope);
   const subset = (state.teams || []).length > 0 || (state.cats || []).length > 0
-    || announcers === 'subset';
+    || announcers === 'subset' || networkCuts;
   let kept = scope;
   if (announcers === 'rowfilter') {
     kept = scope.filter((r) => r.pbp_person != null && picks.peopleIdx.has(r.pbp_person));
   }
-  const m = crewsMode(state, { announcers });
+  const m = crewsMode(state, { announcers, networkCuts });
   const adjustedMode = m.effective === 'adjusted' && !subset;
   const threshold = lowNThreshold(model);
 
