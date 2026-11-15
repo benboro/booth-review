@@ -4438,6 +4438,12 @@ body:not([data-sport="nfl"], [data-sport="mlb"]) #sport-load-error {
 .nfl-show-all {
   align-self: flex-start;
   margin-top: var(--space-sm);
+  text-align: center;
+}
+
+/* An expand/collapse button, not a filter: no reserved check slot, so the label sits centered. */
+.nfl-show-all[aria-pressed]::before {
+  content: none;
 }
 
 /* The season-by-season table's group rules: the one table with vertical rules (D-11). */
