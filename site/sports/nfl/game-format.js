@@ -37,13 +37,16 @@ export function slotLabel(code) {
   return SLOT_NAMES[code] ?? code;
 }
 
-/** Ordered subset of the flag labels set on the row. */
+/**
+ * Ordered subset of the flag labels set on the row. The International flag is
+ * left out when the slot itself is International, so it is not named twice.
+ */
 export function flagLabels(row) {
   const out = [];
   if (row.standalone) out.push('Solo slot');
   if (row.agotw) out.push('Fox AGOTW');
   if (row.cbsNational) out.push('CBS late national');
-  if (row.international) out.push('International');
+  if (row.international && row.slot !== 'International') out.push('International');
   if (row.flexed) out.push('Flexed');
   return out;
 }
