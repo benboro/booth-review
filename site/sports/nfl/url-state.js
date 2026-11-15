@@ -1,6 +1,12 @@
 /**
  * NFL URL state (D-05, D-06). DOM-free. Encodes `sport=nfl` first plus only
  * non-default params; decoding allowlists every value and never throws.
+ *
+ * The first tab (every game by team) is the default view and writes no `view`; its "Special
+ * games only" toggle is `special=1`. Old links: a bare `?sport=nfl` opens the tab with the toggle
+ * off (the new default), and `view=special`, the old tab's name, opens it with the toggle on.
+ * `networks` is the Networks pick, as on the CFB page: comma-separated network ids (`tba` for a
+ * game with no network yet), `none` for an empty pick, omitted when every network is picked.
  */
 import {
   canonicalNflState, defaultNflState, CATEGORY_OPTIONS, CREW_METRICS, NFL_NATURAL_DIR,
@@ -21,6 +27,7 @@ export function encodeNflState(state, model) {
   const d = defaultNflState(model);
   const parts = ['sport=nfl'];
   if (VIEW_PARAM.includes(s.view)) parts.push('view=' + s.view);
+  if (s.special) parts.push('special=1');
   if (s.view === 'weekend') {
     if (s.week != null) parts.push('week=' + s.week);
     if (s.day != null) parts.push('day=' + s.day);
@@ -32,6 +39,9 @@ export function encodeNflState(state, model) {
   if (s.teams.length) parts.push('team=' + s.teams.map(encodeURIComponent).join(','));
   if (s.people.length) parts.push('people=' + s.people.map(encodeURIComponent).join(','));
   if (s.cats.length) parts.push('cat=' + s.cats.map(encodeURIComponent).join(','));
+  if (s.networks != null) {
+    parts.push('networks=' + (s.networks.length ? s.networks.map(encodeURIComponent).join(',') : 'none'));
+  }
   if (s.booths.length) parts.push('booths=' + s.booths.map(encodeURIComponent).join(','));
   if (s.perseason === false) parts.push('perseason=0');
   // decode keeps csort=season only when the table has a Season column (Per season on and a
@@ -78,6 +88,7 @@ export function decodeNflState(search, model) {
   const q = typeof search === 'string' ? search.replace(/^\?/, '') : '';
   const seen = new Set();
   let legacySeason = null;
+  let legacySpecial = false;
   let csort = null;
   for (const pair of q.split('&')) {
     const eq = pair.indexOf('=');
@@ -91,8 +102,11 @@ export function decodeNflState(search, model) {
         const v = safeDecode(raw);
         if (VIEW_PARAM.includes(v)) state.view = v;
         else if (Object.prototype.hasOwnProperty.call(VIEW_ALIASES, v)) state.view = VIEW_ALIASES[v];
+        // The old first tab: the same tab with "Special games only" on.
+        else if (v === 'special') legacySpecial = true;
         break;
       }
+      case 'special': if (raw === '1') state.special = true; break;
       case 'week': if (/^\d{1,2}$/.test(raw)) state.week = Number(raw); break;
       case 'day': if (DAY_TOKENS.includes(raw)) state.day = raw; break;
       case 'wview': if (raw === 'map') state.wview = 'map'; break;
@@ -105,6 +119,17 @@ export function decodeNflState(search, model) {
       case 'people': state.people = list(raw); break;
       case 'cat': state.cats = list(raw).filter((k) => CATEGORY_OPTIONS.some((o) => o.key === k)); break;
       case 'net': break; // legacy one-network param: read and ignored
+      case 'networks': {
+        // 'none' is the empty pick; unknown ids drop, and a list with no known id is unfiltered.
+        // A link to the no-network entry alone stays an empty pick once every game has its network.
+        if (raw === 'none') state.networks = [];
+        else {
+          const picked = list(raw);
+          const ids = picked.filter((id) => model.net.ids.includes(id));
+          state.networks = ids.length ? ids : picked.includes('tba') ? [] : null;
+        }
+        break;
+      }
       case 'booths': state.booths = list(raw); break;
       case 'cseason':
       case 'fseason':
@@ -130,6 +155,7 @@ export function decodeNflState(search, model) {
     && legacySeason >= model.seasons[0] && legacySeason <= model.seasons[1]) {
     state.seasons = [legacySeason, legacySeason];
   }
+  if (legacySpecial && state.view === 'teams') state.special = true;
   const out = canonicalNflState(state, model);
   if (csort) {
     const def = defaultSort(out.perseason);

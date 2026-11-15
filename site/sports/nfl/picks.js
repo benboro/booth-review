@@ -1,10 +1,11 @@
 // NFL pick layer (Phase 15): one DOM-free answer to "which games does this pick match",
-// so every NFL view reads the same mask. Seasons, Team and Category decide whether a game
-// passes; Announcers and Booths decide whether a passing game is matched (their
+// so every NFL view reads the same mask. Seasons, Networks, Team and Category decide whether a
+// game passes; Announcers and Booths decide whether a passing game is matched (their
 // intersection when both are set, U-05).
-import { gamePasses, boothGames } from './state.js';
+import { gamePasses, boothGames, networkIdOf } from './state.js';
 
-let memo = null;
+const MEMO_SIZE = 4;
+let memo = [];
 
 /** The Booths-pick key of a booth row: "<group id>:<pbp person id>", null without a pbp. */
 export function boothKeyOf(model, row) {
@@ -13,13 +14,16 @@ export function boothKeyOf(model, row) {
 }
 
 /**
- * Per-game masks for the current pick. `passes` is Seasons AND Team AND Category;
+ * Per-game masks for the current pick. `passes` is Seasons AND Networks AND Team AND Category;
  * `matched` further requires the Announcers pick (any seat) and the Booths pick.
  * Memoized on the pick signature and the model identity.
  */
 export function computePicks(model, state) {
-  const signature = JSON.stringify([state.seasons, state.teams, state.cats, state.people, state.booths]);
-  if (memo && memo.model === model && memo.result.signature === signature) return memo.result;
+  const signature = JSON.stringify([
+    state.seasons, state.teams, state.cats, state.people, state.booths, state.networks ?? null,
+  ]);
+  const hit = memo.find((m) => m.model === model && m.result.signature === signature);
+  if (hit) return hit.result;
 
   const n = model.n;
   const crew = model.cols.crew;
@@ -47,19 +51,50 @@ export function computePicks(model, state) {
     signature, passes, matched, hasPeople, hasBooths,
     hasPick: hasPeople || hasBooths, peopleIdx, boothSet, matchedCount,
   };
-  memo = { model, result };
+  // A render asks for the pick with and without Team (the all-games bars) and without Networks
+  // (the Networks list's counts), so the last few answers are kept, newest first.
+  memo.unshift({ model, result });
+  memo.length = Math.min(memo.length, MEMO_SIZE);
   return result;
 }
 
-/** The booth rows in scope on Crews: Seasons range, then the Booths row filter. */
+/**
+ * How a Networks pick meets one booth row: 'in' (no pick, or every game of the row is on a
+ * picked network), 'out' (none is) or 'cut' (some are, so the pick cuts inside the booth season).
+ * A lineup-only row (no games yet) is 'in' when any network of its group is picked.
+ */
+export function networksRowState(model, state, row) {
+  const picked = state.networks;
+  if (picked == null) return 'in';
+  const games = row.gameList || [];
+  if (!games.length) {
+    const members = model.networkGroups[row.network_group].members || [];
+    return members.some((m) => picked.includes(model.networks[m].id)) ? 'in' : 'out';
+  }
+  let on = 0;
+  for (const g of games) if (picked.includes(networkIdOf(model, g))) on += 1;
+  if (on === 0) return 'out';
+  return on === games.length ? 'in' : 'cut';
+}
+
+/**
+ * The booth rows in scope on Crews: Seasons range, the Booths row filter, then the Networks
+ * pick, which drops a row with no game on a picked network.
+ */
 export function crewsScopeRows(model, state) {
   const booths = state.booths || [];
   return model.booths.filter((r) => {
     if (r.season < state.seasons[0] || r.season > state.seasons[1]) return false;
+    if (networksRowState(model, state, r) === 'out') return false;
     if (!booths.length) return true;
     const k = boothKeyOf(model, r);
     return k !== null && booths.includes(k);
   });
+}
+
+/** Whether the Networks pick cuts inside any in-scope booth row (some of its games, not all). */
+export function networksCutRows(model, state, scopeRows) {
+  return state.networks != null && scopeRows.some((r) => networksRowState(model, state, r) === 'cut');
 }
 
 /**

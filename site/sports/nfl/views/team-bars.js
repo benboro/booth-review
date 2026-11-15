@@ -1,13 +1,19 @@
 /**
- * NFL view 1: Special games by team (D-12, D-13, D-24).
+ * NFL view 1: games by team (D-12, D-13, D-24), one horizontal Plotly bar per franchise over
+ * the selected seasons, each game counted once per team.
  *
- * A stacked horizontal Plotly bar per franchise over the selected seasons, eight
- * exclusive segments (Thursday night ... International), each game
- * counted once. The legend is CFB's chip row with double-click "only this one"
- * (D-15) and an info note with one definition per segment (D-13). Hover text, the
- * season breakdown and the hidden data table are all built with
- * createElement/textContent; names enter Plotly strings only through
- * escapeHover, and customdata carries row indexes, never names.
+ * With "Special games only" off (the default) a bar holds every game the filters pass, grouped
+ * by network family, the special games solid and the other games light (views/network-bars.js).
+ * The legend chips are the network families and act on the Networks filter, as on the CFB page.
+ *
+ * With it on, a bar holds the special games in eight exclusive segments (Thursday night ...
+ * International), the legend chips show and hide a segment, and the info note has one
+ * definition per segment (D-13). This is the old Special games tab, unchanged.
+ *
+ * Both legends are CFB's chip row with double-click "only this one" (D-15). Hover text, the
+ * season breakdown and the hidden data table are all built with createElement/textContent;
+ * names enter Plotly strings only through escapeHover, and customdata carries row indexes,
+ * never names.
  */
 import {
   teamBars,
@@ -16,25 +22,39 @@ import {
   rankTeamBars,
   shownTotal,
   pendingNetworkSeasons,
+  networkBars,
+  networkSeasonRows,
+  networkFacets,
+  networkIdOf,
+  countedMask,
   SLOT_SEGMENT,
   EXCLUSIVE_CATEGORIES,
 } from '../state.js';
 import { computePicks } from '../picks.js';
 import { createOnlyDetector, makeLegendChip } from '../../../modules/legend.js';
+import {
+  familyIsSole,
+  familyOnlyPatch,
+  familyToggledOff,
+  toggleFamilyNetworks,
+} from '../../../modules/select.js';
 import { MARGIN, TICK_FONT_PX, DOT_OPACITY } from '../../../modules/chart.js';
-import { categoryColor } from '../palette.js';
+import { categoryColor, familyColor, familyLabel } from '../palette.js';
 import { ACCENT, INK, MUTED, PAGE_BG, DIVIDER, SPECIAL, mixHex } from '../../../modules/palette.js';
 import { FRAME_FONT, frameConfig, frameLayout } from '../../../modules/chart-frame.js';
 import {
   endMarkerAnnotations,
   endMarkerShapes,
   markerWidth,
+  overlayAxis,
   textWidth,
 } from '../../../modules/bar-chart.js';
 import { ensureTooltipEl, showTextTooltip, hideTooltip } from '../../../modules/tooltip.js';
 import { attachScrollCue } from '../../../modules/scroll-cue.js';
 import { escapeHover } from '../../../modules/format.js';
 import { DATA_TABLE_CLASS, rebuildKeepingFocus } from '../data-table.js';
+import { mountViewTools } from '../tools.js';
+import { networkTraces, networkHoverModel } from './network-bars.js';
 
 const SEGMENTS = EXCLUSIVE_CATEGORIES.filter((c) => c.key !== 'none');
 const TOP_N = 15;
@@ -79,11 +99,16 @@ const refs = {
   captions: null,
   pending: null,
   dataBody: null,
+  dataHead: null,
+  dataCaption: null,
+  specialBox: null,
+  shadeKey: null,
+  infoButton: null,
   bound: false,
 };
 
 // What the last render drew (also what the event handlers read).
-let drawn = null; // { rows, env, theme, state, model }
+let drawn = null; // { all, rows, env, theme, state, model, pending }
 
 function theme(env) {
   return env.dark ? 'dark' : 'light';
@@ -103,9 +128,9 @@ function teamLabel(model, state, fIdx) {
 }
 
 /**
- * The franchise's games in the season range that sit in a stack segment the legend leaves
- * visible, so a bar click lists the games the bar shows. With every chip on that is every
- * special or international game of the team.
+ * Special games only: the franchise's games in the season range, on a picked network, that sit
+ * in a stack segment the legend leaves visible, so a bar click lists the games the bar shows.
+ * With every chip on that is every special or international game of the team.
  */
 function teamGames(model, state, fIdx) {
   const c = model.cols;
@@ -113,6 +138,8 @@ function teamGames(model, state, fIdx) {
   const hidden = new Set(state.hiddenSegments);
   return (model.franchiseGames.get(fIdx) || []).filter((i) => {
     if (c.season[i] < lo || c.season[i] > hi) return false;
+    // A Networks pick narrows the bar (state.js specialRows), so it narrows the bar's games too.
+    if (state.networks != null && !state.networks.includes(networkIdOf(model, i))) return false;
     const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
     return !!cat && cat.key !== 'none' && !hidden.has(cat.key);
   });
@@ -228,27 +255,45 @@ function toggleTeam(row) {
     ctx.clearSelection();
     return;
   }
-  ctx.selectGames({
-    kind: 'team',
-    key: id,
-    label: row.label,
-    games: teamGames(model, state, row.bar.franchise),
-  });
+  ctx.selectGames(teamSelection(model, state, row.bar, id, row.label));
+}
+
+/**
+ * The selection a team bar makes. An all-games bar lists exactly the games it counts (`exact`:
+ * the Matched games table does not filter them again); a Special games bar lists its shown
+ * segments' games.
+ */
+function teamSelection(model, state, bar, id, label) {
+  if (!state.special) return { kind: 'team', key: id, label, games: bar.games, exact: true };
+  return { kind: 'team', key: id, label, games: teamGames(model, state, bar.franchise) };
+}
+
+/** The drawn row a Plotly point belongs to: customdata is the row index, or `{ r }` on the shared stacked bars. */
+function pointRow(ev) {
+  const cd = ev.points && ev.points[0] ? ev.points[0].customdata : null;
+  const k = Number.isInteger(cd) ? cd : cd && Number.isInteger(cd.r) ? cd.r : null;
+  return drawn && k != null && drawn.rows[k] ? drawn.rows[k] : null;
+}
+
+/** The hover model of a drawn row, for the mode it was drawn in. */
+function rowHover(d, row) {
+  return d.all
+    ? networkHoverModel(d.model, d.state, row.label, row.bar, d.theme)
+    : hoverModel(d.state, row.label, row.bar, d.theme, d.pending);
 }
 
 function bindEvents(gd) {
   if (refs.bound) return;
   refs.bound = true;
   gd.on('plotly_click', (ev) => {
-    const k = ev.points && ev.points[0] ? ev.points[0].customdata : null;
-    if (drawn && Number.isInteger(k) && drawn.rows[k]) toggleTeam(drawn.rows[k]);
+    const row = pointRow(ev);
+    if (row) toggleTeam(row);
   });
   gd.on('plotly_hover', (ev) => {
-    const k = ev.points && ev.points[0] ? ev.points[0].customdata : null;
-    if (!drawn || !Number.isInteger(k) || !drawn.rows[k]) return;
+    const row = pointRow(ev);
+    if (!row) return;
     if (drawn.env.mobile || drawn.env.hoverNone) return;
-    const row = drawn.rows[k];
-    const lines = tooltipLines(hoverModel(drawn.state, row.label, row.bar, drawn.theme, drawn.pending));
+    const lines = tooltipLines(rowHover(drawn, row));
     lines.push({ text: 'Click to see seasons and games.', kind: 'hint' });
     const e = ev.event || {};
     showTextTooltip(lines, {
@@ -283,9 +328,49 @@ function setHidden(ctx, hide) {
   ctx.setState({ hiddenSegments: ALL_KEYS.filter((k) => set.has(k)) });
 }
 
+/** "A", "A and B", "A, B and C". */
+function joinAnd(names) {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** The network names of a family, in the family's network order. */
+function familyNetworkNames(model, family) {
+  const { net } = model;
+  return (net.networksByFamily.get(family) ?? []).map((idx) => net.lookups.networks[idx].name);
+}
+
+/** The info note with "Special games only" off: what a bar, its groups and its two fills mean. */
+function networkNotes(model) {
+  const { net } = model;
+  const lines = [
+    "Each bar counts a team's regular-season games in the Seasons range, once each, grouped by the network that carried them.",
+    "Solid: the network's special games. A special game is alone in its window (Thursday, Sunday or Monday night, a holiday, or another solo slot), is Fox AGOTW or CBS late national, or was played abroad.",
+    "Light: the network's other games, mostly regional Sunday afternoons.",
+  ];
+  const shared = net.families.filter((f) => f !== 'tba' && f !== 'other' && familyNetworkNames(model, f).length > 1);
+  if (shared.length) {
+    lines.push(`A group can hold several networks: ${shared.map((f) => joinAnd(familyNetworkNames(model, f))).join('; ')}. The hover counts each one.`);
+  }
+  if (net.families.includes('other')) lines.push(`Other: ${joinAnd(familyNetworkNames(model, 'other'))}.`);
+  if (net.families.includes('tba')) {
+    lines.push(`${familyLabel('tba')}: a game whose network is not in the data, or is not assigned yet.`);
+  }
+  lines.push('A chip turns a network on or off in the Networks filter. Turn on Special games only to split the special games by category.');
+  return lines;
+}
+
 /** Binds the one delegated chip listener (D-15); the chips themselves are rebuilt each render. */
 function bindLegend() {
   const { ctx, legend } = refs;
+  // Network chips are the Networks filter, with the CFB legend's rules (modules/select.js).
+  const families = createOnlyDetector({
+    onToggle: (family) => ctx.setState({ networks: toggleFamilyNetworks(ctx.model.net, ctx.getState(), family) }),
+    onOnly: (family, before) => {
+      const view = { facets: { networks: networkFacets(ctx.model, ctx.getState()) } };
+      ctx.setState(familyOnlyPatch(ctx.model.net, view, family, before));
+    },
+    snapshot: () => ctx.getState().networks,
+  });
   const detector = createOnlyDetector({
     onToggle: (key) => {
       const cur = new Set(ctx.getState().hiddenSegments);
@@ -301,14 +386,45 @@ function bindLegend() {
     snapshot: () => [...ctx.getState().hiddenSegments],
   });
   legend.addEventListener('click', (ev) => {
-    const button = ev.target.closest('button[data-segment]');
+    const button = ev.target.closest('button[data-segment], button[data-family]');
     if (!button) {
       // A click in the gaps between chips ends any pending first click.
       detector.reset();
+      families.reset();
       return;
     }
-    detector.click(ev, button.dataset.segment);
+    if (button.dataset.family) families.click(ev, button.dataset.family);
+    else detector.click(ev, button.dataset.segment);
   });
+}
+
+/**
+ * The network chips: one per family, on unless the Networks filter excludes every network of
+ * the family, and dotted (`data-offered="false"`) when the other filters leave it no games.
+ */
+function renderNetworkLegend(model, state, th) {
+  const { net } = model;
+  const counts = networkFacets(model, state);
+  const view = { facets: { networks: counts } };
+  const items = net.families.map((family) => {
+    const label = familyLabel(family);
+    const hint = familyIsSole(net, view, family, state.networks)
+      ? 'Double-click to show all networks'
+      : `Double-click to show only ${label}`;
+    const b = makeLegendChip({
+      label,
+      color: familyColor(family, th),
+      pressed: !familyToggledOff(net, state, family),
+      hint,
+      data: { family },
+    });
+    const games = (net.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + counts[idx], 0);
+    b.dataset.offered = String(games > 0);
+    const li = document.createElement('li');
+    li.appendChild(b);
+    return li;
+  });
+  refs.legend.replaceChildren(...items);
 }
 
 function renderLegend(state, th) {
@@ -337,7 +453,7 @@ function renderLegend(state, th) {
 function buildInfo(ctx) {
   const button = el('button', 'band-info');
   button.type = 'button';
-  button.setAttribute('aria-label', 'About these categories');
+  button.setAttribute('aria-label', 'About this chart');
   button.setAttribute('aria-expanded', 'false');
   button.append(el('span', 'band-info-glyph', 'i'));
   button.firstChild.setAttribute('aria-hidden', 'true');
@@ -352,23 +468,29 @@ function buildInfo(ctx) {
   const close = el('button', 'panel-close', '×');
   close.type = 'button';
   close.setAttribute('aria-label', 'Close');
-  const title = el('h2', null, 'Special game categories');
+  const title = el('h2');
   title.id = 'nfl-special-info-title';
   const body = el('div', 'panel-body');
-  for (const line of SEGMENT_NOTES) body.appendChild(el('p', null, line));
-  const foot = el('p');
-  foot.append(document.createTextNode('Each game counts once. See '));
-  const a = el('a', null, 'methodology');
-  a.href = ctx.methodologyHref('nfl-special-games');
-  a.rel = 'noopener noreferrer';
-  foot.append(a, document.createTextNode(' for the full rules.'));
-  body.appendChild(foot);
+  // The note follows the toggle: the networks and the two fills, or the eight categories.
+  const fill = () => {
+    const all = !ctx.getState().special;
+    title.textContent = all ? 'Games by network' : 'Special game categories';
+    const foot = el('p');
+    foot.append(document.createTextNode(all ? 'Each game counts once per team. See ' : 'Each game counts once. See '));
+    const a = el('a', null, 'methodology');
+    a.href = ctx.methodologyHref(all ? 'nfl-games-by-network' : 'nfl-special-games');
+    a.rel = 'noopener noreferrer';
+    foot.append(a, document.createTextNode(' for the full rules.'));
+    const lines = all ? networkNotes(ctx.model) : SEGMENT_NOTES;
+    body.replaceChildren(...lines.map((line) => el('p', null, line)), foot);
+  };
   inner.append(close, title, body);
   dialog.appendChild(inner);
 
   let downOnBackdrop = false;
   button.addEventListener('click', () => {
     if (dialog.open) return;
+    fill();
     dialog.showModal();
     button.setAttribute('aria-expanded', 'true');
   });
@@ -583,6 +705,10 @@ function renderBreakdown(model, state, env, rows) {
   const label = teamLabel(model, state, fIdx);
   breakdown.hidden = false;
   breakdown.appendChild(el('h3', null, `${label}: season by season`));
+  if (!state.special) {
+    renderNetworkBreakdown(model, state, env, rows, fIdx, label);
+    return;
+  }
 
   const bar = (rows.find((r) => r.bar.franchise === fIdx) || {}).bar
     || teamBars(model, state).find((b) => b.franchise === fIdx);
@@ -592,21 +718,7 @@ function renderBreakdown(model, state, env, rows) {
     // The hover content on a phone, with the same colour dots as the tooltip. It is appended
     // after the table (v2.1, todo 2026-10-25-nfl-phone-season-table-reach), so the table sits
     // right under its heading instead of below ten stacked lines.
-    const m = hoverModel(state, label, bar, theme(env), pending);
-    lines = el('div', 'nfl-breakdown-lines');
-    const texts = hoverTextLines(m).slice(1);
-    texts.forEach((text, k) => {
-      const p = el('p');
-      const row = m.rows[k - 1];
-      if (row) {
-        const dot = el('span', 'tooltip-counts-dot');
-        dot.setAttribute('aria-hidden', 'true');
-        dot.style.backgroundColor = row.color;
-        p.appendChild(dot);
-      }
-      p.appendChild(document.createTextNode(text));
-      lines.appendChild(p);
-    });
+    lines = phoneLines(hoverModel(state, label, bar, theme(env), pending));
   }
   const pendingSeasons = new Set(pending.seasons);
   const PENDING_KEYS = new Set(['agotw', 'cbs_national']);
@@ -684,12 +796,7 @@ function renderBreakdown(model, state, env, rows) {
   table.append(...groups, thead, tbody);
   // Eleven columns do not fit a phone; the table scrolls inside its own wrapper, with the
   // site's edge-fade scroll cue (v2.1). The breakdown lines follow the table.
-  const scroll = el('div', 'table-scroll');
-  scroll.appendChild(table);
-  breakdown.appendChild(scroll);
-  refs.cueOff?.();
-  refs.cueOff = attachScrollCue(scroll, null);
-  if (lines) breakdown.appendChild(lines);
+  appendBreakdownTable(table, lines);
 
   if (!tbody.children.length) {
     breakdown.appendChild(el('p', 'nfl-muted', 'No games in the shown categories.'));
@@ -711,8 +818,142 @@ function renderBreakdown(model, state, env, rows) {
   }
 }
 
-function renderDataTable(rows) {
+/** Appends the season table in its scroll wrapper (the site's edge-fade cue) and, on a phone, the hover lines. */
+function appendBreakdownTable(table, lines) {
+  const { breakdown } = refs;
+  const scroll = el('div', 'table-scroll');
+  scroll.appendChild(table);
+  breakdown.appendChild(scroll);
+  refs.cueOff?.();
+  refs.cueOff = attachScrollCue(scroll, null);
+  if (lines) breakdown.appendChild(lines);
+}
+
+/** The hover model as the phone's lines under the season table, with the tooltip's colour dots. */
+function phoneLines(m) {
+  const lines = el('div', 'nfl-breakdown-lines');
+  hoverTextLines(m).slice(1).forEach((text, k) => {
+    const p = el('p');
+    const row = m.rows[k - 1];
+    if (row) {
+      const dot = el('span', 'tooltip-counts-dot');
+      dot.setAttribute('aria-hidden', 'true');
+      dot.style.backgroundColor = row.color;
+      p.appendChild(dot);
+    }
+    p.appendChild(document.createTextNode(text));
+    lines.appendChild(p);
+  });
+  return lines;
+}
+
+const NETWORK_SPECIAL_TIP = 'The games among them in a special category: a solo slot, Fox AGOTW, CBS late national or a game played abroad.';
+
+/**
+ * The season table with "Special games only" off: one column per network family, then the
+ * season's games (their sum) and how many of them are special. A family the Networks filter
+ * turns off reads as a dash, as a chip-hidden category does on the Special games table.
+ */
+function renderNetworkBreakdown(model, state, env, rows, fIdx, label) {
+  const { breakdown } = refs;
+  const { net } = model;
+  const bar = (rows.find((r) => r.bar.franchise === fIdx) || {}).bar;
+  const lines = (env.mobile || env.hoverNone) && bar
+    ? phoneLines(networkHoverModel(model, state, label, bar, theme(env)))
+    : null;
+  const off = new Set(net.families.filter((f) => familyToggledOff(net, state, f)));
+  // A family with only some of its networks on (ESPN without ABC) still has a column.
+  const partial = state.networks != null && net.families.some((f) => {
+    const ids = (net.networksByFamily.get(f) ?? []).map((idx) => net.lookups.networks[idx].id);
+    const on = ids.filter((id) => state.networks.includes(id)).length;
+    return on > 0 && on < ids.length;
+  });
+  const VR = ' nfl-vrule';
+  // Short network heads: the table is as wide as its content, not the module.
+  const table = el('table', 'games-table nfl-network-table');
+  const tall = (text, cls) => {
+    const th = cell('th', text, cls);
+    th.rowSpan = 2;
+    th.scope = 'col';
+    return th;
+  };
+  const spanner = el('th', 'nfl-spanner' + VR);
+  spanner.colSpan = net.families.length;
+  spanner.scope = 'colgroup';
+  spanner.appendChild(el('span', 'nfl-spanner-label', 'Games by network'));
+  const specialHead = tall(null, 'num' + VR);
+  tipHead(specialHead, 'Special games', NETWORK_SPECIAL_TIP, env);
+  const row1 = el('tr');
+  row1.append(tall('Season', null), spanner, tall('Games', 'num' + VR), specialHead);
+  const row2 = el('tr');
+  net.families.forEach((family, k) => {
+    const th = el('th', 'num' + (k === 0 ? VR : ''));
+    th.scope = 'col';
+    th.dataset.family = family;
+    const names = familyNetworkNames(model, family);
+    if (family === 'other') tipHead(th, familyLabel(family), `${joinAnd(names)}.`, env);
+    else if (family === 'tba') tipHead(th, familyLabel(family), 'Games whose network is not in the data, or is not assigned yet.', env);
+    else th.textContent = familyLabel(family);
+    row2.appendChild(th);
+  });
+  const thead = el('thead');
+  thead.append(row1, row2);
+  const tbody = el('tbody');
+  for (const r of networkSeasonRows(model, state, fIdx)) {
+    const tr = el('tr');
+    tr.dataset.season = String(r.season);
+    const season = cell('th', String(r.season));
+    season.scope = 'row';
+    const counts = new Map(r.segments.map((seg) => [seg.family, seg.count]));
+    tr.append(
+      season,
+      ...net.families.map((family, k) => {
+        const cls = 'num' + (k === 0 ? VR : '');
+        if (off.has(family)) {
+          const td = cell('td', '–', cls);
+          td.dataset.hidden = 'true';
+          td.setAttribute('aria-label', 'Hidden');
+          return td;
+        }
+        return cell('td', String(counts.get(family) ?? 0), cls);
+      }),
+      cell('td', String(r.total), 'num nfl-vrule nfl-total'),
+      cell('td', String(r.special), 'num nfl-vrule'),
+    );
+    tbody.appendChild(tr);
+  }
+  const groups = [1, net.families.length, 1, 1].map((span) => {
+    const g = el('colgroup');
+    g.span = span;
+    return g;
+  });
+  table.append(...groups, thead, tbody);
+  appendBreakdownTable(table, lines);
+  if (!tbody.children.length) breakdown.appendChild(el('p', 'nfl-muted', 'No games match these filters.'));
+  const notes = [
+    off.size
+      ? 'Games is the sum of the network columns before it; a dash marks a network turned off in the legend or the Networks filter.'
+      : 'Games is the sum of the network columns before it.',
+    ...(partial ? ['A column with some of its networks turned off counts only the ones left on.'] : []),
+    'Special games counts the special games among them.',
+  ];
+  breakdown.appendChild(el('p', 'nfl-muted', notes.join(' ')));
+}
+
+function renderDataTable(rows, all, model) {
   const { dataBody } = refs;
+  const families = all ? model.net.families : [];
+  const heads = all
+    ? ['Team', ...families.map(familyLabel), 'Games', 'Special games']
+    : ['Team', ...SEGMENTS.map((seg) => seg.label), 'Total'];
+  refs.dataCaption.textContent = all ? 'Games by team and network' : 'Special games by team';
+  const hr = el('tr');
+  for (const h of heads) {
+    const th = el('th', null, h);
+    th.scope = 'col';
+    hr.appendChild(th);
+  }
+  refs.dataHead.replaceChildren(hr);
   rebuildKeepingFocus(dataBody, () => {
     dataBody.replaceChildren();
     for (const r of rows) {
@@ -725,11 +966,21 @@ function renderDataTable(rows) {
       btn.setAttribute('aria-label', `Select ${r.label}`);
       btn.addEventListener('click', () => toggleTeam(r));
       th.appendChild(btn);
-      tr.append(
-        th,
-        ...SEGMENTS.map((seg) => cell('td', String(r.bar.counts[seg.key]))),
-        cell('td', String(r.bar.total)),
-      );
+      if (all) {
+        const counts = new Map(r.bar.segments.map((seg) => [seg.family, seg.count]));
+        tr.append(
+          th,
+          ...families.map((family) => cell('td', String(counts.get(family) ?? 0))),
+          cell('td', String(r.bar.total)),
+          cell('td', String(r.bar.special)),
+        );
+      } else {
+        tr.append(
+          th,
+          ...SEGMENTS.map((seg) => cell('td', String(r.bar.counts[seg.key]))),
+          cell('td', String(r.bar.total)),
+        );
+      }
       dataBody.appendChild(tr);
     }
   });
@@ -789,16 +1040,39 @@ function buildFigure(rows, state, env, th) {
   });
   const traces = SEGMENTS.map((seg) => trace(seg, true));
   if (picked) for (const seg of SEGMENTS) traces.push(trace(seg, false));
-  let max = 0;
-  for (const r of rows) {
-    const sum = SEGMENTS.reduce((a, seg) => a + (hidden.has(seg.key) ? 0 : r.bar.counts[seg.key]), 0);
-    if (sum > max) max = sum;
-  }
+  // End markers: the visible total per row.
+  const totals = rows.map((r) => shownTotal(r.bar, state.hiddenSegments));
+  const layout = barLayout(rows, totals, state, env, th, {
+    title: 'Special games',
+    barmode: picked ? 'overlay' : 'stack',
+  });
+  return { traces, layout: frameLayout(layout, { theme: th }) };
+}
+
+/** The figure with "Special games only" off: the shared stacked bars, one group per network family. */
+function buildNetworkFigure(rows, state, env, th) {
+  const selected = selectedKey(state);
+  const faded = rows.map((r) => r.faded || (selected != null && r.id !== selected));
+  const traces = networkTraces(rows, env, th, faded);
+  const layout = barLayout(rows, rows.map((r) => r.bar.total), state, env, th, { title: 'Games', barmode: 'stack' });
+  // The stacked builder puts its separators and hover targets on an overlay axis.
+  layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
+  return { traces, layout: frameLayout(layout, { theme: th }) };
+}
+
+/**
+ * The layout both modes share: one row per team with its name on the y axis, a count axis with
+ * round ticks, and an end marker with each row's total in the hero colour (--ink at 80%, the
+ * accent on the picked team).
+ */
+function barLayout(rows, totals, state, env, th, { title, barmode }) {
+  const selected = selectedKey(state);
+  const bg = PAGE_BG[th];
+  const ids = rows.map((r) => r.id);
+  const max = Math.max(0, ...totals);
   const pitch = env.mobile ? 44 : 32;
   const thickness = env.mobile ? 28 : 20;
   const fontPx = env.mobile ? TICK_FONT_PX.mobile : TICK_FONT_PX.desktop;
-  // End markers: the visible total per row, in the hero colour (--ink at 80%, accent on the picked team).
-  const totals = rows.map((r) => shownTotal(r.bar, state.hiddenSegments));
   const heroInk = mixHex(INK[th], bg, HERO_INK_WEIGHT);
   const fills = rows.map((r) => (r.id === selected ? SPECIAL[th] : heroInk));
   const markerRows = totals.map((total) => ({ total }));
@@ -809,7 +1083,7 @@ function buildFigure(rows, state, env, th) {
   const plotPx = Math.max(1, (refs.chart.clientWidth || env.width || 600) - 8 - labelPx - LABEL_PAD_PX - 16);
   const top = Math.max(1, max) * Math.max(1.05, plotPx / Math.max(1, plotPx - markerHalf));
   const layout = {
-    barmode: picked ? 'overlay' : 'stack',
+    barmode,
     bargap: 1 - thickness / pitch,
     hovermode: 'closest',
     clickmode: 'event',
@@ -820,7 +1094,7 @@ function buildFigure(rows, state, env, th) {
     // No value column at the right (notes 15): the end markers carry each total.
     margin: { l: 8, r: 16, t: 8, b: MARGIN.b },
     xaxis: {
-      title: { text: 'Special games', standoff: 4 },
+      title: { text: title, standoff: 4 },
       range: [0, top],
       tickmode: 'linear',
       tick0: 0,
@@ -848,18 +1122,35 @@ function buildFigure(rows, state, env, th) {
   };
   layout.shapes = endMarkerShapes(markerRows, (r) => r.total, fills, th, 'x');
   layout.annotations = endMarkerAnnotations(markerRows, (r) => r.total, fills, th, 'x');
-  return { traces, layout: frameLayout(layout, { theme: th }) };
+  return layout;
 }
 
 export function mount(container, ctx) {
   refs.ctx = ctx;
   const legendRow = el('div', 'legend-row');
   refs.legend = el('ul', 'legend-chips');
-  refs.legend.setAttribute('aria-label', 'Special game categories: select to show or hide');
+  // The key to the two fills of a network's group (all games only); it is not a control.
+  refs.shadeKey = el('p', 'nfl-shade-key');
+  for (const [cls, text] of [['is-solid', 'Special games'], ['is-light', 'Not special']]) {
+    const item = el('span', 'nfl-shade-key-item');
+    const mark = el('span', `nfl-shade-key-mark ${cls}`);
+    mark.setAttribute('aria-hidden', 'true');
+    item.append(mark, document.createTextNode(text));
+    refs.shadeKey.appendChild(item);
+  }
   const info = buildInfo(ctx);
   refs.infoDialog = info.dialog;
-  legendRow.append(refs.legend, info.button, info.dialog);
+  refs.infoButton = info.button;
+  legendRow.append(refs.legend, refs.shadeKey, info.button, info.dialog);
   bindLegend();
+  // "Special games only" sits in the module header tools, a checkbox like Crews' Per season.
+  const specialLabel = el('label', 'crews-perseason-label nfl-special-only-label');
+  refs.specialBox = el('input', 'crews-perseason nfl-special-only');
+  refs.specialBox.type = 'checkbox';
+  refs.specialBox.addEventListener('change', () => ctx.setState({ special: refs.specialBox.checked }));
+  specialLabel.append(refs.specialBox, ' Special games only');
+  const tools = el('div', 'chart-controls nfl-teams-controls');
+  tools.appendChild(specialLabel);
   refs.chart = el('div', 'nfl-chart');
   refs.gd = el('div');
   refs.note = el('div', 'season-empty-note');
@@ -880,18 +1171,80 @@ export function mount(container, ctx) {
   const dataWrap = el('div', DATA_TABLE_CLASS);
   const dataTable = el('table');
   dataWrap.appendChild(dataTable);
-  dataTable.appendChild(el('caption', null, 'Special games by team'));
-  const thead = el('thead');
-  const hr = el('tr');
-  for (const h of ['Team', ...SEGMENTS.map((s) => s.label), 'Total']) {
-    const th = el('th', null, h);
-    th.scope = 'col';
-    hr.appendChild(th);
-  }
-  thead.appendChild(hr);
+  // The caption and the head follow the toggle (renderDataTable).
+  refs.dataCaption = el('caption');
+  refs.dataHead = el('thead');
   refs.dataBody = el('tbody');
-  dataTable.append(thead, refs.dataBody);
+  dataTable.append(refs.dataCaption, refs.dataHead, refs.dataBody);
   container.append(legendRow, refs.chart, refs.pending, refs.showAll, refs.breakdown, refs.captions, dataWrap);
+  mountViewTools(ctx, 'teams', [tools], container);
+}
+
+/** The games with no network among the games the all-games bars count: their seasons and how many. */
+function tbaGames(model, state) {
+  const mask = countedMask(model, state);
+  const c = model.cols;
+  const seasons = new Set();
+  let games = 0;
+  for (let i = 0; i < model.n; i++) {
+    if (!mask[i] || c.network[i] != null) continue;
+    seasons.add(c.season[i]);
+    games += 1;
+  }
+  return { seasons: [...seasons].sort((a, b) => a - b), games };
+}
+
+/** The caption under the all-games chart when it counts a game with no network yet, else null. */
+export function tbaText(tba) {
+  if (!tba.games) return null;
+  const n = tba.games;
+  return `${n} ${n === 1 ? 'game' : 'games'} (${seasonList(tba.seasons)}) ${n === 1 ? 'has' : 'have'} no network listed.`;
+}
+
+/** Renders the tab with "Special games only" off: every counted game by team and network. */
+function renderNetworks(ctx, model, state, env, th) {
+  const bars = networkBars(model, state);
+  // Keep a selected team's games in step with the filters; an all-games selection is exact.
+  const key = selectedKey(state);
+  if (key != null && model.franchiseIndex.has(key)) {
+    const bar = bars.find((b) => b.franchise === model.franchiseIndex.get(key));
+    const fresh = bar ? bar.games : [];
+    const cur = state.selection.games || [];
+    if (state.selection.exact !== true || fresh.length !== cur.length || fresh.some((g, k) => g !== cur[k])) {
+      ctx.selectGames({ kind: 'team', key, label: state.selection.label, games: fresh, exact: true });
+      return;
+    }
+  }
+
+  renderNetworkLegend(model, state, th);
+  const rowsAll = bars.map((bar) => ({
+    bar,
+    id: model.franchises[bar.franchise].id,
+    label: teamLabel(model, state, bar.franchise),
+    faded: bar.teamFaded,
+  }));
+  const rows = state.showAllTeams ? rowsAll : rowsAll.slice(0, TOP_N);
+  const tba = tbaGames(model, state);
+  drawn = { all: true, rows, totalTeams: rowsAll.length, env, theme: th, state, model, pending: tba };
+  renderShowAll(rowsAll.length, state);
+  renderDataTable(rows, true, model);
+  renderBreakdown(model, state, env, rowsAll);
+
+  const anyShown = rows.length > 0;
+  if (anyShown) setNote(null);
+  else setNote(EMPTY_TITLE, EMPTY_HINT);
+  refs.drawn = anyShown;
+  const caption = anyShown ? tbaText(tba) : null;
+  refs.pending.hidden = caption == null;
+  refs.pending.textContent = caption ?? '';
+  if (!anyShown) {
+    refs.showAll.hidden = true;
+    return;
+  }
+  const fig = buildNetworkFigure(rows, state, env, th);
+  refs.chart.style.minHeight = `${fig.layout.height}px`;
+  window.Plotly.react(refs.gd, fig.traces, fig.layout, CONFIG);
+  bindEvents(refs.gd);
 }
 
 export function render(ctx) {
@@ -901,13 +1254,27 @@ export function render(ctx) {
   const th = theme(env);
   hideTooltip();
 
-  // Keep a selected team's games in step with the season range and the legend chips.
+  const all = !state.special;
+  refs.specialBox.checked = state.special;
+  refs.shadeKey.hidden = !all;
+  refs.legend.setAttribute(
+    'aria-label',
+    all ? 'Networks: select to show or hide' : 'Special game categories: select to show or hide',
+  );
+  refs.infoButton.setAttribute('aria-label', all ? 'About this chart' : 'About these categories');
+  if (all) {
+    renderNetworks(ctx, model, state, env, th);
+    return;
+  }
+
+  // Keep a selected team's games in step with the season range, the Networks pick and the legend
+  // chips. A selection made with the toggle off was exact; here the table filters it again.
   const key = selectedKey(state);
   if (key != null && model.franchiseIndex.has(key)) {
     const fresh = teamGames(model, state, model.franchiseIndex.get(key));
     const cur = state.selection.games || [];
-    if (fresh.length !== cur.length || fresh.some((g, k) => g !== cur[k])) {
-      ctx.selectGames({ ...state.selection, games: fresh });
+    if (state.selection.exact === true || fresh.length !== cur.length || fresh.some((g, k) => g !== cur[k])) {
+      ctx.selectGames({ kind: 'team', key, label: state.selection.label, games: fresh });
       return;
     }
   }
@@ -933,9 +1300,9 @@ export function render(ctx) {
     faded: bar.teamFaded,
   }));
   const rows = state.showAllTeams ? rowsAll : rowsAll.slice(0, TOP_N);
-  drawn = { rows, env, theme: th, state, model, pending };
+  drawn = { all: false, rows, totalTeams: rowsAll.length, env, theme: th, state, model, pending };
   renderShowAll(rowsAll.length, state);
-  renderDataTable(rows);
+  renderDataTable(rows, false, model);
   renderBreakdown(model, state, env, rowsAll);
 
   let anyShown = false;
@@ -972,7 +1339,8 @@ export function testModel() {
   if (!drawn || !refs.drawn) {
     const s = refs.ctx ? refs.ctx.getState() : null;
     return {
-      view: 'special',
+      view: 'teams',
+      mode: s && !s.special ? 'all' : 'special',
       drawn: false,
       rows: [],
       hiddenSegments: s ? [...s.hiddenSegments] : [],
@@ -980,8 +1348,43 @@ export function testModel() {
     };
   }
   const s = refs.ctx.getState();
+  if (drawn.all) {
+    const { net } = drawn.model;
+    const counts = networkFacets(drawn.model, s);
+    return {
+      view: 'teams',
+      mode: 'all',
+      drawn: true,
+      rows: drawn.rows.map((r) => ({
+        franchise: r.id,
+        label: r.label,
+        total: r.bar.total,
+        special: r.bar.special,
+        faded: r.faded,
+        games: [...r.bar.games],
+        segments: r.bar.segments.map((seg) => ({
+          family: seg.family,
+          count: seg.count,
+          special: seg.special,
+          channels: seg.channels.map((ch) => ({ id: ch.id, count: ch.count, special: ch.special })),
+        })),
+      })),
+      families: net.families.map((family) => ({
+        family,
+        label: familyLabel(family),
+        on: !familyToggledOff(net, s, family),
+        games: (net.networksByFamily.get(family) ?? []).reduce((sum, idx) => sum + counts[idx], 0),
+      })),
+      networks: s.networks,
+      selected: selectedKey(s),
+      totalTeams: drawn.totalTeams,
+      tba: { ...drawn.pending },
+      hover: drawn.rows.map((r) => hoverTextLines(rowHover(drawn, r))),
+    };
+  }
   return {
-    view: 'special',
+    view: 'teams',
+    mode: 'special',
     drawn: true,
     rows: drawn.rows.map((r) => ({
       franchise: r.id,
@@ -1000,7 +1403,7 @@ export function testModel() {
     selected: selectedKey(s),
     totalTeams: teamBars(drawn.model, s).length,
     pending: { ...drawn.pending },
-    hover: drawn.rows.map((r) => hoverTextLines(hoverModel(s, r.label, r.bar, drawn.theme, drawn.pending))),
+    hover: drawn.rows.map((r) => hoverTextLines(rowHover(drawn, r))),
   };
 }
 

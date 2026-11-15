@@ -393,9 +393,12 @@ const TRANSPARENT = 'rgba(0,0,0,0)';
  * @param {{piece: string, overlay: string, text: string}} axes
  * @param {number} gap - separator stroke width in px (D-28).
  * @param {boolean} [matched] - a pick is active (hero bars take the accent).
+ * @param {{labels?: boolean}} [opts] - `labels: false` leaves out layer 3 (the NFL team bars
+ *   carry no in-bar text). The Bars and Butterfly tabs pass nothing.
  * @returns {object[]}
  */
-function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap, matched = false) {
+export function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap, matched = false, opts = {}) {
+  const { labels = true } = opts;
   const bg = PAGE_BG[theme];
   const y = rows.map((r) => r.key);
   const segs = rows.map(segmentsOf);
@@ -449,7 +452,7 @@ function stackedTraces(rows, segmentsOf, partsOf, side, theme, axes, gap, matche
   }
 
   // Layer 3: the label on each segment's wider part (WR-02).
-  for (let k = 0; k < depth; k += 1) {
+  for (let k = 0; labels && k < depth; k += 1) {
     const cells = segs.map((list, i) => {
       const seg = list[k];
       if (!seg) return null;
@@ -510,7 +513,7 @@ function familyParts(theme) {
 }
 
 /** An invisible axis overlaying `base` with the same range (D-23 overlay). */
-function overlayAxis(base, range) {
+export function overlayAxis(base, range) {
   return {
     overlaying: base,
     anchor: 'y',

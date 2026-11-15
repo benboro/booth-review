@@ -23,14 +23,14 @@ SURFACE = "#212625"
 INK = "#E5EAE8"
 
 _READY = {
-    "special": "window.__nflTestHooks.getViewModel('special') !== null",
+    "teams": "window.__nflTestHooks.getViewModel('teams') !== null",
     "scatter": "window.__nflTestHooks.getViewModel('scatter') !== null",
     "viewership": "window.__nflTestHooks.getViewModel('viewership') !== null",
     "crews": "window.__nflTestHooks.getViewModel('crews') !== null",
 }
 
 
-@pytest.mark.parametrize("view", ["special", "scatter", "viewership", "crews"])
+@pytest.mark.parametrize("view", ["teams", "scatter", "viewership", "crews"])
 def test_nfl_view_repaints_dark_after_toggle_click(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl, view: str
 ) -> None:
@@ -48,6 +48,50 @@ def test_nfl_view_repaints_dark_after_toggle_click(
     assert after["gridY"] == GRID, after
     assert after["xrange"] == before["xrange"] and after["yrange"] == before["yrange"]
     assert white_box_offenders(nfl_guarded_page) == []
+
+
+def test_nfl_special_games_bars_repaint_dark_after_toggle_click(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    """The first tab with "Special games only" on (the old Special games bars)."""
+    open_nfl_app(nfl_guarded_page, "?sport=nfl&special=1")
+    nfl_guarded_page.wait_for_function(
+        "window.__nflTestHooks.getViewModel('teams').mode === 'special'"
+    )
+    sel = "#nfl-view-teams .js-plotly-plot"
+    nfl_guarded_page.locator(sel).first.wait_for(state="attached")
+    before = chart_layout(nfl_guarded_page, sel)
+    click_toggle(nfl_guarded_page)
+    after = chart_layout(nfl_guarded_page, sel)
+    assert after["paper"] == PAGE_BG and after["plot"] == PAGE_BG, after
+    assert after["gridY"] == GRID, after
+    assert after["xrange"] == before["xrange"] and after["yrange"] == before["yrange"]
+    assert white_box_offenders(nfl_guarded_page) == []
+
+
+def test_nfl_all_games_bars_take_the_dark_family_colours(
+    nfl_guarded_page: Page, open_nfl_app: OpenNfl
+) -> None:
+    """A live flip repaints the network groups and their chips in the dark family palette."""
+    page = nfl_guarded_page
+    open_nfl_app(page, "?sport=nfl")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('teams').drawn === true")
+    click_toggle(page)
+    page.wait_for_function("document.documentElement.dataset.theme === 'dark'")
+    got = page.evaluate(
+        """async () => {
+          const P = await import('./sports/nfl/palette.js');
+          const gd = document.querySelector('#nfl-view-teams .nfl-chart > div');
+          const solid = new Set(gd.data.filter(t => t.xaxis === 'x')
+            .flatMap(t => t.marker.color.filter((c, k) => t.x[k] > 0 && c.startsWith('#'))));
+          const chips = [...document.querySelectorAll('#nfl-view-teams .legend-chips button')]
+            .map(b => [b.dataset.family, b.style.getPropertyValue('--mark')]);
+          const want = chips.map(([f]) => [f, P.familyColor(f, 'dark')]);
+          return { solid: [...solid], chips, want, light: P.familyColor('fox', 'light') }; }"""
+    )
+    assert got["chips"] == got["want"]
+    assert set(got["solid"]) <= {color for _, color in got["want"]}
+    assert got["light"] not in got["solid"]
 
 
 @pytest.mark.parametrize("view", ["scatter", "viewership"])

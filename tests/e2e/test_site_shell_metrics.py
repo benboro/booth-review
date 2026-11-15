@@ -59,7 +59,7 @@ NFL = Sport(
     "nfl",
     "?sport=nfl",
     "__nflTestHooks",
-    tuple(f"#nfl-tab-{v}" for v in ("special", "crews", "viewership", "scatter")),
+    tuple(f"#nfl-tab-{v}" for v in ("teams", "crews", "viewership", "scatter")),
     "#nfl-chart-tabs",
     "#nfl-chart-area .nfl-chart-module",
     "#nfl-toolbar",

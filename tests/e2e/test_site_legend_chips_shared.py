@@ -74,7 +74,9 @@ def test_cfb_legend_chips(guarded_page: Page, open_app: Callable[..., None]) -> 
 @pytest.mark.parametrize(
     ("view", "sel"),
     [
-        ("special", "#nfl-view-special .legend-chips"),
+        # The first tab: its network chips, and (the old tab's link) its category chips.
+        ("teams", "#nfl-view-teams .legend-chips"),
+        ("special", "#nfl-view-teams .legend-chips"),
         ("scatter", "#nfl-view-scatter .legend-chips"),
         ("viewership", "#nfl-view-viewership .legend-chips"),
     ],

@@ -1,7 +1,7 @@
 /**
  * NFL This weekend view (Phase 18, D-01, D-12): the shared timeline (desktop) or list (phone) over
  * one week of NFL games, laid out by `modules/weekend-view.js` and `modules/weekend-list.js`.
- * The NFL master filter contributes Team, Announcers and Booths picks only (Seasons and Category
+ * The NFL master filter contributes Team, Networks, Announcers and Booths picks only (Seasons and Category
  * are not used here, D-20, D-21). Credits: nflverse and 506 Sports, plus Wikipedia (CC BY-SA
  * 4.0) only when a slot-basis network shows; the NFL page never credits a CFB data source.
  *
@@ -30,7 +30,8 @@ function el(tag, className) {
 }
 
 function hasPick(state) {
-  return state.teams.length > 0 || state.people.length > 0 || state.booths.length > 0;
+  return state.teams.length > 0 || state.people.length > 0 || state.booths.length > 0
+    || state.networks != null;
 }
 
 /** The weekend week to show; every day of it shows. */

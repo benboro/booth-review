@@ -99,6 +99,12 @@ Every `people`, `networks` and `venues` entry must be referenced by something.
 | `cause` | why a game has no figure: `pending`, `regional` or `none`; set exactly when `viewers` is null. The wording lives in the client, never in the data |
 | `place` | `lookups.venues` index of the stadium (after the stadium overrides); null when the stadium is not in the location table, never a guess from the home team's city |
 
+The first tab's all-games bars and the Networks filter are computed in the browser from this
+block: `home`, `away`, `network` (with `lookups.networks[].family` for the group and its
+colour) and the special-game flags. There is no pre-aggregated per-network block, and a null
+`network` is shown as "No network listed" (a played game whose network is not in the data, or
+one not assigned yet; This weekend keeps "Network TBA" for an unassigned upcoming game).
+
 `pending` follows the CFB rule: a game in the current season (`freshness.season`) at or
 after `freshness.viewership_through_week`, or any current-season game when that stamp is
 null. It does not depend on `freshness.in_progress`, since figures keep arriving after
@@ -161,7 +167,10 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
 
 ### special
 
-One row per franchise-season. Each game counts once per bar (D-24): the five `solo_*`
+One row per franchise-season, read by the first tab with "Special games only" on. Under a
+Networks pick the client recounts the same columns from `games` for the picked networks
+(`specialRowsFromGames` in `site/sports/nfl/state.js`; with every game kept the recount equals
+this block). Each game counts once per bar (D-24): the five `solo_*`
 columns, `agotw`, `cbs_national` and `international_other` are exclusive segments.
 Precedence: Thursday night, Sunday night, Monday night and Holiday keep their games
 first (a Monday night game played abroad stays Monday night); then International takes

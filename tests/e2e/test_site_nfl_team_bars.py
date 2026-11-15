@@ -12,9 +12,12 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page, Route
+from playwright.sync_api import Page, Route, expect
 
 pytestmark = pytest.mark.e2e
+
+# The first NFL tab with "Special games only" on: the old Special games tab.
+SPECIAL_ON = "?sport=nfl&special=1"
 
 SEGMENT_KEYS = [
     "solo_thursday",
@@ -47,7 +50,7 @@ NOTE_LINES = [
     "CBS late national: CBS's national game in the late Sunday window.",
     "International: a game played abroad, alone in its window or not. A night, holiday, Fox AGOTW or CBS late national game abroad keeps that category.",
 ]
-LEGEND = "#nfl-view-special .legend-chips"
+LEGEND = "#nfl-view-teams .legend-chips"
 SLOT_ORDER = [
     ("tnf", "TNF"),
     ("snf", "SNF"),
@@ -62,24 +65,24 @@ SLOT_ORDER = [
     ("sunday_late", "Sunday late"),
     ("other", "other"),
 ]
-GD = "#nfl-view-special .nfl-chart > div"
+GD = "#nfl-view-teams .nfl-chart > div"
 
 
 @pytest.fixture
 def app(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> Page:
-    open_nfl_app(nfl_guarded_page)
+    open_nfl_app(nfl_guarded_page, SPECIAL_ON)
     return nfl_guarded_page
 
 
 @pytest.fixture
 def mobile(nfl_mobile_page: Page, open_nfl_app: Callable[..., None]) -> Page:
-    open_nfl_app(nfl_mobile_page)
+    open_nfl_app(nfl_mobile_page, SPECIAL_ON)
     return nfl_mobile_page
 
 
 def _vm(page: Page) -> dict[str, Any]:
-    page.wait_for_function("window.__nflTestHooks.getViewModel('special').drawn === true")
-    return page.evaluate("window.__nflTestHooks.getViewModel('special')")  # type: ignore[no-any-return]
+    page.wait_for_function("window.__nflTestHooks.getViewModel('teams').drawn === true")
+    return page.evaluate("window.__nflTestHooks.getViewModel('teams')")  # type: ignore[no-any-return]
 
 
 def _set(page: Page, patch: dict[str, Any]) -> None:
@@ -340,27 +343,25 @@ def test_legend_chip_hides_segment(app: Page) -> None:
     chip = f"{LEGEND} button[data-segment=agotw]"
     app.click(chip)
     app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.includes('agotw')"
+        "window.__nflTestHooks.getViewModel('teams').hiddenSegments.includes('agotw')"
     )
     assert app.get_attribute(chip, "aria-pressed") == "false"
     visible = app.evaluate(f"document.querySelector('{GD}').data.map(t => t.visible)")
     assert visible == [True] * 5 + [False, True, True]
     app.wait_for_timeout(400)  # past the 300 ms double-tap window
     app.click(chip)
-    app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 0"
-    )
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 0")
 
 
 def test_info_modal_lists_definitions_and_leaves_the_page_alone(app: Page) -> None:
     _vm(app)
-    button = app.locator("#nfl-view-special .legend-row button.band-info")
-    dialog = app.locator("#nfl-view-special dialog.info-modal")
+    button = app.locator("#nfl-view-teams .legend-row button.band-info")
+    dialog = app.locator("#nfl-view-teams dialog.info-modal")
     assert button.get_attribute("aria-label") == "About these categories"
     assert dialog.is_hidden()
     # Opening it must not move the page (user 2026-11-14): it is a centred modal, not a row.
     box = (
-        "() => [document.querySelector('#nfl-view-special .nfl-chart').getBoundingClientRect().top,"
+        "() => [document.querySelector('#nfl-view-teams .nfl-chart').getBoundingClientRect().top,"
         " document.documentElement.scrollHeight]"
     )
     before = app.evaluate(box)
@@ -387,7 +388,8 @@ def test_info_modal_lists_definitions_and_leaves_the_page_alone(app: Page) -> No
     assert dialog.locator("a").get_attribute("href") == "methodology.html#nfl-special-games"
     app.keyboard.press("Escape")
     assert dialog.is_hidden()
-    assert button.get_attribute("aria-expanded") == "false"
+    # The dialog's close event fires a task after it closes, so this read retries.
+    expect(button).to_have_attribute("aria-expanded", "false")
     button.click()
     app.mouse.click(5, 5)  # the backdrop
     assert dialog.is_hidden()
@@ -398,10 +400,10 @@ def test_info_modal_lists_definitions_and_leaves_the_page_alone(app: Page) -> No
 
 def test_no_standalone_label_anywhere(app: Page) -> None:
     _vm(app)
-    assert "standalone" not in app.inner_text("#nfl-view-special").lower()
+    assert "standalone" not in app.inner_text("#nfl-view-teams").lower()
     assert (
         "standalone"
-        not in app.evaluate("document.querySelector('#nfl-view-special').textContent").lower()
+        not in app.evaluate("document.querySelector('#nfl-view-teams').textContent").lower()
     )
 
 
@@ -448,7 +450,7 @@ def _pick_person(app: Page, raw: dict[str, Any]) -> tuple[str, dict[str, dict[st
     expected = app.evaluate(_EXPECTED_MATCHED_JS, pid)
     assert expected
     _set(app, {"people": [pid]})
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').overlay?.length > 0")
     return pid, expected
 
 
@@ -525,7 +527,7 @@ def test_empty_state_copy(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
         )
     )
     _set(app, {"seasons": [season, season], "people": [people[who]["id"]]})
-    note = app.locator("#nfl-view-special .season-empty-note")
+    note = app.locator("#nfl-view-teams .season-empty-note")
     note.wait_for(state="visible")
     assert note.locator(".season-empty-title").inner_text() == "No games match these filters"
     assert (
@@ -570,23 +572,23 @@ def test_show_all_toggle_and_escaping(
     nfl_guarded_page: Page, open_nfl_app: Callable[..., None]
 ) -> None:
     nfl_guarded_page.route("**/nfl-data.json", _many_franchises)
-    open_nfl_app(nfl_guarded_page)
+    open_nfl_app(nfl_guarded_page, SPECIAL_ON)
     vm = _vm(nfl_guarded_page)
     assert len(vm["rows"]) == 15 and vm["totalTeams"] == 20
-    btn = nfl_guarded_page.locator("#nfl-view-special .nfl-show-all")
+    btn = nfl_guarded_page.locator("#nfl-view-teams .nfl-show-all")
     assert btn.inner_text() == "Show all 20 teams"
     btn.click()
     nfl_guarded_page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').rows.length === 20"
+        "window.__nflTestHooks.getViewModel('teams').rows.length === 20"
     )
     assert btn.inner_text() == "Show top 15"
     labels = nfl_guarded_page.evaluate(f"document.querySelector('{GD}').layout.yaxis.ticktext")
     assert "Odd &lt;b&gt;&amp;Co" in labels
     assert not any("<" in t for t in labels)
-    assert nfl_guarded_page.locator("#nfl-view-special b").count() == 0
+    assert nfl_guarded_page.locator("#nfl-view-teams b").count() == 0
     btn.click()
     nfl_guarded_page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').rows.length === 15"
+        "window.__nflTestHooks.getViewModel('teams').rows.length === 15"
     )
 
 
@@ -604,7 +606,7 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     box = app.locator(f"{GD} .barlayer .trace .point path").first.bounding_box()
     assert box
     app.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     assert _vm(app)["selected"] == fid
 
     g = nfl_fixture_raw["games"]
@@ -616,17 +618,17 @@ def test_click_selects_team_and_fills_games_and_breakdown(
     )
     assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == expected
 
-    heading = app.locator("#nfl-view-special .nfl-breakdown h3").inner_text()
+    heading = app.locator("#nfl-view-teams .nfl-breakdown h3").inner_text()
     assert heading == f"{nfl_fixture_raw['lookups']['franchises'][f]['name']}: season by season"
     seasons = app.eval_on_selector_all(
-        "#nfl-view-special .nfl-breakdown tbody tr", "els => els.map(e => e.dataset.season)"
+        "#nfl-view-teams .nfl-breakdown tbody tr", "els => els.map(e => e.dataset.season)"
     )
     assert seasons == ["2026", "2025", "2024"]
-    assert app.locator("#nfl-view-special .nfl-breakdown a").count() == 0
+    assert app.locator("#nfl-view-teams .nfl-breakdown a").count() == 0
     assert (
         "Special games is the sum of the eight columns before it. "
         "Flexed games are counted separately."
-    ) in app.inner_text("#nfl-view-special .nfl-breakdown")
+    ) in app.inner_text("#nfl-view-teams .nfl-breakdown")
 
     # Selected bar outlined, others at 40%.
     opac = app.evaluate(f"document.querySelector('{GD}').data[0].marker.opacity")
@@ -636,8 +638,8 @@ def test_click_selects_team_and_fills_games_and_breakdown(
 
     app.wait_for_timeout(600)  # past the touch double-fire guard
     _emit(app, "plotly_click", 0)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
-    assert app.locator("#nfl-view-special .nfl-breakdown").is_hidden()
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected === null")
+    assert app.locator("#nfl-view-teams .nfl-breakdown").is_hidden()
     assert app.evaluate("window.__nflTestHooks.getTableIndexes()") == []
 
 
@@ -648,7 +650,7 @@ def test_bar_click_under_a_pick_lists_only_matched_games(
     g = raw["games"]
     _vm(app)
     _set(app, {"people": ["p12"]})
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').overlay?.length > 0")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').overlay?.length > 0")
     matched = set(app.evaluate("window.__nflTestHooks.getTableIndexes()"))
     p12 = next(i for i, p in enumerate(raw["lookups"]["people"]) if p["id"] == "p12")
     assert any(m["person"] == p12 for i in matched for m in g["crew"][i])
@@ -667,7 +669,7 @@ def test_bar_click_under_a_pick_lists_only_matched_games(
             )
         }
         _emit(app, "plotly_click", k)
-        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+        app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
         app.wait_for_timeout(100)  # a render re-sync may rewrite the selection
         assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == sorted(
             team & matched
@@ -675,7 +677,7 @@ def test_bar_click_under_a_pick_lists_only_matched_games(
         cut += len(team - matched)
         app.wait_for_timeout(600)  # past the touch double-fire guard
         _emit(app, "plotly_click", k)
-        app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
+        app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected === null")
         app.wait_for_timeout(600)
     assert cut > 0
 
@@ -690,9 +692,7 @@ def test_click_with_only_international_shown_lists_only_international_games(
     _vm(app)
     others = [k for k in SEGMENT_KEYS if k != "international_other"]
     _set(app, {"hiddenSegments": others})
-    app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 7"
-    )
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 7")
     vm = _vm(app)
     row = vm["rows"][0]
     f = _franchise_idx(raw, row["franchise"])
@@ -704,13 +704,13 @@ def test_click_with_only_international_shown_lists_only_international_games(
         raw, f, lo, hi, {"international_other"}
     )
     _emit(app, "plotly_click", 0)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     app.wait_for_timeout(100)  # a render re-sync may rewrite the selection
     got = sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()"))
     assert got == _team_games(raw, f, lo, hi, {"international_other"})
     assert len(got) == shown_intl
 
-    body = "#nfl-view-special .nfl-breakdown tbody tr"
+    body = "#nfl-view-teams .nfl-breakdown tbody tr"
     rows = app.eval_on_selector_all(
         body, "els => els.map(e => [...e.children].map(c => c.textContent))"
     )
@@ -730,7 +730,7 @@ def test_click_with_only_international_shown_lists_only_international_games(
     assert (
         "Special games is the sum of the shown columns before it; a dash marks a category "
         "hidden in the legend."
-    ) in app.inner_text("#nfl-view-special .nfl-breakdown")
+    ) in app.inner_text("#nfl-view-teams .nfl-breakdown")
 
     # Turn Fox AGOTW back on with the team still picked: both tables follow.
     shown = {"international_other", "agotw"}
@@ -756,7 +756,7 @@ def test_click_with_only_international_shown_lists_only_international_games(
     _set(app, {"hiddenSegments": [k for k in SEGMENT_KEYS if k != empty]})
     app.wait_for_function("window.__nflTestHooks.getTableIndexes().length === 0")
     assert app.locator(body).count() == 0
-    assert "No games in the shown categories." in app.inner_text("#nfl-view-special .nfl-breakdown")
+    assert "No games in the shown categories." in app.inner_text("#nfl-view-teams .nfl-breakdown")
 
     # Every chip on again: the whole team, as before.
     _set(app, {"hiddenSegments": []})
@@ -765,7 +765,7 @@ def test_click_with_only_international_shown_lists_only_international_games(
         "n => window.__nflTestHooks.getTableIndexes().length === n", arg=len(want)
     )
     assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == want
-    assert "–" not in app.inner_text("#nfl-view-special .nfl-breakdown table")
+    assert "–" not in app.inner_text("#nfl-view-teams .nfl-breakdown table")
     # Every chip on: every season in range is listed, as before.
     assert app.locator(body).count() == len(per_season)
 
@@ -830,7 +830,7 @@ def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> No
     assert not [a for a in annos if a.get("name") == "value"]
     assert app.evaluate(f"{layout}.margin.r") == 16
     _emit(app, "plotly_click", 0)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     picked = app.evaluate(f"{layout}.shapes.map(s => s.fillcolor)")
     assert picked[0] == hero["accent"] == "#1B4F5C"
     assert set(picked[1:]) == {hero["ink"]}
@@ -851,9 +851,9 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
     fid = ids[row["franchise"]]
     k = [r["franchise"] for r in vm["rows"]].index(fid)
     _emit(app, "plotly_click", k)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     cells = app.eval_on_selector_all(
-        "#nfl-view-special .nfl-breakdown tbody tr[data-season='2026'] > *",
+        "#nfl-view-teams .nfl-breakdown tbody tr[data-season='2026'] > *",
         "els => els.map(e => e.textContent)",
     )
     assert cells[0] == "2026"
@@ -865,7 +865,7 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
     assert sum(int(c) for c in cells[1:9]) == int(cells[9])
     older = next(r for r in sp if r["season"] == 2025 and r["franchise"] == row["franchise"])
     cells = app.eval_on_selector_all(
-        "#nfl-view-special .nfl-breakdown tbody tr[data-season='2025'] > *",
+        "#nfl-view-teams .nfl-breakdown tbody tr[data-season='2025'] > *",
         "els => els.map(e => e.textContent)",
     )
     assert cells[6] == str(older["agotw"])
@@ -875,14 +875,14 @@ def test_breakdown_rows_match_fixture(app: Page, nfl_fixture_raw: dict[str, Any]
 
 def test_hidden_table_one_row_per_bar(app: Page) -> None:
     vm = _vm(app)
-    rows = app.locator("#nfl-view-special div.visually-hidden table tbody tr")
+    rows = app.locator("#nfl-view-teams div.visually-hidden table tbody tr")
     assert rows.count() == len(vm["rows"])
     first = rows.first.locator("td").all_inner_texts()
     r0 = vm["rows"][0]
     assert first == [*(str(r0["counts"][k]) for k in SEGMENT_KEYS), str(r0["total"])]
     rows.first.locator("button").focus()
     app.keyboard.press("Enter")
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
 
 
 def test_mobile_tap_selects_and_shows_hover_lines(
@@ -895,11 +895,11 @@ def test_mobile_tap_selects_and_shows_hover_lines(
     box = bar.bounding_box()
     assert box
     mobile.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-    mobile.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    mobile.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     ids = [f["id"] for f in nfl_fixture_raw["lookups"]["franchises"]]
     f = ids.index(vm["rows"][0]["franchise"])
     lines = mobile.eval_on_selector_all(
-        "#nfl-view-special .nfl-breakdown-lines p", "els => els.map(e => e.textContent)"
+        "#nfl-view-teams .nfl-breakdown-lines p", "els => els.map(e => e.textContent)"
     )
     assert lines == _hover(nfl_fixture_raw, f, 2024, 2026)[1:-1]
     assert mobile.evaluate("document.getElementById('chart-tooltip')?.hidden ?? true") is True
@@ -931,7 +931,7 @@ def test_tab_change_drops_the_team_selection(app: Page) -> None:
     _set(app, {"seasons": [2024, 2024]})
     _vm(app)
     _emit(app, "plotly_click", 0)
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     assert app.evaluate("window.__nflTestHooks.getTableIndexes().length") > 0
     _set(app, {"view": "scatter", "seasons": [2024, 2026]})
     assert app.evaluate("window.__nflTestHooks.getState().selection") is None
@@ -948,7 +948,7 @@ def test_tab_change_drops_the_team_selection(app: Page) -> None:
 def test_keyboard_picks_a_team_from_the_visible_on_focus_table(app: Page) -> None:
     """JS-WR-04: the data table shows while focused, and Enter keeps focus on the row."""
     _vm(app)
-    wrap = app.locator("#nfl-view-special div.nfl-data-table")
+    wrap = app.locator("#nfl-view-teams div.nfl-data-table")
     first = wrap.locator("tbody button").first
     key = first.get_attribute("data-key")
     box = wrap.bounding_box()
@@ -957,7 +957,7 @@ def test_keyboard_picks_a_team_from_the_visible_on_focus_table(app: Page) -> Non
     box = wrap.bounding_box()
     assert box is not None and box["width"] > 100 and box["height"] > 20
     app.keyboard.press("Enter")
-    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     assert _vm(app)["selected"] == key
     assert app.evaluate("document.activeElement.dataset.key") == key
 
@@ -967,10 +967,10 @@ def test_chart_container_hugs_the_plot_for_six_teams(
 ) -> None:
     """No blank band under the team bars: the container follows the figure height."""
     open_nfl_app(nfl_guarded_page, "?sport=nfl&view=special")
-    nfl_guarded_page.wait_for_selector("#nfl-view-special .nfl-chart .js-plotly-plot")
+    nfl_guarded_page.wait_for_selector("#nfl-view-teams .nfl-chart .js-plotly-plot")
     got = nfl_guarded_page.evaluate(
         """() => {
-          const gd = document.querySelector('#nfl-view-special .nfl-chart .js-plotly-plot');
+          const gd = document.querySelector('#nfl-view-teams .nfl-chart .js-plotly-plot');
           const box = gd.parentElement.getBoundingClientRect();
           return { gap: box.bottom - gd.getBoundingClientRect().bottom,
                    rows: gd.data[0].y.length };
@@ -1009,9 +1009,7 @@ def test_chips_and_category_filter_resort(app: Page, nfl_fixture_raw: dict[str, 
     _vm(app)
     hidden = ("solo_thursday", "solo_monday", "solo_holiday", "solo_other", "cbs_national")
     _set(app, {"hiddenSegments": list(hidden)})
-    app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 5"
-    )
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 5")
     vm = _vm(app)
     order = [r["franchise"] for r in vm["rows"]]
     assert order == _expected_order(nfl_fixture_raw, 2024, 2026, hidden=hidden)
@@ -1055,9 +1053,7 @@ def test_tooltip_keys_and_filters_categories(app: Page, nfl_fixture_raw: dict[st
 
     hidden = ("solo_thursday", "solo_monday", "solo_holiday", "solo_other", "cbs_national")
     _set(app, {"hiddenSegments": list(hidden)})
-    app.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 5"
-    )
+    app.wait_for_function("window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 5")
     vm = _vm(app)
     for k in range(len(vm["rows"])):
         f = ids.index(vm["rows"][k]["franchise"])
@@ -1071,7 +1067,7 @@ def test_tooltip_keys_and_filters_categories(app: Page, nfl_fixture_raw: dict[st
 def test_complete_networks_show_no_pending_note(app: Page) -> None:
     vm = _vm(app)
     assert vm["pending"] == {"seasons": [], "games": 0}
-    assert app.locator("#nfl-view-special .nfl-pending-caption").is_hidden()
+    assert app.locator("#nfl-view-teams .nfl-pending-caption").is_hidden()
     _emit(app, "plotly_hover", 0)
     assert not any("pending" in x for x in _tooltip(app))
 
@@ -1085,12 +1081,12 @@ def test_missing_sunday_networks_say_pending(
     page = nfl_guarded_page
     pending = _pending_raw(nfl_fixture_raw)
     page.route("**/nfl-data.json*", lambda route: route.fulfill(json=pending))
-    open_nfl_app(page)
+    open_nfl_app(page, SPECIAL_ON)
     n = _pending_games(pending)
     assert n > 0
     vm = _vm(page)
     assert vm["pending"] == {"seasons": [2026], "games": n}
-    caption = page.locator("#nfl-view-special .nfl-pending-caption")
+    caption = page.locator("#nfl-view-teams .nfl-pending-caption")
     expected = (
         "2026 Fox AGOTW and CBS late national counts are pending: "
         f"{n} Sunday-afternoon games have no network listed yet, so they are not counted."
@@ -1107,7 +1103,7 @@ def test_missing_sunday_networks_say_pending(
     # The tooltip names only the shown Sunday-window segment; the caption never changes.
     _set(page, {"hiddenSegments": ["agotw"]})
     page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 1"
+        "window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 1"
     )
     _emit(page, "plotly_hover", 0)
     assert _tooltip(page)[-2] == "2026 CBS late national is pending."
@@ -1115,7 +1111,7 @@ def test_missing_sunday_networks_say_pending(
     assert caption.inner_text() == expected
     _set(page, {"hiddenSegments": ["agotw", "cbs_national"]})
     page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 2"
+        "window.__nflTestHooks.getViewModel('teams').hiddenSegments.length === 2"
     )
     _emit(page, "plotly_hover", 0)
     assert not any("pending" in x for x in _tooltip(page))
@@ -1126,15 +1122,15 @@ def test_missing_sunday_networks_say_pending(
     vm = _vm(page)
     fid = vm["rows"][0]["franchise"]
     _emit(page, "plotly_click", 0)
-    page.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected !== null")
     assert _vm(page)["selected"] == fid
     cells = page.locator(
-        "#nfl-view-special .nfl-breakdown tbody tr[data-season='2026'] > *"
+        "#nfl-view-teams .nfl-breakdown tbody tr[data-season='2026'] > *"
     ).all_inner_texts()
     assert [k for k, c in enumerate(cells) if c.endswith("*")] == [6, 7]
-    old = page.locator("#nfl-view-special .nfl-breakdown tbody tr[data-season='2025'] > *")
+    old = page.locator("#nfl-view-teams .nfl-breakdown tbody tr[data-season='2025'] > *")
     assert not any(c.endswith("*") for c in old.all_inner_texts())
-    assert page.locator("#nfl-view-special .nfl-pending-note").inner_text() == (
+    assert page.locator("#nfl-view-teams .nfl-pending-note").inner_text() == (
         "* Pending: not every 2026 Sunday-afternoon game has a network listed yet, "
         "so Fox AGOTW and CBS late national are not final."
     )
@@ -1142,7 +1138,7 @@ def test_missing_sunday_networks_say_pending(
     edges = page.evaluate(
         """() => ['2026', '2025'].map((s) => {
           const td = document.querySelector(
-            `#nfl-view-special .nfl-breakdown tr[data-season='${s}'] td:nth-child(7)`);
+            `#nfl-view-teams .nfl-breakdown tr[data-season='${s}'] td:nth-child(7)`);
           const r = document.createRange();
           r.selectNodeContents(td.firstChild);
           return r.getBoundingClientRect().right;
@@ -1153,7 +1149,7 @@ def test_missing_sunday_networks_say_pending(
     # A range without 2026 shows no note.
     page.wait_for_timeout(600)  # past the touch double-fire guard
     _emit(page, "plotly_click", 0)
-    page.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('teams').selected === null")
     _set(page, {"seasons": [2024, 2025]})
     assert _vm(page)["pending"] == {"seasons": [], "games": 0}
     assert caption.is_hidden()

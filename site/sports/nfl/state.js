@@ -9,7 +9,11 @@
 import { lowNThreshold } from './mode.js';
 import { computePicks } from './picks.js';
 
-export const NFL_VIEWS = Object.freeze(['special', 'crews', 'viewership', 'scatter', 'weekend']);
+/**
+ * The first tab is every regular-season game by team (`teams`); its "Special games only" toggle
+ * (`state.special`) shows the eight special-game categories instead of the networks.
+ */
+export const NFL_VIEWS = Object.freeze(['teams', 'crews', 'viewership', 'scatter', 'weekend']);
 export const CREW_METRICS = Object.freeze(['margin', 'excitement', 'viewers']);
 
 /** Crews table sort keys and their natural directions (booth like CFB crew, margin like exc). */
@@ -94,11 +98,16 @@ const SPECIAL_SLOT_COLUMNS = Object.freeze([
 /** @returns {object} the default NFL state for this model */
 export function defaultNflState(model) {
   return {
-    view: 'special',
+    view: 'teams',
+    // The first tab's toggle: false counts every game by network, true only the special games.
+    special: false,
     seasons: [model.seasons[0], model.seasons[1]],
     teams: [],
     people: [],
     cats: [],
+    // The Networks pick: null is unfiltered, [] is none, else network ids in lookup order
+    // ('tba' stands for a game with no network yet), as on the CFB page.
+    networks: null,
     dots: 'fade',
     booths: [],
     perseason: true,
@@ -127,6 +136,14 @@ function cleanIds(list, lookup) {
 
 function pick(value, allowed, fallback) {
   return allowed.includes(value) ? value : fallback;
+}
+
+/** A Networks pick in lookup order; every network picked (or no list) is null, the unfiltered state. */
+function cleanNetworks(list, model) {
+  if (!Array.isArray(list)) return null;
+  const picked = new Set(list.filter((v) => typeof v === 'string'));
+  const ids = model.net.ids.filter((id) => picked.has(id));
+  return ids.length === model.net.ids.length ? null : ids;
 }
 
 /** The season the This weekend tab shows: the upcoming block's, else the freshness season. */
@@ -211,10 +228,12 @@ export function canonicalNflState(state, model) {
   const asList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
   return {
     view: pick(s.view, NFL_VIEWS, d.view),
+    special: s.special === true,
     seasons: [lo, hi],
     teams: cleanIds(s.teams, new Map(model.franchises.map((f) => [f.id, 1]))),
     people: cleanIds(s.people, new Map(model.people.map((p) => [p.id, 1]))),
     cats: CAT_KEYS.filter((k) => catSet.has(k)),
+    networks: cleanNetworks(s.networks, model),
     dots: s.dots === 'hide' ? 'hide' : 'fade',
     booths: [...new Set(asList(s.booths).filter((k) => model.boothIndex.has(k)))],
     perseason: s.perseason !== false,
@@ -250,10 +269,17 @@ function catMatches(model, key, i) {
   }
 }
 
-/** Seasons AND Team AND Category (match any); an empty filter passes all. */
+/** The Networks-filter id of game `i`: its network's id, or 'tba' when it has none yet. */
+export function networkIdOf(model, i) {
+  const n = model.cols.network[i];
+  return n == null ? 'tba' : model.networks[n].id;
+}
+
+/** Seasons AND Networks AND Team AND Category (match any); an empty filter passes all. */
 export function gamePasses(model, state, i) {
   const c = model.cols;
   if (c.season[i] < state.seasons[0] || c.season[i] > state.seasons[1]) return false;
+  if (state.networks != null && !state.networks.includes(networkIdOf(model, i))) return false;
   if (state.teams.length) {
     const home = model.franchises[c.home[i]].id;
     const away = model.franchises[c.away[i]].id;
@@ -316,11 +342,64 @@ function finish(model, acc, fIdx, faded, segFaded) {
   };
 }
 
+const SLOT_COLUMN_BY_NAME = new Map(SPECIAL_SLOT_COLUMNS.map(([col, label]) => [label, col]));
+
+/**
+ * The `special` block's rows recounted from the games `keep` passes: one row per franchise and
+ * season with the eight segments, `international`, `flexed`, `games` and the twelve
+ * `standalone_<slot>` counts. With every game kept it equals the shipped block on those columns.
+ */
+export function specialRowsFromGames(model, keep) {
+  const c = model.cols;
+  const rows = new Map();
+  const rowOf = (franchise, season) => {
+    const key = `${franchise}:${season}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { franchise, season, games: 0, international: 0, flexed: 0 };
+      for (const k of SEGMENT_KEYS) row[k] = 0;
+      for (const [col] of SPECIAL_SLOT_COLUMNS) row['standalone_' + col] = 0;
+      rows.set(key, row);
+    }
+    return row;
+  };
+  for (let i = 0; i < model.n; i++) {
+    if (!keep(i)) continue;
+    const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
+    const slotCol = c.standalone[i] ? SLOT_COLUMN_BY_NAME.get(model.slots[c.slot[i]]) : undefined;
+    for (const f of [c.home[i], c.away[i]]) {
+      const row = rowOf(f, c.season[i]);
+      row.games += 1;
+      if (cat && cat.key !== 'none') row[cat.key] += 1;
+      if (slotCol) row['standalone_' + slotCol] += 1;
+      if (c.international[i]) row.international += 1;
+      if (c.flexed[i]) row.flexed += 1;
+    }
+  }
+  return [...rows.values()].sort((a, b) => a.franchise - b.franchise || a.season - b.season);
+}
+
+let specialMemo = null;
+
+/**
+ * The special rows the bars read: the shipped block, or under a Networks pick the rows recounted
+ * from the games on the picked networks, so the pick narrows the Special games bars too.
+ */
+export function specialRows(model, state) {
+  if (state.networks == null) return model.special;
+  const signature = state.networks.join(',');
+  if (specialMemo && specialMemo.model === model && specialMemo.signature === signature) return specialMemo.rows;
+  const picked = new Set(state.networks);
+  const rows = specialRowsFromGames(model, (i) => picked.has(networkIdOf(model, i)));
+  specialMemo = { model, signature, rows };
+  return rows;
+}
+
 /** One entry per franchise, summed over the selected season range. */
 export function teamBars(model, state) {
   const [lo, hi] = state.seasons;
   const accs = model.franchises.map(() => newAcc());
-  for (const r of model.special) {
+  for (const r of specialRows(model, state)) {
     if (r.season < lo || r.season > hi) continue;
     addRow(accs[r.franchise], r);
   }
@@ -339,7 +418,7 @@ export function teamBars(model, state) {
 export function teamSeasonRows(model, state, franchiseIdx) {
   const [lo, hi] = state.seasons;
   const segFaded = segmentFading(state);
-  const rows = model.special
+  const rows = specialRows(model, state)
     .filter((r) => r.franchise === franchiseIdx && r.season >= lo && r.season <= hi)
     .sort((a, b) => b.season - a.season);
   return rows.map((r) => {
@@ -485,6 +564,11 @@ function newestFirst(model, list) {
 export function tableGames(model, state) {
   let base = null;
   const picks = computePicks(model, state);
+  if (state.selection && state.selection.exact === true && Array.isArray(state.selection.games)) {
+    // An all-games team bar lists exactly the games it counts: every filter but Team, which only
+    // puts the picked teams' bars in focus, so the table never drops a game the bar shows.
+    return newestFirst(model, state.selection.games);
+  }
   if (state.selection && Array.isArray(state.selection.games)) {
     // Under a pick a chart click may carry games the pick excludes (a Special games bar, a point's
     // full list) and a selection can go stale when the pick changes, so intersect with the matched
@@ -529,14 +613,169 @@ export function specialMatchedCounts(model, state, matched) {
   return out;
 }
 
-/** Count of non-default Seasons, Team, Category and Announcers filters (0-4). */
+/** Count of non-default Seasons, Team, Category, Networks, Announcers and Booths filters (0-6). */
 export function activeFilterCount(model, state) {
   const d = defaultNflState(model);
   let n = 0;
   if (state.seasons[0] !== d.seasons[0] || state.seasons[1] !== d.seasons[1]) n++;
   if (state.teams.length) n++;
   if (state.cats.length) n++;
+  if (state.networks != null) n++;
   if (state.people.length) n++;
   if (state.booths.length) n++;
   return n;
+}
+
+// ---- every game by team and network (the first tab with "Special games only" off) ----
+
+/** Per-network counts of game `i` added to a franchise's tally (`byNet`: network index -> counts). */
+function bumpNet(byNet, netIdx, special) {
+  let rec = byNet.get(netIdx);
+  if (!rec) {
+    rec = { count: 0, special: 0 };
+    byNet.set(netIdx, rec);
+  }
+  rec.count += 1;
+  if (special) rec.special += 1;
+}
+
+/** A tally (`network index -> {count, special}`) as family segments in legend order, each with its networks. */
+function familySegments(model, byNet) {
+  const { net } = model;
+  const out = [];
+  for (const family of net.families) {
+    const channels = [];
+    for (const idx of net.networksByFamily.get(family) ?? []) {
+      const rec = byNet.get(idx);
+      if (!rec) continue;
+      const { id, name } = net.lookups.networks[idx];
+      channels.push({ id, name, count: rec.count, special: rec.special });
+    }
+    if (!channels.length) continue;
+    out.push({
+      family,
+      count: channels.reduce((n, ch) => n + ch.count, 0),
+      special: channels.reduce((n, ch) => n + ch.special, 0),
+      channels,
+    });
+  }
+  return out;
+}
+
+/** Whether game `i` is a special game: it sits in one of the eight stack segments. */
+export function isSpecialGame(model, i) {
+  const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
+  return !!cat && cat.key !== 'none';
+}
+
+/**
+ * The games an all-games bar counts: every filter except Team (Seasons, Networks, Category) and
+ * the Announcers and Booths picks. Team does not narrow a bar; it puts the picked teams' bars in
+ * focus, as on the Special games bars.
+ */
+export function countedMask(model, state) {
+  return computePicks(model, state.teams.length ? { ...state, teams: [] } : state).matched;
+}
+
+/** Whether a filter or pick narrows the all-games bars, so team totals differ and rank the bars. */
+export function barsNarrowed(state) {
+  return state.networks != null || state.cats.length > 0 || state.people.length > 0 || state.booths.length > 0;
+}
+
+/**
+ * One entry per franchise with a counted game: its games by network family and network, each
+ * split into special and other games. `games` lists the counted game indexes (the bar click).
+ */
+export function networkBars(model, state) {
+  const mask = countedMask(model, state);
+  const c = model.cols;
+  const tallies = new Map();
+  for (let i = 0; i < model.n; i++) {
+    if (!mask[i]) continue;
+    const netIdx = c.network[i] ?? model.net.tbaIndex;
+    const special = isSpecialGame(model, i);
+    for (const f of [c.home[i], c.away[i]]) {
+      let t = tallies.get(f);
+      if (!t) {
+        t = { byNet: new Map(), games: [] };
+        tallies.set(f, t);
+      }
+      bumpNet(t.byNet, netIdx, special);
+      t.games.push(i);
+    }
+  }
+  const out = [];
+  for (const [f, t] of tallies) {
+    const segments = familySegments(model, t.byNet);
+    out.push({
+      franchise: f,
+      name: model.franchises[f].name,
+      total: segments.reduce((n, s) => n + s.count, 0),
+      special: segments.reduce((n, s) => n + s.special, 0),
+      segments,
+      games: t.games,
+      teamFaded: state.teams.length > 0 && !state.teams.includes(model.franchises[f].id),
+    });
+  }
+  return rankNetworkBars(model, out, barsNarrowed(state));
+}
+
+/**
+ * All-games bars ranked for the chart. With no narrowing filter every team has about the same
+ * total (a full schedule), so the bars rank by special games, the solid part, with ties by the
+ * franchise name A to Z and then its id: the order the Special games bars have with every chip
+ * on (`rankTeamBars`), so the rows keep their places when the toggle flips. Once a filter or
+ * pick narrows them they rank by their total, ties by special games, then name and id.
+ */
+export function rankNetworkBars(model, bars, narrowed) {
+  const id = (b) => model.franchises[b.franchise].id;
+  const byName = (a, b) =>
+    (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (id(a) < id(b) ? -1 : id(a) > id(b) ? 1 : 0);
+  return [...bars].sort((a, b) => (narrowed
+    ? b.total - a.total || b.special - a.special || byName(a, b)
+    : b.special - a.special || byName(a, b)));
+}
+
+/** One row per season with a counted game for a franchise, newest first, in the bars' shape. */
+export function networkSeasonRows(model, state, franchiseIdx) {
+  const mask = countedMask(model, state);
+  const c = model.cols;
+  const seasons = new Map();
+  for (const i of model.franchiseGames.get(franchiseIdx) || []) {
+    if (!mask[i]) continue;
+    let byNet = seasons.get(c.season[i]);
+    if (!byNet) {
+      byNet = new Map();
+      seasons.set(c.season[i], byNet);
+    }
+    bumpNet(byNet, c.network[i] ?? model.net.tbaIndex, isSpecialGame(model, i));
+  }
+  return [...seasons.entries()]
+    .sort((a, b) => b[0] - a[0])
+    .map(([season, byNet]) => {
+      const segments = familySegments(model, byNet);
+      return {
+        season,
+        segments,
+        total: segments.reduce((n, s) => n + s.count, 0),
+        special: segments.reduce((n, s) => n + s.special, 0),
+      };
+    });
+}
+
+/**
+ * Games per network index passing every filter and pick except Networks itself (the counts beside
+ * the Networks list's rows and the legend's "no games" state), in `model.net` index order. On the
+ * team bars Team is left out too: it only puts bars in focus there, so every team's networks
+ * still show. This weekend counts its own week's games (weekend-data.js nflWeekendNetworkFacets).
+ */
+export function networkFacets(model, state) {
+  const open = { ...state, networks: null, ...(state.view === 'teams' ? { teams: [] } : {}) };
+  const mask = computePicks(model, open).matched;
+  const counts = new Int32Array(model.net.lookups.networks.length);
+  const c = model.cols;
+  for (let i = 0; i < model.n; i++) {
+    if (mask[i]) counts[c.network[i] ?? model.net.tbaIndex] += 1;
+  }
+  return counts;
 }

@@ -3,7 +3,7 @@
  *
  * `mount({ footerEl, search })` builds the NFL regions once, fetches
  * nfl-data.json once (cache 'no-cache'), swaps the footer credits and wires
- * the games table, detail panel, tabs and the four views. `unmount()` hides
+ * the games table, detail panel, tabs and the five views. `unmount()` hides
  * nothing itself (CSS hides the regions under body[data-sport]); it restores
  * the footer, closes the panel and detaches listeners. State stays in memory.
  *
@@ -13,6 +13,7 @@ import { prepareNfl, gameRow } from './data.js';
 import { upcomingRow } from './weekend-data.js';
 import { currentTheme, onThemeChange } from '../../modules/theme.js';
 import { canonicalNflState, tableGames, gamePasses } from './state.js';
+import { computePicks } from './picks.js';
 import { encodeNflState, decodeNflState } from './url-state.js';
 import { createGamesTable } from './table.js';
 import { createDetailPanel } from './panel.js';
@@ -29,11 +30,11 @@ import { waitForFonts, onLateFont } from '../../modules/chart-frame.js';
 import { showToolsFor } from './tools.js';
 import { keepTailTogether } from '../../modules/format.js';
 
-const VIEW_MODULES = { special: teamBars, crews, viewership, scatter, weekend };
+const VIEW_MODULES = { teams: teamBars, crews, viewership, scatter, weekend };
 const VIEW_IDS = Object.keys(VIEW_MODULES);
 
 const HINTS = {
-  special: 'Pick a team bar to see its seasons and games.',
+  teams: 'Pick a team bar to see its seasons and games.',
   scatter: '',
 };
 
@@ -323,11 +324,16 @@ function renderSelectionBar() {
   }
 }
 
-/** '{N} games, {first}–{last}' for the active Seasons range and filters. */
+/**
+ * '{N} games, {first}–{last}' for the active Seasons range and filters. The all-games bars count
+ * only the games an Announcers or Booths pick matches, so their headline does too; the Special
+ * games bars and Scatter keep drawing the other games, faded, and count every game that passes.
+ */
 function renderHeadline() {
   const n = model.cols.season.length;
   let count = 0;
-  for (let i = 0; i < n; i += 1) if (gamePasses(model, state, i)) count += 1;
+  if (state.view === 'teams' && !state.special) count = computePicks(model, state).matchedCount;
+  else for (let i = 0; i < n; i += 1) if (gamePasses(model, state, i)) count += 1;
   const [lo, hi] = state.seasons;
   const span = lo === hi ? String(lo) : `${lo}–${hi}`;
   if (state.view === 'crews' || state.view === 'viewership' || state.view === 'weekend') {

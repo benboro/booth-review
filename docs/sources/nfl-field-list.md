@@ -203,19 +203,21 @@ nothing here claims the aggregation hides it.
 
 Modes: NFL Crews shows Raw or Adjusted (the booth residual
 `adj_<metric>_resid` with its standard error); NFL Viewership shows Viewers or
-Residual (`viewership_resid` with its standard error). Special games has no
-modes.
+Residual (`viewership_resid` with its standard error). Team games (every game
+by network, or the special games with its toggle on) has no modes.
 
 Crews Adjusted stays available under row filters (Seasons, a Booths pick, an
-Announcers pick that matches a booth row's play-by-play voice), which pool the
+Announcers pick that matches a booth row's play-by-play voice, a Networks pick
+that keeps or drops whole booth rows), which pool the
 shipped booth rows exactly from their `n`, mean and standard error; a row with
 a null residual leaves the pool together with its `n`, and the pooled value is
 blank when no row in range has one. Viewership Residual is never pooled: it
 shows one point per category-season, because the model behind it is fitted per
 category and era, so its residuals average to zero over a whole era. Any other
-pick (Team, Category on Crews or Viewership, Booths or Announcers on
+pick (Team, Category on Crews or Viewership, Booths, Announcers or Networks on
 Viewership, an Announcers pick that matches an analyst, fill-in or any other
-listed crew member inside a Crews row) switches the view to Raw, recomputed in
+listed crew member inside a Crews row, a Networks pick that keeps only some of a
+Crews row's games) switches the view to Raw, recomputed in
 the browser from `games[]` fields, with a short on-screen reason. When one pick
 matches whole rows in some places and games inside a row in others, the view
 switches to Raw. Under Raw, the low-n mark uses the number of picked games with
@@ -228,11 +230,15 @@ a value for the shown metric. No NFL contract, golden or fixture changes.
 | Crews x Announcers (booth's play-by-play voice) | row filter: `booths[].pbp_person` |
 | Crews x Announcers (analyst, fill-in or other crew member) | Raw, from the absolute value of `games[].final_margin`, `excitement`, `viewers` via `booths[].game_list` |
 | Crews x Team, Crews x Category | Raw, as above |
+| Crews x Networks (whole booth rows, e.g. Fox only) | row filter: `booths[]` rows whose `game_list` games are all on a picked network (`games[].network`) |
+| Crews x Networks (part of a row, e.g. ESPN without ABC) | Raw, as above |
 | Viewership x Seasons | row filter on `viewership[]` rows: Seasons trims the points drawn, one point per category-season in both settings (`mean_viewers`, `games`; Residual `viewership_resid`, `viewership_se`); nothing is pooled across seasons |
-| Viewership x Category, Team, Announcers or Booths | Raw, from `games[].viewers` via `viewership[].game_list` |
+| Viewership x Category, Team, Networks, Announcers or Booths | Raw, from `games[].viewers` via `viewership[].game_list` |
 | Special games x Seasons | row filter: `special[]` whole rows |
 | Special games x Category | fades segments within `special[]` rows; no row is dropped |
 | Special games x Team, Announcers | `games[].home`, `away`, `crew`, `slot`, `standalone`, `agotw`, `cbs_national`, `international`, `flexed` (no spread value used) |
+| Special games x Networks | the `special[]` columns recounted from `games[]` for the picked networks (`network` plus the fields above) |
+| Team games, all games x any pick | counts of `games[]` by `home`, `away` and `network` (`lookups.networks[].family`), split by the special-game flags; Team fades rows, every other pick narrows the counts (no spread value used) |
 | Scatter, Matched games table x any pick | `games[]` fields, by pass |
 
 Phase 15 (2026-10-23): the approved 15-UI-SPEC trims Viewership points to the Seasons range instead of pooling Viewers within one era; the 12-DECISIONS reading of pooled Viewers is not built.

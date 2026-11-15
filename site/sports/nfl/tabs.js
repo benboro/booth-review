@@ -5,7 +5,7 @@
 import { NFL_VIEWS } from './state.js';
 
 export const TAB_LABELS = Object.freeze({
-  special: 'Special games',
+  teams: 'Team games',
   crews: 'Crews',
   viewership: 'Viewership',
   scatter: 'Scatter',

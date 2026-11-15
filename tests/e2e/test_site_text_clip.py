@@ -22,7 +22,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 CFB_VIEWS = ["", "bars", "butterfly", "map", "crews", "weekend"]
-NFL_VIEWS = ["special", "crews", "viewership", "scatter", "weekend"]
+NFL_VIEWS = ["teams", "crews", "viewership", "scatter", "weekend"]
 WIDTHS = [1440, 1024, 390]
 
 # Returns one entry per clipped text run: the clipping element, the text, and how many

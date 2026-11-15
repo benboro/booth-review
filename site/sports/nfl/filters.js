@@ -1,6 +1,6 @@
 /**
- * NFL toolbar filters (D-02, D-08): Clear all filters, Announcers, Seasons,
- * Category and Team popovers, plus the mobile Filters button and its own
+ * NFL toolbar filters (D-02, D-08): Clear all filters, Announcers, Networks, Booths,
+ * Team, Category and Seasons popovers, plus the mobile Filters button and its own
  * bottom sheet (`#nfl-filters-sheet`).
  *
  * Nothing here touches CFB nodes or the CFB filters module: each section is built
@@ -15,7 +15,13 @@
  * visible (D-11), and its entries are grouped Broadcast, Matchup, Calendar like the CFB bar.
  */
 import { makeRolePill } from '../../modules/pill.js';
-import { CATEGORY_OPTIONS, boothGames, defaultNflState } from './state.js';
+import { makeCaretIcon } from '../../modules/icons.js';
+import { familyIsSole, familyOnlyPatch, offeredFamilyIds, sameSet } from '../../modules/select.js';
+import {
+  CATEGORY_OPTIONS, boothGames, defaultNflState, networkFacets, weekendCurrentWeek,
+} from './state.js';
+import { nflWeekendNetworkFacets } from './weekend-data.js';
+import { familyLabel } from './palette.js';
 import { PHONE_QUERY } from '../../modules/breakpoints.js';
 
 const TRIGGERS = [
@@ -24,11 +30,13 @@ const TRIGGERS = [
   { key: 'category', label: 'Category' },
   { key: 'team', label: 'Team' },
   { key: 'booths', label: 'Booths' },
+  { key: 'networks', label: 'Networks' },
 ];
 
 /** The bar's three ruled groups, left to right (UI-SPEC decision 8); the phone sheet uses the same. */
 const GROUPS = [
-  { key: 'broadcast', label: 'Broadcast', keys: ['announcers', 'booths'] },
+  // Announcers, Networks, then the booth entry: the CFB bar's Broadcast order.
+  { key: 'broadcast', label: 'Broadcast', keys: ['announcers', 'networks', 'booths'] },
   { key: 'matchup', label: 'Matchup', keys: ['team', 'category'] },
   { key: 'calendar', label: 'Calendar', keys: ['seasons'] },
 ];
@@ -546,12 +554,208 @@ function teamSection(ctx, sfx) {
   };
 }
 
+let networkBoxSeq = 0;
+
+/**
+ * The games each network has under the other filters, for the view on screen: This weekend
+ * counts its own week's games, every other tab the played games (state.js networkFacets).
+ */
+function facetsFor(model, state) {
+  return state.view === 'weekend'
+    ? nflWeekendNetworkFacets(model, state, state.week ?? weekendCurrentWeek(model))
+    : networkFacets(model, state);
+}
+
+/**
+ * Networks: the CFB page's family-nested checklist (same markup and classes, so the shared
+ * styles and the shared selection helpers in modules/select.js apply). A family row holds a
+ * tri-state checkbox, a caret that shows its networks when it has more than one, the games it
+ * has under the other filters, and Only / All; picks write `networks` in lookup order.
+ */
+function networksSection(ctx, sfx) {
+  const { model } = ctx;
+  const { net } = model;
+  const root = el('section', 'nfl-filter-section nfl-filter-networks');
+  root.id = `nfl-filter-networks-${sfx}`;
+  const { head, reset } = sectionHead('Networks', () => ctx.setState({ networks: null }));
+  root.appendChild(head);
+  const allIds = net.ids;
+  const idsOf = (family) => (net.networksByFamily.get(family) ?? []).map((idx) => net.lookups.networks[idx].id);
+  const inLookupOrder = (set) => allIds.filter((id) => set.has(id));
+  const expanded = new Set();
+  const families = [];
+  const channels = [];
+
+  const countSpans = () => {
+    const visible = el('span', 'option-count');
+    visible.setAttribute('aria-hidden', 'true');
+    return [visible, el('span', 'visually-hidden option-count-sr')];
+  };
+  const checkItem = (box, name) => {
+    const item = el('div', 'check-item');
+    const label = el('label', 'check-row');
+    label.append(box, el('span', 'option-name', name), ...countSpans());
+    item.appendChild(label);
+    return item;
+  };
+  const onlyButton = () => {
+    const btn = el('button', 'only-btn', 'Only');
+    btn.type = 'button';
+    return btn;
+  };
+  const setCount = (item, count) => {
+    item.querySelector('.option-count').textContent = `(${count})`;
+    item.querySelector('.option-count-sr').textContent = `, ${count} ${count === 1 ? 'game' : 'games'}`;
+    item.classList.toggle('is-zero', count === 0);
+  };
+
+  for (const family of net.families) {
+    const idxs = net.networksByFamily.get(family) ?? [];
+    const label = familyLabel(family);
+    const fieldset = el('fieldset', 'family-group');
+    const legend = el('legend');
+    const box = el('input');
+    box.type = 'checkbox';
+    box.dataset.familyCheckbox = family;
+    const item = checkItem(box, label);
+    item.classList.add('family-item');
+    const listId = `nfl-family-rows-${family}-${sfx}`;
+    let caret = null;
+    if (idxs.length > 1) {
+      caret = el('button', 'family-caret');
+      caret.type = 'button';
+      caret.setAttribute('aria-expanded', 'false');
+      caret.setAttribute('aria-controls', listId);
+      caret.setAttribute('aria-label', `${label} channels`);
+      caret.title = 'Show channels';
+      caret.appendChild(makeCaretIcon());
+      caret.addEventListener('click', () => {
+        if (expanded.has(family)) expanded.delete(family);
+        else expanded.add(family);
+        syncRows();
+      });
+      item.prepend(caret);
+    } else {
+      const spacer = el('span', 'family-caret-spacer');
+      spacer.setAttribute('aria-hidden', 'true');
+      item.prepend(spacer);
+    }
+    // "2 of 3 on" between the name and the count, as the checkbox's description (CFB 04.16 D-12).
+    const hint = el('span', 'family-on-hint');
+    hint.setAttribute('aria-hidden', 'true');
+    hint.hidden = true;
+    hint.id = `nfl-family-on-${family}-${sfx}`;
+    box.setAttribute('aria-describedby', hint.id);
+    item.querySelector('.option-name').after(hint);
+    const only = onlyButton();
+    only.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const state = ctx.getState();
+      const view = { facets: { networks: facetsFor(model, state) } };
+      ctx.setState(familyOnlyPatch(net, view, family, state.networks));
+    });
+    item.appendChild(only);
+    box.addEventListener('change', () => {
+      const cur = new Set(ctx.getState().networks ?? allIds);
+      for (const id of idsOf(family)) {
+        if (box.checked) cur.add(id);
+        else cur.delete(id);
+      }
+      ctx.setState({ networks: inLookupOrder(cur) });
+    });
+    legend.appendChild(item);
+    fieldset.appendChild(legend);
+
+    const list = el('ul', 'network-list');
+    list.id = listId;
+    list.hidden = true;
+    for (const idx of idxs) {
+      const { id, name } = net.lookups.networks[idx];
+      const li = el('li');
+      const netBox = el('input');
+      netBox.type = 'checkbox';
+      netBox.dataset.networkId = id;
+      netBox.id = `nfl-net-${networkBoxSeq++}`;
+      const netItem = checkItem(netBox, name);
+      const netOnly = onlyButton();
+      netOnly.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const cur = ctx.getState().networks;
+        ctx.setState({ networks: cur != null && sameSet(cur, [id]) ? null : [id] });
+      });
+      netItem.appendChild(netOnly);
+      netBox.addEventListener('change', () => {
+        const cur = new Set(ctx.getState().networks ?? allIds);
+        if (netBox.checked) cur.add(id);
+        else cur.delete(id);
+        ctx.setState({ networks: inLookupOrder(cur) });
+      });
+      li.appendChild(netItem);
+      list.appendChild(li);
+      channels.push({ id, idx, name, box: netBox, item: netItem, only: netOnly });
+    }
+    fieldset.appendChild(list);
+    root.appendChild(fieldset);
+    families.push({ family, label, idxs, box, item, caret, hint, list, only });
+  }
+
+  function syncRows() {
+    for (const f of families) {
+      const open = expanded.has(f.family);
+      if (f.caret) {
+        f.caret.setAttribute('aria-expanded', String(open));
+        f.caret.title = open ? 'Hide channels' : 'Show channels';
+      }
+      f.list.hidden = !open;
+      f.hint.hidden = open || !f.box.indeterminate;
+    }
+  }
+
+  return {
+    root,
+    // Every open starts with the families collapsed, as on the CFB page (04.16 D-10).
+    onOpen() {
+      expanded.clear();
+      syncRows();
+    },
+    update(state) {
+      const counts = facetsFor(model, state);
+      const view = { facets: { networks: counts } };
+      const current = state.networks ?? allIds;
+      for (const ch of channels) {
+        ch.box.checked = current.includes(ch.id);
+        setCount(ch.item, counts[ch.idx]);
+        const sole = state.networks != null && sameSet(state.networks, [ch.id]);
+        ch.only.textContent = sole ? 'All' : 'Only';
+        ch.only.setAttribute('aria-label', sole ? 'Show all networks' : `Show only ${ch.name}`);
+      }
+      for (const f of families) {
+        const ids = idsOf(f.family);
+        const on = ids.filter((id) => current.includes(id)).length;
+        f.box.checked = ids.length > 0 && on === ids.length;
+        f.box.indeterminate = on > 0 && on < ids.length;
+        f.hint.textContent = `${on} of ${ids.length} on`;
+        setCount(f.item, f.idxs.reduce((sum, idx) => sum + counts[idx], 0));
+        const sole = familyIsSole(net, view, f.family, state.networks);
+        f.only.hidden = offeredFamilyIds(net, f.family, view).length === 0;
+        f.only.textContent = sole ? 'All' : 'Only';
+        f.only.setAttribute('aria-label', sole ? 'Show all networks' : `Show only ${f.label}`);
+      }
+      syncRows();
+      setDisabledLook(reset, state.networks == null);
+    },
+  };
+}
+
 const BUILDERS = {
   announcers: announcersSection,
   booths: boothsSection,
   seasons: seasonsSection,
   category: categorySection,
   team: teamSection,
+  networks: networksSection,
 };
 
 // ---- popover placement ----
@@ -610,7 +814,19 @@ function controlInfo(model, state) {
     category: picks('Category', 'All', state.cats.map(catName)),
     team: picks('Team', 'Any', state.teams.map(teamName)),
     booths: picks('Booths', 'Any', state.booths.map(boothName)),
+    networks: networksInfo(model, state),
   };
+}
+
+/**
+ * The Networks entry (the CFB rule): "All" at default, else the checked network names in lookup
+ * order, which truncate inside the entry, or "None" for an empty pick.
+ */
+function networksInfo(model, state) {
+  if (state.networks == null) return { active: false, items: [], count: 0, value: 'All', full: 'Networks' };
+  const names = model.net.lookups.networks.filter((n) => state.networks.includes(n.id)).map((n) => n.name);
+  const items = names.length ? names : ['None'];
+  return { active: true, items, count: names.length, value: items.join(', '), full: `Networks: ${items.join(', ')}` };
 }
 
 /** The control keys that differ from a clean load, in bar order. */
@@ -623,7 +839,7 @@ export function changedControls(model, state) {
 
 function clearAll(ctx) {
   const d = defaultNflState(ctx.model);
-  ctx.setState({ seasons: [...d.seasons], teams: [], people: [], cats: [], booths: [] });
+  ctx.setState({ seasons: [...d.seasons], teams: [], people: [], cats: [], booths: [], networks: null });
 }
 
 function buildShell(ctx) {
@@ -744,10 +960,18 @@ function buildSections(ctx) {
   const sheetRoots = new Map();
   for (const t of TRIGGERS) {
     const popSection = BUILDERS[t.key](ctx, 'pop');
-    ui.popovers.get(t.key).appendChild(popSection.root);
+    const pop = ui.popovers.get(t.key);
+    pop.appendChild(popSection.root);
     const sheetSection = BUILDERS[t.key](ctx, 'sheet');
     sheetRoots.set(t.key, sheetSection.root);
     updaters.push(popSection.update, sheetSection.update);
+    // A section may reset its in-memory layout each time its popover or the sheet opens.
+    for (const [host, section] of [[pop, popSection], [ui.sheet, sheetSection]]) {
+      if (!section.onOpen) continue;
+      host.addEventListener('beforetoggle', (e) => {
+        if (e.newState === 'open') section.onOpen();
+      });
+    }
   }
   // The phone sheet follows the bar: Broadcast, Matchup, Calendar, each under a ruled label.
   for (const g of GROUPS) {
@@ -824,7 +1048,7 @@ export function renderNflFilters(ctx) {
     btn.setAttribute('title', full);
     btn.setAttribute('aria-label', full);
   }
-  // This weekend uses only Team, Announcers and Booths: Seasons and Category are greyed (D-21).
+  // This weekend uses only Team, Networks, Announcers and Booths: Seasons and Category are greyed (D-21).
   const weekendView = state.view === 'weekend';
   for (const key of UNUSED_ON_WEEKEND) {
     const btn = ui.triggers.get(key);

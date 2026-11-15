@@ -15,6 +15,9 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
+# The first NFL tab with "Special games only" on: the old Special games tab.
+SPECIAL_ON = "?sport=nfl&special=1"
+
 SEGMENTS = [
     "solo_thursday",
     "solo_sunday",
@@ -41,16 +44,14 @@ _GAP_CLICK = """
 }
 """
 
-SPECIAL = "#nfl-view-special .legend-chips"
+SPECIAL = "#nfl-view-teams .legend-chips"
 SCATTER = "#nfl-view-scatter .legend-chips"
 
 
 @pytest.fixture
 def app(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> Page:
-    open_nfl_app(nfl_guarded_page)
-    nfl_guarded_page.wait_for_function(
-        "window.__nflTestHooks.getViewModel('special').drawn === true"
-    )
+    open_nfl_app(nfl_guarded_page, SPECIAL_ON)
+    nfl_guarded_page.wait_for_function("window.__nflTestHooks.getViewModel('teams').drawn === true")
     return nfl_guarded_page
 
 

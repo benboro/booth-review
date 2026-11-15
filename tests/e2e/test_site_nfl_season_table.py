@@ -15,8 +15,11 @@ from playwright.sync_api import Page
 
 pytestmark = pytest.mark.e2e
 
-GD = "#nfl-view-special .nfl-chart > div"
-TABLE = "#nfl-view-special .nfl-breakdown table"
+# The first NFL tab with "Special games only" on: the old Special games tab.
+SPECIAL_ON = "?sport=nfl&special=1"
+
+GD = "#nfl-view-teams .nfl-chart > div"
+TABLE = "#nfl-view-teams .nfl-breakdown table"
 HEADS = [
     "Season",
     "Solo slots",
@@ -42,7 +45,7 @@ RULED = ["Thursday night", "Fox AGOTW", "Special games", "Flexed"]
 
 
 def _select_team(page: Page) -> None:
-    page.wait_for_function("window.__nflTestHooks.getViewModel('special').drawn === true")
+    page.wait_for_function("window.__nflTestHooks.getViewModel('teams').drawn === true")
     page.evaluate(
         """(sel) => {
           document.querySelector(sel).emit('plotly_click',
@@ -56,14 +59,14 @@ def _select_team(page: Page) -> None:
 @pytest.fixture
 def app(nfl_guarded_page: Page, open_nfl_app: Callable[..., None]) -> Page:
     nfl_guarded_page.set_viewport_size({"width": 1440, "height": 900})
-    open_nfl_app(nfl_guarded_page)
+    open_nfl_app(nfl_guarded_page, SPECIAL_ON)
     _select_team(nfl_guarded_page)
     return nfl_guarded_page
 
 
 @pytest.fixture
 def mobile(nfl_mobile_page: Page, open_nfl_app: Callable[..., None]) -> Page:
-    open_nfl_app(nfl_mobile_page)
+    open_nfl_app(nfl_mobile_page, SPECIAL_ON)
     _select_team(nfl_mobile_page)
     return nfl_mobile_page
 
@@ -99,12 +102,12 @@ def test_structure_and_totals(app: Page) -> None:
     table_text = app.inner_text(TABLE)
     for bad in ("n/a", "weeks", "%", " of "):
         assert bad not in table_text
-    text = app.inner_text("#nfl-view-special .nfl-breakdown")
+    text = app.inner_text("#nfl-view-teams .nfl-breakdown")
     assert (
         "Special games is the sum of the eight columns before it. "
         "Flexed games are counted separately."
     ) in text
-    assert app.locator("#nfl-view-special .nfl-breakdown a").count() == 0
+    assert app.locator("#nfl-view-teams .nfl-breakdown a").count() == 0
 
 
 @pytest.mark.parametrize("theme", ["light", "dark"])
@@ -285,10 +288,10 @@ def test_phone_tap_toggle_outside_and_replace(mobile: Page) -> None:
     mobile.wait_for_function(
         "t => document.getElementById('chart-tooltip').textContent === t", arg=TIPS["Fox AGOTW"]
     )
-    mobile.locator("#nfl-view-special .nfl-breakdown h3").evaluate(
+    mobile.locator("#nfl-view-teams .nfl-breakdown h3").evaluate(
         "e => e.scrollIntoView({ block: 'center' })"
     )
-    mobile.locator("#nfl-view-special .nfl-breakdown h3").tap()
+    mobile.locator("#nfl-view-teams .nfl-breakdown h3").tap()
     mobile.wait_for_function("document.getElementById('chart-tooltip').hidden")
 
 
@@ -312,7 +315,7 @@ def test_rerender_while_open_hides_tooltip(mobile: Page) -> None:
 
 def test_international_label_in_table_head(app: Page) -> None:
     assert "International" in app.locator(f"{TABLE} thead th").all_inner_texts()
-    assert "International, shared" not in app.inner_text("#nfl-view-special")
+    assert "International, shared" not in app.inner_text("#nfl-view-teams")
 
 
 def test_phone_second_head_row_is_not_pinned(mobile: Page) -> None:
@@ -345,7 +348,7 @@ def test_phone_table_sits_under_its_heading_and_cues_its_scroll(mobile: Page) ->
     # between the heading and the table, and the scroller carries the site's edge-fade cue.
     page = mobile
     got = page.evaluate(
-        """() => { const b = document.querySelector('#nfl-view-special .nfl-breakdown');
+        """() => { const b = document.querySelector('#nfl-view-teams .nfl-breakdown');
           const h = b.querySelector('h3').getBoundingClientRect();
           const scroll = b.querySelector('.table-scroll');
           const s = scroll.getBoundingClientRect();

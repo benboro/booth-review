@@ -219,7 +219,7 @@ def test_filter_bar_booths_and_announcer_intersect_everywhere(
     assert set(both) == set(booth_only) & set(people_only)
     page.evaluate(f"k => {HOOKS}.setState({{ booths: [k] }})", CATALOG)
     page.wait_for_function(f"{HOOKS}.getState().booths.length === 1")
-    for view in ("special", "scatter"):
+    for view in ("teams", "scatter"):
         page.evaluate(f"v => {HOOKS}.setState({{ view: v }})", view)
         page.wait_for_function(f"{HOOKS}.getState().view === '{view}'")
         with_both = page.evaluate(f"v => JSON.stringify({HOOKS}.getViewModel(v))", view)

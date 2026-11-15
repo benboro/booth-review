@@ -19,7 +19,7 @@ from playwright.sync_api import Page
 pytestmark = pytest.mark.e2e
 
 WIDTHS = [1440, 1104, 1024, 768, 390]
-VIEWS = ["special", "crews", "viewership", "scatter"]
+VIEWS = ["teams", "crews", "viewership", "scatter"]
 TRACE_TYPES = {"scatter", "scattergl", "bar"}
 TEAM = "f-lanterns"
 CREWS = "#nfl-view-crews"
