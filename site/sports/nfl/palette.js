@@ -4,7 +4,7 @@
  * colours from it, so a network looks the same on both pages.
  */
 import {
-  FAMILY_COLORS, FAMILY_LABELS, MUTED, PAGE_BG, familyKey, mixHex,
+  FAMILY_COLORS, FAMILY_LABELS, MUTED, PAGE_BG, SURFACE, contrastRatio, familyKey, mixHex,
 } from '../../modules/palette.js';
 import { NO_NETWORK_NAME } from './data.js';
 
@@ -43,23 +43,42 @@ export function familyColor(family, theme) {
 }
 
 /**
- * Segment colors for the eight exclusive stack segments, keyed by the builder's
- * segment names. The hues are positional Okabe-Ito picks and imply no CFB network
- * family. Sunday night (from #1D96DB) and the greys (from #8F8F8F) are darkened in
- * the light theme because they measured 2.99 and 2.96 against --surface, under the
- * 3:1 check (NFL-only style, D-18). On the Phase 26 green-gray surface (#EBEFED) Monday
- * (from #009E73, 2.95:1) and CBS national (from #B77F00, 2.99:1) fell under it too, so
- * they take the deepened map-family values (#009970, #B37C00) in the light theme.
+ * Segment colors for the eight exclusive stack segments, keyed by the builder's segment
+ * names. Each category wears the family colour of the network that carries most of its
+ * games, so a category looks like its network on the all-games bars (user 2026-11-15):
+ * Sunday night NBC, Monday night ESPN, Fox AGOTW FOX, CBS late national CBS. Thursday
+ * night (Prime Video), Other solo slot and International (NFL Network) are all in the
+ * Other family, so they take three greys a clear step apart, every one at 3:1 or more on
+ * --bg and --surface (e2e: test_segment_colors_reach_3_to_1); a network colour under that
+ * is deepened just enough to reach it (familyPair). Holiday games split almost
+ * evenly between FOX, CBS and NBC, so Holiday keeps an olive no network uses (user
+ * 2026-11-15).
  */
+const SEGMENT_MIN_CONTRAST = 3;
+
+/**
+ * A network family's colour pair for a category. The light tone is deepened toward black,
+ * one step at a time, until it reaches 3:1 on --surface (NBC's #C972A2 measured 2.82); a
+ * family that already clears it keeps its own colour.
+ */
+function familyPair(family) {
+  const base = FAMILY_COLORS.light[family];
+  let light = base;
+  for (let w = 100; w >= 0 && contrastRatio(light, SURFACE.light) < SEGMENT_MIN_CONTRAST; w -= 1) {
+    light = mixHex(base, '#000000', w / 100);
+  }
+  return Object.freeze({ light, dark: FAMILY_COLORS.dark[family] });
+}
+
 export const NFL_CATEGORY_COLORS = Object.freeze({
-  solo_thursday: Object.freeze({ light: '#0072B2', dark: '#0072B2' }),
-  solo_sunday: Object.freeze({ light: '#1B90D2', dark: '#56B4E9' }),
-  solo_monday: Object.freeze({ light: '#009970', dark: '#009E73' }),
+  solo_thursday: Object.freeze({ light: '#444444', dark: '#D2D2D2' }),
+  solo_sunday: familyPair('nbc'),
+  solo_monday: familyPair('disney'),
   solo_holiday: Object.freeze({ light: '#8A7A00', dark: '#F0E442' }),
   solo_other: Object.freeze({ light: '#888888', dark: '#999999' }),
-  agotw: Object.freeze({ light: '#D55E00', dark: '#D55E00' }),
-  cbs_national: Object.freeze({ light: '#B37C00', dark: '#E69F00' }),
-  international_other: Object.freeze({ light: '#C26D9C', dark: '#CC79A7' }),
+  agotw: familyPair('fox'),
+  cbs_national: familyPair('cbs'),
+  international_other: Object.freeze({ light: '#5F5F5F', dark: '#B0B0B0' }),
 });
 
 /** Games in no special category (scatter only). */
@@ -68,7 +87,9 @@ export const NFL_OTHER_COLOR = Object.freeze({ light: '#888888', dark: '#999999'
 /**
  * Viewership view category -> segment color plus marker symbol. Lines that share a hue
  * (the three holidays, Saturday/Friday/Other) also differ in marker shape and carry their
- * own shade of the family hue (`shade`), so they stay apart. Every shade reaches 3:1
+ * own shade of the family hue (`shade`), so they stay apart. The greys also keep clear of
+ * Thursday night's and International's: International is a triangle, and the Other-slot
+ * lines take shades and shapes neither of those uses. Every shade reaches 3:1
  * against --bg and --surface in both themes (e2e: test_view_category_colors_reach_3_to_1).
  * Dashes stay reserved for window-level lines.
  */
@@ -81,10 +102,10 @@ export const VIEW_CATEGORY_STYLE = Object.freeze({
   thanksgiving: { segment: 'solo_holiday', symbol: 'circle' },
   christmas: { segment: 'solo_holiday', symbol: 'square', shade: { light: '#6B5F00', dark: '#C9BD1F' } },
   black_friday: { segment: 'solo_holiday', symbol: 'diamond', shade: { light: '#9A8800', dark: '#FFF59A' } },
-  international: { segment: 'international_other', symbol: 'circle' },
-  saturday: { segment: 'solo_other', symbol: 'circle', shade: { light: '#5F5F5F', dark: '#8A8A8A' } },
-  friday: { segment: 'solo_other', symbol: 'square', shade: { light: '#888888', dark: '#B0B0B0' } },
-  other: { segment: 'solo_other', symbol: 'diamond', shade: { light: '#444444', dark: '#D2D2D2' } },
+  international: { segment: 'international_other', symbol: 'triangle-up' },
+  saturday: { segment: 'solo_other', symbol: 'circle' },
+  friday: { segment: 'solo_other', symbol: 'square', shade: { light: '#767676', dark: '#7E7E7E' } },
+  other: { segment: 'solo_other', symbol: 'diamond', shade: { light: '#2B2B2B', dark: '#EDEDED' } },
 });
 
 /**
