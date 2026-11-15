@@ -715,6 +715,12 @@ def test_click_with_only_international_shown_lists_only_international_games(
         body, "els => els.map(e => [...e.children].map(c => c.textContent))"
     )
     per_season = {r["season"]: r for r in _special_rows(raw, lo, hi) if r["franchise"] == f}
+    # While a chip is off, only seasons with games in the shown columns are listed, newest first.
+    listed = [int(c[0]) for c in rows]
+    assert listed == sorted(
+        (y for y, r in per_season.items() if r["international_other"]), reverse=True
+    )
+    assert len(listed) < len(per_season)  # the fixture's leader has a season with none
     for cells in rows:
         r = per_season[int(cells[0])]
         assert cells[1:8] == ["–"] * 7
@@ -737,10 +743,20 @@ def test_click_with_only_international_shown_lists_only_international_games(
     rows = app.eval_on_selector_all(
         body, "els => els.map(e => [...e.children].map(c => c.textContent))"
     )
+    assert [int(c[0]) for c in rows] == sorted(
+        (y for y, r in per_season.items() if r["agotw"] + r["international_other"]), reverse=True
+    )
     for cells in rows:
         r = per_season[int(cells[0])]
         assert cells[6] == str(r["agotw"])
         assert cells[9] == str(r["agotw"] + r["international_other"])
+
+    # Only a segment the team has no games in: no season rows, and the note says so.
+    empty = next(k for k in SEGMENT_KEYS if not any(r[k] for r in per_season.values()))
+    _set(app, {"hiddenSegments": [k for k in SEGMENT_KEYS if k != empty]})
+    app.wait_for_function("window.__nflTestHooks.getTableIndexes().length === 0")
+    assert app.locator(body).count() == 0
+    assert "No games in the shown categories." in app.inner_text("#nfl-view-special .nfl-breakdown")
 
     # Every chip on again: the whole team, as before.
     _set(app, {"hiddenSegments": []})
@@ -750,6 +766,8 @@ def test_click_with_only_international_shown_lists_only_international_games(
     )
     assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == want
     assert "–" not in app.inner_text("#nfl-view-special .nfl-breakdown table")
+    # Every chip on: every season in range is listed, as before.
+    assert app.locator(body).count() == len(per_season)
 
 
 def test_solo_international_game_is_in_the_international_segment(

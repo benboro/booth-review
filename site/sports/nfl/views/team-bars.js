@@ -643,9 +643,11 @@ function renderBreakdown(model, state, env, rows) {
   thead.append(row1, row2);
   const tbody = el('tbody');
   // A chip-hidden category is not shown: its cells read as a dash and Special games sums the
-  // shown columns only, so the table matches the bar.
+  // shown columns only, so the table matches the bar. While a chip is off, a season with no
+  // games in the shown columns is left out; with every chip on, every season is listed.
   const hidden = new Set(state.hiddenSegments);
   for (const r of teamSeasonRows(model, state, fIdx)) {
+    if (hidden.size && shownTotal(r, state.hiddenSegments) === 0) continue;
     const tr = el('tr');
     tr.dataset.season = String(r.season);
     const season = cell('th', String(r.season));
@@ -689,6 +691,9 @@ function renderBreakdown(model, state, env, rows) {
   refs.cueOff = attachScrollCue(scroll, null);
   if (lines) breakdown.appendChild(lines);
 
+  if (!tbody.children.length) {
+    breakdown.appendChild(el('p', 'nfl-muted', 'No games in the shown categories.'));
+  }
   breakdown.appendChild(el(
     'p',
     'nfl-muted',
