@@ -52,7 +52,7 @@ Terms status uses five values:
 | `pregame_spread` | Pre-game point spread, positive when home is favored | nflverse schedules (`spread_line`), scripted | 2006 | analysis-only (odds provenance unstated) | can move until kickoff | copied, used only for game-quality controls |
 | `final_margin` | Home score minus away score | derived from nflverse schedules (`result`) | 2006 | derived | after the game | copied as computed |
 | `home_points` / `away_points` | Final score of each side | nflverse schedules (`home_score` / `away_score`), scripted | 2006 | open-attribution (CC BY 4.0) | after the game | copied; both null together when the game is unplayed, so they never disagree with `final_margin` |
-| `international_other` | Games that are international but not standalone, AGOTW or CBS national (Task 2's exclusive fourth stack segment) | derived from `is_international`, `is_standalone`, `is_agotw`, `is_cbs_national` | 2006 | derived | after each game | counted per franchise-season so a stacked bar counts each game once; `international` keeps its full meaning |
+| `international_other` | International games that are not a Thursday, Sunday or Monday night or holiday solo game, AGOTW or CBS national, solo slot or shared window (Task 2's exclusive International stack segment; since NFL contract 3.0.0 it includes the solo international games, which leave `solo_other`) | derived from `is_international`, `is_standalone`, `slot_name`, `is_agotw`, `is_cbs_national` | 2006 | derived | after each game | counted per franchise-season so a stacked bar counts each game once; `international` keeps its full meaning |
 | `wp_volatility` | How much win probability swung during the game | derived from nflverse play-by-play win probability | 1999 | derived | nightly after games | spread of per-play `home_wp` changes |
 
 ## Rules
@@ -114,7 +114,8 @@ Terms status uses five values:
   with slot name Christmas, and the streaming service is the network value.
 - **9:30 ET international:** Team A vs. Team B in Europe on Sunday at 9:30 am ET
   on a cable network. The next kickoff is 1:00 pm, a gap of 3:30, so it is
-  standalone with slot name International and the international flag set.
+  standalone with slot name International and the international flag set. Its stack
+  segment is International, not Other solo slot.
 - **Friday in Brazil:** an opening-week Friday night game in Sao Paulo on a
   streaming service. It is standalone, and its slot name is International.
 - **Cross-flex:** a 1:00 pm game moved from CBS to Fox. It is not standalone and

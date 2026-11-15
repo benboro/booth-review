@@ -42,10 +42,10 @@ NOTE_LINES = [
     "Sunday night: solo-slot Sunday night games.",
     "Monday night: solo-slot Monday games. Monday doubleheader games share a window, so they are not counted here.",
     "Holiday: Thanksgiving, Christmas and Black Friday games in a solo slot.",
-    "Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.",
+    "Other solo slot: any other game with no NFL game within 3 hours, such as a Saturday, Friday or lone Sunday-afternoon game.",
     "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
     "CBS late national: CBS's national game in the late Sunday window.",
-    "International: a game played abroad that shares its window with other games.",
+    "International: a game played abroad, alone in its window or not. A night, holiday, Fox AGOTW or CBS late national game abroad keeps that category.",
 ]
 LEGEND = "#nfl-view-special .legend-chips"
 SLOT_ORDER = [
@@ -116,11 +116,42 @@ def _agg(raw: dict[str, Any], lo: int, hi: int) -> dict[int, dict[str, Any]]:
     return out
 
 
-# The solo slots each combined row lists under its label (notes 15), in slot order.
+# The solo slots each combined row lists under its label (notes 15), in slot order. A solo
+# International-slot game is International (contract 3.0.0), so Other solo slot omits it.
 SUB_SLOTS = {
     "solo_holiday": ("thanksgiving", "christmas", "black_friday"),
-    "solo_other": ("saturday", "international", "friday", "sunday_early", "sunday_late", "other"),
+    "solo_other": ("saturday", "friday", "sunday_early", "sunday_late", "other"),
 }
+SOLO_OTHER_PARTS = ("saturday", "international", "friday", "sunday_early", "sunday_late", "other")
+_KEPT_SOLO = {"TNF": 0, "SNF": 1, "MNF": 2, "Thanksgiving": 3, "Christmas": 3, "Black Friday": 3}
+
+
+def _segment_of(raw: dict[str, Any], i: int) -> str | None:
+    """A game's stack segment under the contract 3.0.0 precedence, or None for other games."""
+    g = raw["games"]
+    kept = _KEPT_SOLO.get(raw["lookups"]["slots"][g["slot"][i]]) if g["standalone"][i] else None
+    if kept is not None:
+        return SEGMENT_KEYS[kept]
+    if g["international"][i] and not g["agotw"][i] and not g["cbs_national"][i]:
+        return "international_other"
+    if g["standalone"][i]:
+        return "solo_other"
+    if g["agotw"][i]:
+        return "agotw"
+    if g["cbs_national"][i]:
+        return "cbs_national"
+    return None
+
+
+def _team_games(raw: dict[str, Any], f: int, lo: int, hi: int, shown: set[str]) -> list[int]:
+    g = raw["games"]
+    return sorted(
+        i
+        for i in range(len(g["season"]))
+        if f in (g["home"][i], g["away"][i])
+        and lo <= g["season"][i] <= hi
+        and _segment_of(raw, i) in shown
+    )
 
 
 def _hover(
@@ -268,10 +299,13 @@ def test_traces_legend_and_counts(app: Page, nfl_fixture_raw: dict[str, Any]) ->
     for row in vm["rows"]:
         a = agg[ids.index(row["franchise"])]
         assert row["counts"] == {k: a[k] for k in SEGMENT_KEYS}
-        # Each game counts once: the eight segments sum to the team total.
+        # Each game counts once: the eight segments sum to the team total, which is special
+        # plus the international games that are not standalone, AGOTW or CBS national.
         assert row["total"] == sum(row["counts"].values())
-        assert row["total"] == a["special"] + a["international_other"]
-        total_sum += row["total"]
+        moved = sum(a["slots"][c] for c in SOLO_OTHER_PARTS) - a["solo_other"]
+        assert moved >= a["slots"]["international"]
+        assert row["total"] == a["special"] + a["international_other"] - moved
+        total_sum += row["total"] + moved
     assert total_sum == sp_sum + io_sum
 
 
@@ -644,6 +678,134 @@ def test_bar_click_under_a_pick_lists_only_matched_games(
         app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected === null")
         app.wait_for_timeout(600)
     assert cut > 0
+
+
+def test_click_with_only_international_shown_lists_only_international_games(
+    app: Page, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """A bar click carries only the games the bar shows: with every chip off but International,
+    the Matched games and season-by-season tables hold the International games only, and a
+    chip toggled while the team is picked updates both."""
+    raw = nfl_fixture_raw
+    _vm(app)
+    others = [k for k in SEGMENT_KEYS if k != "international_other"]
+    _set(app, {"hiddenSegments": others})
+    app.wait_for_function(
+        "window.__nflTestHooks.getViewModel('special').hiddenSegments.length === 7"
+    )
+    vm = _vm(app)
+    row = vm["rows"][0]
+    f = _franchise_idx(raw, row["franchise"])
+    lo, hi = app.evaluate("window.__nflTestHooks.getState().seasons")
+    shown_intl = row["counts"]["international_other"]
+    assert shown_intl > 0
+    # The fixture's leader also has games in hidden segments, so the old click overshoots.
+    assert _team_games(raw, f, lo, hi, set(SEGMENT_KEYS)) != _team_games(
+        raw, f, lo, hi, {"international_other"}
+    )
+    _emit(app, "plotly_click", 0)
+    app.wait_for_function("window.__nflTestHooks.getViewModel('special').selected !== null")
+    app.wait_for_timeout(100)  # a render re-sync may rewrite the selection
+    got = sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()"))
+    assert got == _team_games(raw, f, lo, hi, {"international_other"})
+    assert len(got) == shown_intl
+
+    body = "#nfl-view-special .nfl-breakdown tbody tr"
+    rows = app.eval_on_selector_all(
+        body, "els => els.map(e => [...e.children].map(c => c.textContent))"
+    )
+    per_season = {r["season"]: r for r in _special_rows(raw, lo, hi) if r["franchise"] == f}
+    # While a chip is off, only seasons with games in the shown columns are listed, newest first.
+    listed = [int(c[0]) for c in rows]
+    assert listed == sorted(
+        (y for y, r in per_season.items() if r["international_other"]), reverse=True
+    )
+    assert len(listed) < len(per_season)  # the fixture's leader has a season with none
+    for cells in rows:
+        r = per_season[int(cells[0])]
+        assert cells[1:8] == ["–"] * 7
+        assert cells[8] == str(r["international_other"])
+        assert cells[9] == str(r["international_other"])
+    assert sum(int(c[9]) for c in rows) == shown_intl
+    assert (
+        "Special games is the sum of the shown columns before it; a dash marks a category "
+        "hidden in the legend."
+    ) in app.inner_text("#nfl-view-special .nfl-breakdown")
+
+    # Turn Fox AGOTW back on with the team still picked: both tables follow.
+    shown = {"international_other", "agotw"}
+    _set(app, {"hiddenSegments": [k for k in SEGMENT_KEYS if k not in shown]})
+    want = _team_games(raw, f, lo, hi, shown)
+    app.wait_for_function(
+        "n => window.__nflTestHooks.getTableIndexes().length === n", arg=len(want)
+    )
+    assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == want
+    rows = app.eval_on_selector_all(
+        body, "els => els.map(e => [...e.children].map(c => c.textContent))"
+    )
+    assert [int(c[0]) for c in rows] == sorted(
+        (y for y, r in per_season.items() if r["agotw"] + r["international_other"]), reverse=True
+    )
+    for cells in rows:
+        r = per_season[int(cells[0])]
+        assert cells[6] == str(r["agotw"])
+        assert cells[9] == str(r["agotw"] + r["international_other"])
+
+    # Only a segment the team has no games in: no season rows, and the note says so.
+    empty = next(k for k in SEGMENT_KEYS if not any(r[k] for r in per_season.values()))
+    _set(app, {"hiddenSegments": [k for k in SEGMENT_KEYS if k != empty]})
+    app.wait_for_function("window.__nflTestHooks.getTableIndexes().length === 0")
+    assert app.locator(body).count() == 0
+    assert "No games in the shown categories." in app.inner_text("#nfl-view-special .nfl-breakdown")
+
+    # Every chip on again: the whole team, as before.
+    _set(app, {"hiddenSegments": []})
+    want = _team_games(raw, f, lo, hi, set(SEGMENT_KEYS))
+    app.wait_for_function(
+        "n => window.__nflTestHooks.getTableIndexes().length === n", arg=len(want)
+    )
+    assert sorted(app.evaluate("window.__nflTestHooks.getTableIndexes()")) == want
+    assert "–" not in app.inner_text("#nfl-view-special .nfl-breakdown table")
+    # Every chip on: every season in range is listed, as before.
+    assert app.locator(body).count() == len(per_season)
+
+
+def test_solo_international_game_is_in_the_international_segment(
+    app: Page, nfl_fixture_raw: dict[str, Any]
+) -> None:
+    """Contract 3.0.0: the fixture's solo International-slot game counts under International
+    for both its teams, in the bars and in the hover's sub-slots."""
+    raw = nfl_fixture_raw
+    g = raw["games"]
+    slots = raw["lookups"]["slots"]
+    solo = [
+        i
+        for i in range(len(g["season"]))
+        if g["standalone"][i] and slots[g["slot"][i]] == "International"
+    ]
+    assert solo
+    lo, hi = 2024, 2026
+    agg = _agg(raw, lo, hi)
+    ids = [f["id"] for f in raw["lookups"]["franchises"]]
+    rows = {r["franchise"]: r for r in _vm(app)["rows"]}
+    for i in solo:
+        for f in (g["home"][i], g["away"][i]):
+            a = agg[f]
+            counts = rows[ids[f]]["counts"]
+            assert counts["international_other"] == a["international_other"]
+            # Every international game of the team outside the night, holiday, AGOTW and CBS
+            # segments, solo or not.
+            want = len(_team_games(raw, f, lo, hi, {"international_other"}))
+            assert counts["international_other"] == want
+            assert counts["solo_other"] == len(_team_games(raw, f, lo, hi, {"solo_other"}))
+            # The hover's Other solo slot sub-slots no longer list the International slot.
+            k = list(rows).index(ids[f])
+            _emit(app, "plotly_hover", k)
+            lines = _tooltip(app)
+            assert lines == _hover(raw, f, lo, hi)
+            other = next(x for x in lines if x.startswith("Other solo slot:"))
+            assert "International" not in other
+            _emit(app, "plotly_unhover", k)
 
 
 def test_end_markers_are_ink_until_a_team_is_picked_then_accent(app: Page) -> None:

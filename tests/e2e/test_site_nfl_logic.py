@@ -87,18 +87,28 @@ def test_person_games_and_category_precedence(
     solo = {"TNF": 0, "SNF": 1, "MNF": 2, "Thanksgiving": 3, "Christmas": 3, "Black Friday": 3}
     expected_cat = []
     for i in range(n):
-        if g["standalone"][i]:
-            expected_cat.append(solo.get(slots[g["slot"][i]], 4))
+        kept = solo.get(slots[g["slot"][i]]) if g["standalone"][i] else None
+        # Contract 3.0.0: primetime and holiday solo slots, then International (any
+        # international game not AGOTW or CBS national), then Other solo slot.
+        if kept is not None:
+            expected_cat.append(kept)
+        elif g["international"][i] and not g["agotw"][i] and not g["cbs_national"][i]:
+            expected_cat.append(7)
+        elif g["standalone"][i]:
+            expected_cat.append(4)
         elif g["agotw"][i]:
             expected_cat.append(5)
         elif g["cbs_national"][i]:
             expected_cat.append(6)
-        elif g["international"][i]:
-            expected_cat.append(7)
         else:
             expected_cat.append(8)
     got = run("return { cat: Array.from(m.category), pg: [...m.personGames.entries()] }")
     assert got["cat"] == expected_cat
+    # The fixture's solo International-slot game lands in International, not Other solo slot.
+    solo_intl = [
+        i for i in range(n) if g["standalone"][i] and slots[g["slot"][i]] == "International"
+    ]
+    assert solo_intl and all(got["cat"][i] == 7 for i in solo_intl)
     pg = {k: v for k, v in got["pg"]}
     for person, games in pg.items():
         assert games == [i for i in range(n) if any(c["person"] == person for c in g["crew"][i])]
@@ -522,6 +532,7 @@ def test_segment_counts_and_fading_map(run: Callable[[str], Any]) -> None:
           sums: bars.every(b => b.total === Object.values(b.counts).reduce((x, y) => x + y, 0)),
           tnf: unfaded(['tnf']), holiday: unfaded(['christmas', 'blackfriday']),
           other: unfaded(['saturday']), intl: unfaded(['intl']), cbs: unfaded(['cbs']),
+          intlSlot: unfaded(['intl_slot']), otherSolo: unfaded(['other_standalone']),
           flexed: unfaded(['flexed']), none: unfaded([]), ex: S.EXCLUSIVE_CATEGORIES.length };
         """
     )
@@ -532,8 +543,16 @@ def test_segment_counts_and_fading_map(run: Callable[[str], Any]) -> None:
     assert got["sums"] is True and got["ex"] == 9
     assert got["tnf"] == ["solo_thursday"]
     assert got["holiday"] == ["solo_holiday"]
-    assert got["other"] == ["solo_other"]
-    assert got["intl"] == ["solo_other", "international_other"]
+    # A filter keeps in focus every segment one of its games can sit in (contract 3.0.0): a
+    # solo game abroad is International, and an international game can also be a night,
+    # holiday, AGOTW or CBS national game.
+    assert got["other"] == ["solo_other", "international_other"]
+    assert got["otherSolo"] == ["solo_other", "international_other"]
+    assert got["intlSlot"] == ["international_other"]
+    assert got["intl"] == [
+        "solo_thursday", "solo_sunday", "solo_monday", "solo_holiday",
+        "agotw", "cbs_national", "international_other",
+    ]  # fmt: skip
     assert got["cbs"] == ["cbs_national"]
     assert len(got["flexed"]) == 8 and len(got["none"]) == 8
 

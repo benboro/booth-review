@@ -59,7 +59,12 @@ export const EXCLUSIVE_CATEGORIES = Object.freeze([
 const SEGMENT_KEYS = Object.freeze(EXCLUSIVE_CATEGORIES.filter((c) => c.key !== 'none').map((c) => c.key));
 const SEGMENT_SET = new Set(SEGMENT_KEYS);
 
-/** Category filter key -> segments it keeps in focus (flexed fades nothing). */
+/**
+ * Category filter key -> every segment that can hold one of its games (flexed fades nothing).
+ * A solo Saturday, Friday, Sunday-afternoon or other game played abroad is International, and
+ * an international game can also sit in a primetime or holiday segment or be AGOTW or CBS
+ * national (contract 3.0.0).
+ */
 const CAT_SEGMENTS = Object.freeze({
   tnf: ['solo_thursday'],
   snf: ['solo_sunday'],
@@ -67,12 +72,15 @@ const CAT_SEGMENTS = Object.freeze({
   thanksgiving: ['solo_holiday'],
   christmas: ['solo_holiday'],
   blackfriday: ['solo_holiday'],
-  saturday: ['solo_other'],
-  intl_slot: ['solo_other'],
-  other_standalone: ['solo_other'],
+  saturday: ['solo_other', 'international_other'],
+  intl_slot: ['international_other'],
+  other_standalone: ['solo_other', 'international_other'],
   agotw: ['agotw'],
   cbs: ['cbs_national'],
-  intl: ['solo_other', 'international_other'],
+  intl: [
+    'solo_thursday', 'solo_sunday', 'solo_monday', 'solo_holiday',
+    'agotw', 'cbs_national', 'international_other',
+  ],
 });
 
 const SPECIAL_SLOT_COLUMNS = Object.freeze([
@@ -341,7 +349,11 @@ export function teamSeasonRows(model, state, franchiseIdx) {
   });
 }
 
-/** The solo stack segment each `standalone_<slot>` column belongs to (docs/nfl-data.md). */
+/**
+ * The stack segment each `standalone_<slot>` column belongs to (docs/nfl-data.md). A solo
+ * International-slot game is always International (contract 3.0.0); the other solo_other slots
+ * map there too, though a game of theirs played abroad counts under International.
+ */
 export const SLOT_SEGMENT = Object.freeze({
   tnf: 'solo_thursday',
   snf: 'solo_sunday',
@@ -350,7 +362,7 @@ export const SLOT_SEGMENT = Object.freeze({
   christmas: 'solo_holiday',
   black_friday: 'solo_holiday',
   saturday: 'solo_other',
-  international: 'solo_other',
+  international: 'international_other',
   friday: 'solo_other',
   sunday_early: 'solo_other',
   sunday_late: 'solo_other',

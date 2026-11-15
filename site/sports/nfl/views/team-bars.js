@@ -102,16 +102,20 @@ function teamLabel(model, state, fIdx) {
   return model.franchises[fIdx].name;
 }
 
-/** Every game of the franchise in the season range that is special or international. */
+/**
+ * The franchise's games in the season range that sit in a stack segment the legend leaves
+ * visible, so a bar click lists the games the bar shows. With every chip on that is every
+ * special or international game of the team.
+ */
 function teamGames(model, state, fIdx) {
   const c = model.cols;
   const [lo, hi] = state.seasons;
-  return (model.franchiseGames.get(fIdx) || []).filter(
-    (i) =>
-      c.season[i] >= lo
-      && c.season[i] <= hi
-      && (c.standalone[i] || c.agotw[i] || c.cbs_national[i] || c.international[i]),
-  );
+  const hidden = new Set(state.hiddenSegments);
+  return (model.franchiseGames.get(fIdx) || []).filter((i) => {
+    if (c.season[i] < lo || c.season[i] > hi) return false;
+    const cat = EXCLUSIVE_CATEGORIES[model.category[i]];
+    return !!cat && cat.key !== 'none' && !hidden.has(cat.key);
+  });
 }
 
 /** "2025", "2025 and 2026", "2024, 2025 and 2026". */
@@ -265,10 +269,10 @@ const SEGMENT_NOTES = Object.freeze([
   'Sunday night: solo-slot Sunday night games.',
   'Monday night: solo-slot Monday games. Monday doubleheader games share a window, so they are not counted here.',
   'Holiday: Thanksgiving, Christmas and Black Friday games in a solo slot.',
-  'Other solo slot: any other game with no NFL game within 3 hours, such as Saturday or an international morning game.',
+  'Other solo slot: any other game with no NFL game within 3 hours, such as a Saturday, Friday or lone Sunday-afternoon game.',
   "Fox AGOTW: Fox's top game on a Sunday afternoon doubleheader.",
   "CBS late national: CBS's national game in the late Sunday window.",
-  'International: a game played abroad that shares its window with other games.',
+  'International: a game played abroad, alone in its window or not. A night, holiday, Fox AGOTW or CBS late national game abroad keeps that category.',
 ]);
 
 const ALL_KEYS = SEGMENTS.map((s) => s.key);
@@ -398,7 +402,7 @@ function cell(tag, text, className) {
 }
 
 const RULE_KEYS = new Set(['solo_thursday', 'agotw']);
-const SPECIAL_TIP_LEAD = 'Solo slots plus Sunday-window games:';
+const SPECIAL_TIP_LEAD = 'Solo slots, Sunday-window and international games:';
 const SPECIAL_TIP_FORMULA = 'Thu + Sun + Mon + Holiday + Other solo + AGOTW + CBS + Intl.';
 const SPECIAL_TIP = `${SPECIAL_TIP_LEAD} ${SPECIAL_TIP_FORMULA}`;
 
@@ -408,7 +412,7 @@ function tipLines(text) {
   return [{ kind: 'body', text: `${SPECIAL_TIP_LEAD} ` }, { kind: 'formula', text: SPECIAL_TIP_FORMULA }];
 }
 const SEGMENT_TIPS = Object.freeze({
-  solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game or a holiday, such as a Saturday, Friday or lone Sunday-afternoon game, or a solo international game.',
+  solo_other: 'A game alone in its window that is not a Thursday, Sunday or Monday night game, a holiday or an international game, such as a Saturday, Friday or lone Sunday-afternoon game.',
   agotw: "Fox's America's Game of the Week, its top Sunday-afternoon game.",
   cbs_national: "CBS's late Sunday-afternoon national game.",
 });
@@ -638,7 +642,12 @@ function renderBreakdown(model, state, env, rows) {
   const thead = el('thead');
   thead.append(row1, row2);
   const tbody = el('tbody');
+  // A chip-hidden category is not shown: its cells read as a dash and Special games sums the
+  // shown columns only, so the table matches the bar. While a chip is off, a season with no
+  // games in the shown columns is left out; with every chip on, every season is listed.
+  const hidden = new Set(state.hiddenSegments);
   for (const r of teamSeasonRows(model, state, fIdx)) {
+    if (hidden.size && shownTotal(r, state.hiddenSegments) === 0) continue;
     const tr = el('tr');
     tr.dataset.season = String(r.season);
     const season = cell('th', String(r.season));
@@ -646,15 +655,22 @@ function renderBreakdown(model, state, env, rows) {
     tr.append(
       season,
       ...SEGMENTS.map((seg) => {
+        const cls = 'num' + (RULE_KEYS.has(seg.key) ? VR : '');
+        if (hidden.has(seg.key)) {
+          const td = cell('td', '–', cls);
+          td.dataset.hidden = 'true';
+          td.setAttribute('aria-label', 'Hidden');
+          return td;
+        }
         const mark = pendingSeasons.has(r.season) && PENDING_KEYS.has(seg.key);
-        const td = cell('td', String(r.counts[seg.key]), 'num' + (RULE_KEYS.has(seg.key) ? VR : ''));
+        const td = cell('td', String(r.counts[seg.key]), cls);
         if (mark) {
           td.classList.add('nfl-pending');
           td.appendChild(el('span', 'nfl-pending-mark', '*'));
         }
         return td;
       }),
-      cell('td', String(r.total), 'num nfl-vrule nfl-total'),
+      cell('td', String(shownTotal(r, state.hiddenSegments)), 'num nfl-vrule nfl-total'),
       cell('td', String(r.flexed), 'num nfl-vrule'),
     );
     tbody.appendChild(tr);
@@ -675,13 +691,18 @@ function renderBreakdown(model, state, env, rows) {
   refs.cueOff = attachScrollCue(scroll, null);
   if (lines) breakdown.appendChild(lines);
 
+  if (!tbody.children.length) {
+    breakdown.appendChild(el('p', 'nfl-muted', 'No games in the shown categories.'));
+  }
   breakdown.appendChild(el(
     'p',
     'nfl-muted',
-    'Special games is the sum of the eight columns before it. Flexed games are counted separately.',
+    hidden.size
+      ? 'Special games is the sum of the shown columns before it; a dash marks a category hidden in the legend. Flexed games are counted separately.'
+      : 'Special games is the sum of the eight columns before it. Flexed games are counted separately.',
   ));
   const shownPending = pending.seasons.filter((s) => tbody.querySelector(`tr[data-season="${s}"]`));
-  if (shownPending.length) {
+  if (shownPending.length && ![...PENDING_KEYS].every((k) => hidden.has(k))) {
     breakdown.appendChild(el(
       'p',
       'nfl-muted nfl-pending-note',
@@ -880,7 +901,7 @@ export function render(ctx) {
   const th = theme(env);
   hideTooltip();
 
-  // Keep a selected team's games in step with the season range.
+  // Keep a selected team's games in step with the season range and the legend chips.
   const key = selectedKey(state);
   if (key != null && model.franchiseIndex.has(key)) {
     const fresh = teamGames(model, state, model.franchiseIndex.get(key));

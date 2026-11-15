@@ -1,6 +1,6 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `2.3.0`). It is separate from
+`nfl-data.json` is the NFL site file (schema `3.0.0`). It is separate from
 `site-data.json` (see `docs/site-data.md`, schema `2.8.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
@@ -161,8 +161,12 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
 
 ### special
 
-One row per franchise-season. Each game counts once per bar (D-24): the standalone
-slots, `agotw`, `cbs_national` and `international_other` are exclusive segments.
+One row per franchise-season. Each game counts once per bar (D-24): the five `solo_*`
+columns, `agotw`, `cbs_national` and `international_other` are exclusive segments.
+Precedence: Thursday night, Sunday night, Monday night and Holiday keep their games
+first (a Monday night game played abroad stays Monday night); then International takes
+every other international game, solo slot or shared window, that is not Fox AGOTW or
+CBS late national; then Other solo slot; then Fox AGOTW and CBS late national.
 
 - `franchise` (index), `season`, `games`.
 - `standalone_total` and the 12 `standalone_<slot>` columns (`christmas`,
@@ -171,12 +175,17 @@ slots, `agotw`, `cbs_national` and `international_other` are exclusive segments.
 - `solo_thursday`, `solo_sunday`, `solo_monday`, `solo_holiday`, `solo_other`: the five
   exclusive solo stack segments (D-12). Thursday = TNF, Sunday = SNF, Monday = MNF,
   Holiday = Thanksgiving + Christmas + Black Friday, Other solo slot = Saturday,
-  International, Friday, Sunday early, Sunday late and Other. They sum to
-  `standalone_total`, so each game counts once per bar.
+  International, Friday, Sunday early, Sunday late and Other minus the international
+  games among them that are not AGOTW or CBS national (those count under
+  `international_other`). Since 3.0.0 they no longer sum to `standalone_total`: an
+  International-slot game is never in `solo_other`.
 - `agotw`, `cbs_national`.
 - `international`: every international game, in any slot. `international_other`: the
-  international games that are not standalone, AGOTW or CBS national (the fourth
-  stack segment); it never exceeds `international`.
+  International stack segment, every international game that is not a Thursday,
+  Sunday or Monday night or Holiday solo game, AGOTW or CBS national, alone in its
+  window or not; it never exceeds `international`.
+- The eight segments sum to `special` plus the international games that are not
+  standalone, AGOTW or CBS national (the bar total).
 - `flexed`: games moved from their original slot.
 - `special`: `standalone_total + agotw + cbs_national`.
 - `agotw_rate`, `cbs_national_rate`: per-doubleheader-week rates; null when the season's
@@ -250,3 +259,8 @@ removed or retyped field. Changing the CFB contract's version is out of scope he
   (additive).
 - 2.2.0 (Phase 24): `place` on `games` and `upcoming`, `lookups.venues` (additive minor).
 - 2.3.0: `overtimes` on `games`, for the Crews game lists' Score column (additive minor).
+- 3.0.0: a solo international game (the 9:30 am ET and Friday games abroad) moves from
+  `solo_other` to `international_other`, so International holds every international game
+  that is not a night, holiday, AGOTW or CBS national game. The column names stay; their
+  meaning changes, so this is a major bump. The five `solo_*` columns no longer sum to
+  `standalone_total`.

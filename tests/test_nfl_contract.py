@@ -55,7 +55,7 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "2.3.0",
+        "schema_version": "3.0.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -365,6 +365,32 @@ def _solo_holiday(d: Payload) -> None:
     d["special"]["solo_holiday"][0] = 1
 
 
+def _with_solo_international(d: Payload) -> None:
+    """Add one solo international morning game to the minimal special row, 3.0.0 sums."""
+    sp = d["special"]
+    sp["standalone_international"][0] = 1
+    sp["standalone_total"][0] = 2
+    sp["special"][0] = 3
+    sp["international"][0] = 3
+    sp["international_other"][0] = 2
+
+
+def _solo_international_old_sum(d: Payload) -> None:
+    # The 2.x sums: the solo international game counted under solo_other, not International.
+    _with_solo_international(d)
+    d["special"]["solo_other"][0] = 1
+    d["special"]["international_other"][0] = 1
+
+
+def _solo_moved_not_international(d: Payload) -> None:
+    # A solo Saturday game left out of solo_other must be an international_other game.
+    sp = d["special"]
+    sp["standalone_saturday"][0] = 1
+    sp["standalone_total"][0] = 2
+    sp["special"][0] = 3
+    sp["international_other"][0] = 0
+
+
 def _old_block(d: Payload) -> None:
     d["fox_booths"] = d["booths"]
 
@@ -473,6 +499,8 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("solo_sum", _solo_sum),
     ("solo_thursday", _solo_thursday),
     ("solo_holiday", _solo_holiday),
+    ("solo_international_old_sum", _solo_international_old_sum),
+    ("solo_moved_not_international", _solo_moved_not_international),
     ("old_fox_booths_block", _old_block),
     ("old_agotw_block", _old_agotw_block),
     ("booth_volatility_column", _booth_volatility_column),
@@ -515,6 +543,26 @@ def test_errors_never_echo_values(mutate: Mutator) -> None:
     text = str(exc.value)
     for needle in INVENTED_STRINGS:
         assert needle not in text
+
+
+def test_solo_international_counts_under_international() -> None:
+    """Contract 3.0.0: a solo international game is in international_other, not solo_other,
+    and the eight segments sum to special plus the shared-window international games."""
+    data = _minimal_payload()
+    _with_solo_international(data)
+    sp = validate_nfl_site_data(data).special
+    segments = (
+        sp.solo_thursday[0]
+        + sp.solo_sunday[0]
+        + sp.solo_monday[0]
+        + sp.solo_holiday[0]
+        + sp.solo_other[0]
+        + sp.agotw[0]
+        + sp.cbs_national[0]
+        + sp.international_other[0]
+    )
+    assert sp.solo_other[0] == 0
+    assert segments == sp.special[0] + 1  # one shared-window international game
 
 
 def _all_models(root: type[BaseModel]) -> set[type[BaseModel]]:
@@ -627,8 +675,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "2.3.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/2.3.0"
+    assert NFL_SCHEMA_VERSION == "3.0.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/3.0.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -701,6 +749,8 @@ def test_fixture_covers_every_view_case() -> None:
     assert any(r is None for r in v["viewership_resid"])
     for col in ("solo_thursday", "solo_sunday", "solo_monday", "solo_holiday", "solo_other"):
         assert any(x > 0 for x in s[col]), col
+    # A solo international game, counted under International (contract 3.0.0).
+    assert any(x > 0 for x in s["standalone_international"])
     assert any(
         sum(1 for gg, _ in zip(b["network_group"], b["season"], strict=True) if gg == gi) == 1
         for gi in range(len(lk["network_groups"]))

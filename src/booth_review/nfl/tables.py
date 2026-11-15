@@ -38,7 +38,10 @@ SLOT_COLUMNS: dict[str, str] = {
 }
 
 #: Exclusive solo-slot groups (D-12): solo_<group> -> frame slot labels. Together they
-#: cover every standalone slot, so the five columns sum to standalone_total.
+#: cover every standalone slot. Since contract 3.0.0 an international game that is not
+#: Fox AGOTW or CBS late national leaves solo_other for international_other (the
+#: primetime and holiday groups keep theirs), so the five columns sum to
+#: standalone_total minus those games.
 SOLO_GROUPS: dict[str, tuple[str, ...]] = {
     "thursday": ("TNF",),
     "sunday": ("SNF",),
@@ -154,24 +157,29 @@ def special_games_table(
             .sum()
             .alias(f"standalone_{suffix}")
         )
+    standalone = pl.col("is_standalone").fill_null(False)
+    # Segment precedence (contract 3.0.0): the primetime and holiday solo groups keep their
+    # games, then International takes every other international game that is not Fox AGOTW
+    # or CBS late national, solo slot or shared window, then Other solo slot.
+    kept_solo = standalone & pl.col("slot_name").is_in(
+        [label for group, labels in SOLO_GROUPS.items() if group != "other" for label in labels]
+    )
+    intl_segment = (
+        pl.col("is_international").fill_null(False)
+        & ~kept_solo
+        & ~pl.col("is_agotw").fill_null(False)
+        & ~pl.col("is_cbs_national").fill_null(False)
+    )
     for suffix, labels in SOLO_GROUPS.items():
-        aggs.append(
-            (pl.col("is_standalone") & pl.col("slot_name").is_in(labels))
-            .sum()
-            .alias(f"solo_{suffix}")
-        )
+        member = standalone & pl.col("slot_name").is_in(labels)
+        if suffix == "other":
+            member = member & ~intl_segment
+        aggs.append(member.sum().alias(f"solo_{suffix}"))
     aggs += [
         pl.col("is_agotw").sum().alias("agotw"),
         pl.col("is_cbs_national").sum().alias("cbs_national"),
         pl.col("is_international").fill_null(False).sum().alias("international"),
-        (
-            pl.col("is_international").fill_null(False)
-            & ~pl.col("is_standalone").fill_null(False)
-            & ~pl.col("is_agotw").fill_null(False)
-            & ~pl.col("is_cbs_national").fill_null(False)
-        )
-        .sum()
-        .alias("international_other"),
+        intl_segment.sum().alias("international_other"),
         pl.col("flexed").sum().alias("flexed"),
         pl.col("is_special").sum().alias("special"),
     ]

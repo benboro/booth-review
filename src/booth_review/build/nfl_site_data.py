@@ -600,14 +600,19 @@ def _exclusive_counts(games: pl.DataFrame) -> dict[tuple[str, int], list[int]]:
     solo_other, agotw, cbs_national, international_other]."""
     counts: dict[tuple[str, int], list[int]] = {}
     for row in games.iter_rows(named=True):
-        if row["is_standalone"]:
-            k = _SOLO_OF_SLOT.get(row["slot_name"], 4)
+        # Contract 3.0.0 precedence: primetime and holiday solo slots, then International
+        # (any international game that is not AGOTW or CBS national), then Other solo slot.
+        kept = _SOLO_OF_SLOT.get(row["slot_name"]) if row["is_standalone"] else None
+        if kept is not None:
+            k = kept
+        elif row["is_international"] and not row["is_agotw"] and not row["is_cbs_national"]:
+            k = 7
+        elif row["is_standalone"]:
+            k = 4
         elif row["is_agotw"]:
             k = 5
         elif row["is_cbs_national"]:
             k = 6
-        elif row["is_international"]:
-            k = 7
         else:
             continue
         for side in ("home", "away"):
