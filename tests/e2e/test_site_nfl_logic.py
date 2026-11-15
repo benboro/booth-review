@@ -291,7 +291,9 @@ def test_flag_labels_and_source_text(run: Callable[[str], Any]) -> None:
         const all = { standalone: true, agotw: true, cbsNational: true, international: true,
           flexed: true };
         return { labels: F.flagLabels(all), a: F.crewSourceText({ crewSource: 'published_lineup' }),
-          b: F.crewSourceText({ crewSource: '506' }), c: F.crewSourceText({ crewSource: null }) };
+          b: F.crewSourceText({ crewSource: '506' }), c: F.crewSourceText({ crewSource: null }),
+          solo: F.flagLabels({ slot: 'International', standalone: true, international: true }),
+          shared: F.flagLabels({ slot: 'Sunday early', international: true }) };
         """
     )
     assert got["labels"] == [
@@ -301,6 +303,9 @@ def test_flag_labels_and_source_text(run: Callable[[str], Any]) -> None:
         "International",
         "Flexed",
     ]
+    # The International slot already names it; the flag is not repeated.
+    assert got["solo"] == ["Solo slot"]
+    assert got["shared"] == ["International"]
     assert got["a"] == "from published lineup" and got["b"] is None and got["c"] is None
 
 
