@@ -193,14 +193,15 @@ def test_default_tab_counts_every_game_by_network(
         f"document.querySelector('{GD}').layout.annotations.filter(a => a.name === 'total').map(a => a.text)"
     )
     assert totals == [str(r["total"]) for r in vm["rows"]]
-    # Each marker starts past its bar's end, so it never covers the bar's last network group.
+    # Each marker sits on its bar's end, centred, as on the Special games bars (user 2026-11-14).
     marks = app.evaluate(
         f"""() => {{ const l = document.querySelector('{GD}').layout;
-          return {{ shapes: l.shapes.filter(s => s.name === 'end-marker').map(s => [s.xanchor, s.x0]),
-            shifts: l.annotations.filter(a => a.name === 'total').map(a => a.xshift) }}; }}"""
+          return {{ shapes: l.shapes.filter(s => s.name === 'end-marker')
+              .map(s => [s.xanchor, s.x0 + s.x1]),
+            shifts: l.annotations.filter(a => a.name === 'total').map(a => a.xshift || 0) }}; }}"""
     )
-    assert [x for x, _ in marks["shapes"]] == [r["total"] for r in vm["rows"]]
-    assert all(x0 > 0 for _, x0 in marks["shapes"]) and all(x > 0 for x in marks["shifts"])
+    assert marks["shapes"] == [[r["total"], 0] for r in vm["rows"]]
+    assert not any(marks["shifts"])
 
 
 def test_legend_chips_are_the_network_families(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:

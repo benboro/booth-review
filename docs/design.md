@@ -235,10 +235,11 @@ records only where the site settles or applies them.
   split them by category, which the toggle does. Groups follow the booth picker's order (Fox,
   CBS, NBC, ESPN/ABC), then Other, then No network listed, a pale neutral (the muted tone at 45% on
   the page) a clear step lighter than Other's grey, drawn in one tone whether special or not.
-- On the all-games bars the total marker starts just past the bar's end instead of being
-  centred on it: centred, it covered the last network groups (all of Other on a phone, a
-  one-game group at any width). The Special games bars and the CFB Bars keep the centred
-  marker.
+- The total marker sits on the bar's end, centred, on the all-games bars as on the Special
+  games bars and the CFB Bars (user 2026-11-14: "They should be on the stacked bar"). A marker
+  set past the end with a gap was tried and rejected. The cost is accepted: the marker covers
+  the bar's last few games, which on a phone is the Other group; the hover and the season table
+  still give those counts.
 - The legend row with the toggle off: the family chips (the CFB legend's rules: a click turns
   the family on or off in the Networks filter, a double-click shows only it, a family with no
   games under the other filters is dotted), then a caption-sized key in neutral marks,
