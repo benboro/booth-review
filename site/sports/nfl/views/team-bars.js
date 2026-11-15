@@ -69,6 +69,8 @@ const CONFIG = frameConfig();
 const HERO_INK_WEIGHT = 0.8;
 // Gap Plotly leaves between a y tick label and the plot when automargin sizes the left edge.
 const LABEL_PAD_PX = 4;
+// Clear space between an all-games bar's end and its total marker (the marker's ring included).
+const MARKER_AFTER_GAP = 3;
 
 /** Round tick step (1, 2, 5, 10, 20, 25, 50, ...) giving 4-8 ticks over max. */
 export function niceStep(max) {
@@ -352,7 +354,9 @@ function networkNotes(model) {
     lines.push(`A group can hold several networks: ${shared.map((f) => joinAnd(familyNetworkNames(model, f))).join('; ')}. The hover counts each one.`);
   }
   if (net.families.includes('other')) lines.push(`Other: ${joinAnd(familyNetworkNames(model, 'other'))}.`);
-  if (net.families.includes('tba')) lines.push('Network TBA: a game with no network listed yet.');
+  if (net.families.includes('tba')) {
+    lines.push(`${familyLabel('tba')}: a game whose network is not in the data, or is not assigned yet.`);
+  }
   lines.push('A chip turns a network on or off in the Networks filter. Turn on Special games only to split the special games by category.');
   return lines;
 }
@@ -890,7 +894,7 @@ function renderNetworkBreakdown(model, state, env, rows, fIdx, label) {
     th.dataset.family = family;
     const names = familyNetworkNames(model, family);
     if (family === 'other') tipHead(th, familyLabel(family), `${joinAnd(names)}.`, env);
-    else if (family === 'tba') tipHead(th, familyLabel(family), 'Games with no network listed yet.', env);
+    else if (family === 'tba') tipHead(th, familyLabel(family), 'Games whose network is not in the data, or is not assigned yet.', env);
     else th.textContent = familyLabel(family);
     row2.appendChild(th);
   });
@@ -1052,7 +1056,13 @@ function buildNetworkFigure(rows, state, env, th) {
   const selected = selectedKey(state);
   const faded = rows.map((r) => r.faded || (selected != null && r.id !== selected));
   const traces = networkTraces(rows, env, th, faded);
-  const layout = barLayout(rows, rows.map((r) => r.bar.total), state, env, th, { title: 'Games', barmode: 'stack' });
+  const layout = barLayout(rows, rows.map((r) => r.bar.total), state, env, th, {
+    title: 'Games',
+    barmode: 'stack',
+    // A marker centred on the bar's end would cover its last network groups (all of Other on a
+    // phone, a one-game group anywhere), so here it sits just past the end.
+    markerAfter: true,
+  });
   // The stacked builder puts its separators and hover targets on an overlay axis.
   layout.xaxis3 = overlayAxis('x', layout.xaxis.range);
   return { traces, layout: frameLayout(layout, { theme: th }) };
@@ -1061,9 +1071,10 @@ function buildNetworkFigure(rows, state, env, th) {
 /**
  * The layout both modes share: one row per team with its name on the y axis, a count axis with
  * round ticks, and an end marker with each row's total in the hero colour (--ink at 80%, the
- * accent on the picked team).
+ * accent on the picked team). The marker is centred on the bar's end, or with `markerAfter`
+ * starts just past it.
  */
-function barLayout(rows, totals, state, env, th, { title, barmode }) {
+function barLayout(rows, totals, state, env, th, { title, barmode, markerAfter = false }) {
   const selected = selectedKey(state);
   const bg = PAGE_BG[th];
   const ids = rows.map((r) => r.id);
@@ -1074,7 +1085,9 @@ function barLayout(rows, totals, state, env, th, { title, barmode }) {
   const heroInk = mixHex(INK[th], bg, HERO_INK_WEIGHT);
   const fills = rows.map((r) => (r.id === selected ? SPECIAL[th] : heroInk));
   const markerRows = totals.map((total) => ({ total }));
-  const markerHalf = Math.ceil(markerWidth(String(Math.max(max, 1))) / 2) + 2;
+  const widest = markerWidth(String(Math.max(max, 1)));
+  // Room past the longest bar: half a marker when it is centred on the end, a whole one after it.
+  const markerHalf = (markerAfter ? widest + MARKER_AFTER_GAP : Math.ceil(widest / 2)) + 2;
   // The y axis automargins to the team names, so the plot is narrower than the 8px left
   // margin says by the widest label (plus Plotly's tick pad); size the marker headroom to that.
   const labelPx = Math.ceil(Math.max(0, ...rows.map((r) => textWidth(r.label, { size: fontPx, family: FRAME_FONT }))));
@@ -1120,6 +1133,15 @@ function barLayout(rows, totals, state, env, th, { title, barmode }) {
   };
   layout.shapes = endMarkerShapes(markerRows, (r) => r.total, fills, th, 'x');
   layout.annotations = endMarkerAnnotations(markerRows, (r) => r.total, fills, th, 'x');
+  if (markerAfter) {
+    // The shared builders centre each marker on its bar's end; move it right by half its width.
+    for (const shape of layout.shapes) {
+      const shift = (shape.x1 - shape.x0) / 2 + MARKER_AFTER_GAP;
+      shape.x0 += shift;
+      shape.x1 += shift;
+    }
+    for (const note of layout.annotations) note.xshift = markerWidth(note.text) / 2 + MARKER_AFTER_GAP;
+  }
   return layout;
 }
 
@@ -1178,7 +1200,7 @@ export function mount(container, ctx) {
   mountViewTools(ctx, 'teams', [tools], container);
 }
 
-/** Network TBA games among the games the all-games bars count: their seasons and how many. */
+/** The games with no network among the games the all-games bars count: their seasons and how many. */
 function tbaGames(model, state) {
   const mask = countedMask(model, state);
   const c = model.cols;
@@ -1196,7 +1218,7 @@ function tbaGames(model, state) {
 export function tbaText(tba) {
   if (!tba.games) return null;
   const n = tba.games;
-  return `${n} ${n === 1 ? 'game has' : 'games have'} no network listed yet (${seasonList(tba.seasons)}), shown as Network TBA.`;
+  return `${n} ${n === 1 ? 'game' : 'games'} (${seasonList(tba.seasons)}) ${n === 1 ? 'has' : 'have'} no network listed.`;
 }
 
 /** Renders the tab with "Special games only" off: every counted game by team and network. */

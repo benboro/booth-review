@@ -20,7 +20,7 @@ VIEW = "#nfl-view-teams"
 GD = f"{VIEW} .nfl-chart > div"
 LEGEND = f"{VIEW} .legend-chips"
 TOGGLE = "#nfl-chart-tools input.nfl-special-only"
-# Legend order: the booth picker's (Fox, CBS, NBC, ESPN/ABC), Other, then Network TBA.
+# Legend order: the booth picker's (Fox, CBS, NBC, ESPN/ABC), Other, then the no-network entry.
 FAMILIES = ["fox", "cbs", "nbc", "disney", "other", "tba"]
 LABELS = {
     "fox": "FOX",
@@ -28,7 +28,7 @@ LABELS = {
     "nbc": "NBC/Peacock",
     "disney": "ABC/ESPN",
     "other": "Other",
-    "tba": "Network TBA",
+    "tba": "No network listed",
 }
 # Network precedence inside a family: ABC before ESPN, NBC before Peacock, cable before streaming.
 PRECEDENCE = ["fox", "abc", "espn", "nbc", "peacock", "cbs", "nfln", "prime", "netflix"]
@@ -193,6 +193,14 @@ def test_default_tab_counts_every_game_by_network(
         f"document.querySelector('{GD}').layout.annotations.filter(a => a.name === 'total').map(a => a.text)"
     )
     assert totals == [str(r["total"]) for r in vm["rows"]]
+    # Each marker starts past its bar's end, so it never covers the bar's last network group.
+    marks = app.evaluate(
+        f"""() => {{ const l = document.querySelector('{GD}').layout;
+          return {{ shapes: l.shapes.filter(s => s.name === 'end-marker').map(s => [s.xanchor, s.x0]),
+            shifts: l.annotations.filter(a => a.name === 'total').map(a => a.xshift) }}; }}"""
+    )
+    assert [x for x, _ in marks["shapes"]] == [r["total"] for r in vm["rows"]]
+    assert all(x0 > 0 for _, x0 in marks["shapes"]) and all(x > 0 for x in marks["shifts"])
 
 
 def test_legend_chips_are_the_network_families(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
@@ -292,7 +300,7 @@ def test_hover_names_each_family_its_networks_and_special_games(
 ) -> None:
     raw = nfl_fixture_raw
     vm = _vm(app)
-    names = {n["id"]: n["name"] for n in raw["lookups"]["networks"]} | {"tba": "Network TBA"}
+    names = {n["id"]: n["name"] for n in raw["lookups"]["networks"]} | {"tba": "No network listed"}
     multi = {"nbc", "disney", "other"}  # families whose label covers several networks
     for k, row in enumerate(vm["rows"]):
         lines = [f"{row['label']}, 2024–2026", f"{row['total']} games, {row['special']} special"]
@@ -377,7 +385,10 @@ def test_info_note_follows_the_toggle(app: Page) -> None:
         in text
     )
     assert "Other: NFL Network, Prime and Netflix." in text
-    assert "Network TBA: a game with no network listed yet." in text
+    assert (
+        "No network listed: a game whose network is not in the data, or is not assigned yet."
+        in text
+    )
     assert (
         app.get_attribute("dialog.info-modal a", "href") == "methodology.html#nfl-games-by-network"
     )
@@ -460,7 +471,7 @@ def test_networks_state_and_url_round_trip(run: Callable[[str], Any]) -> None:
 
 
 def test_a_stale_network_tba_link_stays_an_empty_pick(run: Callable[[str], Any]) -> None:
-    """Once every game has its network there is no Network TBA entry; a link to it alone must
+    """Once every game has its network there is no no-network entry; a link to it alone must
     not widen to every network."""
     got = run(
         """
@@ -548,7 +559,7 @@ def test_networks_entry_list_and_only(app: Page, nfl_fixture_raw: dict[str, Any]
     assert "is-changed" in (app.get_attribute(trigger, "class") or "")
     assert (
         app.inner_text(f"{trigger} .filter-value")
-        == "Fox, CBS, NBC, ESPN, Peacock, ABC, Network TBA"
+        == "Fox, CBS, NBC, ESPN, Peacock, ABC, No network listed"
     )
 
     # One network of a family: the family box is mixed and says how many are on.
@@ -752,7 +763,7 @@ def test_networks_pick_on_this_weekend(app: Page, nfl_fixture_raw: dict[str, Any
     _set(app, {"networks": ["cbs"]})
     assert app.inner_text("#nfl-summary") == f"{cbs} of {cells} games match"
     assert _search(app) == "?sport=nfl&view=weekend&networks=cbs"
-    # An upcoming game with no network yet answers to Network TBA.
+    # An upcoming game with no network yet answers to the no-network entry.
     _set(app, {"networks": ["tba"]})
     assert app.inner_text("#nfl-summary") == f"{tba} of {cells} games match"
 
@@ -927,10 +938,10 @@ def test_selection_keeps_the_table_in_step_and_tab_change_drops_it(app: Page) ->
     assert _state(app)["selection"] is None
 
 
-# ------------------------------------------------------------------ Network TBA
+# ------------------------------------------------------------------ games with no network
 
 
-def test_network_tba_caption_chip_and_group(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
+def test_no_network_caption_chip_and_group(app: Page, nfl_fixture_raw: dict[str, Any]) -> None:
     raw = nfl_fixture_raw
     g = raw["games"]
     tba = [i for i in range(len(g["season"])) if g["network"][i] is None]
@@ -938,7 +949,7 @@ def test_network_tba_caption_chip_and_group(app: Page, nfl_fixture_raw: dict[str
     vm = _vm(app)
     assert vm["tba"] == {"seasons": [2024], "games": 1}
     caption = app.locator(f"{VIEW} .nfl-pending-caption")
-    assert caption.inner_text() == "1 game has no network listed yet (2024), shown as Network TBA."
+    assert caption.inner_text() == "1 game (2024) has no network listed."
     in_bars = [r for r in vm["rows"] if any(s["family"] == "tba" for s in r["segments"])]
     assert len(in_bars) == 2  # the game's two teams
     # Outside its season the caption goes; it never names a game the bars do not count.
@@ -950,7 +961,7 @@ def test_network_tba_caption_chip_and_group(app: Page, nfl_fixture_raw: dict[str
           return [T.tbaText({ seasons: [2025, 2026], games: 12 }), T.tbaText({ seasons: [], games: 0 })]; }"""
     )
     assert text == [
-        "12 games have no network listed yet (2025 and 2026), shown as Network TBA.",
+        "12 games (2025 and 2026) have no network listed.",
         None,
     ]
 

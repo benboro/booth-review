@@ -6,19 +6,20 @@
 import {
   FAMILY_COLORS, FAMILY_LABELS, MUTED, PAGE_BG, familyKey, mixHex,
 } from '../../modules/palette.js';
+import { NO_NETWORK_NAME } from './data.js';
 
-/** How far Network TBA's neutral sits from the page toward the muted text tone. */
+/** How far the no-network neutral sits from the page toward the muted text tone. */
 const TBA_WEIGHT = 0.45;
 
 /**
  * Network family labels on the NFL page: the shared ones, except that Fox and CBS carry NFL
- * games on one network each, and Network TBA (a game with no network yet) is its own entry.
+ * games on one network each, and a game with no network is its own entry.
  */
 export const NFL_FAMILY_LABELS = Object.freeze({
   ...FAMILY_LABELS,
   fox: 'FOX',
   cbs: 'CBS',
-  tba: 'Network TBA',
+  tba: NO_NETWORK_NAME,
 });
 
 /** The label of a network family key ('tba' included); unknown keys read as Other. */
@@ -30,7 +31,7 @@ export function familyLabel(family) {
 
 /**
  * The colour of a network family on the all-games bars and their chips: the shared family
- * colour, and for Network TBA, which is no network's colour, a pale neutral a clear step
+ * colour, and for a game with no network, which is no network's colour, a pale neutral a clear step
  * lighter than Other's grey (the muted text tone mixed toward the page).
  * @param {string} family
  * @param {'light'|'dark'} theme

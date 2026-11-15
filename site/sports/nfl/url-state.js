@@ -121,7 +121,7 @@ export function decodeNflState(search, model) {
       case 'net': break; // legacy one-network param: read and ignored
       case 'networks': {
         // 'none' is the empty pick; unknown ids drop, and a list with no known id is unfiltered.
-        // A link to Network TBA alone stays an empty pick once every game has its network.
+        // A link to the no-network entry alone stays an empty pick once every game has its network.
         if (raw === 'none') state.networks = [];
         else {
           const picked = list(raw);

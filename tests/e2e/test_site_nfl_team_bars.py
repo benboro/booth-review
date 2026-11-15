@@ -12,7 +12,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from playwright.sync_api import Page, Route
+from playwright.sync_api import Page, Route, expect
 
 pytestmark = pytest.mark.e2e
 
@@ -388,7 +388,8 @@ def test_info_modal_lists_definitions_and_leaves_the_page_alone(app: Page) -> No
     assert dialog.locator("a").get_attribute("href") == "methodology.html#nfl-special-games"
     app.keyboard.press("Escape")
     assert dialog.is_hidden()
-    assert button.get_attribute("aria-expanded") == "false"
+    # The dialog's close event fires a task after it closes, so this read retries.
+    expect(button).to_have_attribute("aria-expanded", "false")
     button.click()
     app.mouse.click(5, 5)  # the backdrop
     assert dialog.is_hidden()

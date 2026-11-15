@@ -139,7 +139,10 @@ records only where the site settles or applies them.
   that would have kept one row at 1024px). Networks is the CFB filter: the same
   family-nested list (tri-state family box, caret, counts, Only / All), the same value line
   (the checked network names, "None" for an empty pick) and the same `networks` link param,
-  with Network TBA as its own row for games with no network yet. NFL has no compare mode, so its count line never shows person or booth chips on desktop
+  with "No network listed" (link id `tba`) as its own row for games with no network: a played
+  game whose network is not in the data, or one not assigned yet. It does not say "Network TBA",
+  This weekend's word for an unassigned upcoming game, because the first real case was a 2014
+  game. NFL has no compare mode, so its count line never shows person or booth chips on desktop
   (the pick already shows its name); the phone Filters sheet keeps them in its people strip; MLB has no bar and takes the count line's chip shape, and its Matched games sits in the same module frame as CFB's (Phase 26).
 
 ## Copy
@@ -230,8 +233,12 @@ records only where the site settles or applies them.
   small pieces vanish under the gaps on a phone. The hover
   names each network of a family ("ABC 4, ESPN 24") and each group's special games; it does not
   split them by category, which the toggle does. Groups follow the booth picker's order (Fox,
-  CBS, NBC, ESPN/ABC), then Other, then Network TBA, a pale neutral (the muted tone at 45% on
+  CBS, NBC, ESPN/ABC), then Other, then No network listed, a pale neutral (the muted tone at 45% on
   the page) a clear step lighter than Other's grey, drawn in one tone whether special or not.
+- On the all-games bars the total marker starts just past the bar's end instead of being
+  centred on it: centred, it covered the last network groups (all of Other on a phone, a
+  one-game group at any width). The Special games bars and the CFB Bars keep the centred
+  marker.
 - The legend row with the toggle off: the family chips (the CFB legend's rules: a click turns
   the family on or off in the Networks filter, a double-click shows only it, a family with no
   games under the other filters is dotted), then a caption-sized key in neutral marks,

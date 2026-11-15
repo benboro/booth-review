@@ -102,7 +102,8 @@ Every `people`, `networks` and `venues` entry must be referenced by something.
 The first tab's all-games bars and the Networks filter are computed in the browser from this
 block: `home`, `away`, `network` (with `lookups.networks[].family` for the group and its
 colour) and the special-game flags. There is no pre-aggregated per-network block, and a null
-`network` is shown as "Network TBA".
+`network` is shown as "No network listed" (a played game whose network is not in the data, or
+one not assigned yet; This weekend keeps "Network TBA" for an unassigned upcoming game).
 
 `pending` follows the CFB rule: a game in the current season (`freshness.season`) at or
 after `freshness.viewership_through_week`, or any current-season game when that stamp is

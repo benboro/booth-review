@@ -341,9 +341,9 @@ Each venue pulls color from the networks that aired its games, and the network w
 
 The first NFL tab, Team games, counts every regular-season game of each franchise, once per team, and groups a team's games by the network that carried them. These are assignments, not quality: the bars say where the league and its partners put a team's games, not how good the team is.
 
-**Network groups.** Networks are grouped by family, in the colors the college football page uses: FOX, CBS, NBC with Peacock, ABC with ESPN and ESPN+, and Other (NFL Network, Prime Video, Netflix, YouTube and Yahoo). The hover names each network of a family with its count. A game with no network listed yet is counted as Network TBA until its listing arrives.
+**Network groups.** Networks are grouped by family, in the colors the college football page uses: FOX, CBS, NBC with Peacock, ABC with ESPN and ESPN+, and Other (NFL Network, Prime Video, Netflix, YouTube and Yahoo). The hover names each network of a family with its count. A game with no network in the data (one not assigned yet, or an older game whose network was never recorded) is counted under No network listed.
 
-**Special games.** Inside a network's group the solid part is that network's special games and the light part is its other games, mostly regional Sunday-afternoon games. A special game is one the Special games view counts (next section): a game in a solo slot, Fox AGOTW, CBS late national, or a game played abroad. A Network TBA game is drawn in one pale tone whether or not it is special.
+**Special games.** Inside a network's group the solid part is that network's special games and the light part is its other games, mostly regional Sunday-afternoon games. A special game is one the Special games view counts (next section): a game in a solo slot, Fox AGOTW, CBS late national, or a game played abroad. A game with no network listed is drawn in one pale tone whether or not it is special.
 
 **Special games only.** The toggle swaps the networks for the eight special-game categories of the next section.
 

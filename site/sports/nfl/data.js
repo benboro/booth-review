@@ -7,19 +7,29 @@
 import { sortNetworks } from '../../modules/network.js';
 import { TBA_NETWORK } from '../../modules/weekend-data.js';
 
-/** The family key of the synthetic Network TBA entry: its own chip, apart from Other. */
+/** The family key of the synthetic entry for a game with no network: its own chip, apart from Other. */
 export const TBA_FAMILY = 'tba';
+
+/**
+ * What a game with no network reads as in the filter, the chips and the tables. Not "Network
+ * TBA", the This weekend wording for an unassigned upcoming game: a played game from an old
+ * season can lack a network too, and nothing about it is still to be announced.
+ */
+export const NO_NETWORK_NAME = 'No network listed';
 
 /**
  * The Networks filter's view of the networks, in the shape the shared selection helpers read
  * (`toggleFamilyNetworks`, `familyOnlyPatch` and the rest of modules/select.js): the shipped
- * networks, plus a Network TBA entry when a game or an upcoming game has no network yet.
+ * networks, plus a "No network listed" entry (id `tba`) when a game or an upcoming game has no
+ * network: a played game whose network is not in the data, or one not assigned yet.
  * Families follow the booth picker's order (`lookups.network_groups`: Fox, CBS, NBC, ESPN/ABC,
  * then the rest), each family's networks follow network precedence (ABC before ESPN, NBC before
- * Peacock), and Network TBA is last.
+ * Peacock), and No network listed is last.
  */
 function networkFacade(networks, networkGroups, hasTba) {
-  const list = hasTba ? [...networks, { ...TBA_NETWORK, family: TBA_FAMILY }] : [...networks];
+  const list = hasTba
+    ? [...networks, { ...TBA_NETWORK, name: NO_NETWORK_NAME, family: TBA_FAMILY }]
+    : [...networks];
   const families = [];
   const note = (family) => {
     if (!families.includes(family)) families.push(family);

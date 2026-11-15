@@ -5,7 +5,7 @@
  * looks the same on both pages: one group per network family in its family colour, with a solid
  * part and a light part in the same hue. On CFB the solid part is the rated games; here it is
  * the special games, and the light part is the family's other games. A game with no network yet
- * (Network TBA) has no network colour: it is one pale neutral piece, special or not.
+ * ("No network listed") has no network colour: it is one pale neutral piece, special or not.
  *
  * DOM-free: the trace builder, the hover model and the plain-text lines the phone and the tests
  * read. views/team-bars.js owns the chart node, the layout, the legend and the tables.
@@ -26,7 +26,7 @@ const FADE_WEIGHT = 0.4;
 
 /**
  * The pieces of one family segment: one piece in the family's colour, whose `rated` length is
- * drawn solid (the special games, or every game of Network TBA) and the rest light. A family is
+ * drawn solid (the special games, or every game with no network) and the rest light. A family is
  * one colour, not a shade per network: lightness already tells special from other.
  */
 function partsFor(theme) {
