@@ -355,12 +355,12 @@ The NFL view counts how often each franchise plays in a special game. These are 
 2. Sunday night
 3. Monday night (solo-slot games only; Monday doubleheader games share a window and are not counted here)
 4. Holiday (Thanksgiving, Christmas and Black Friday games in a solo slot)
-5. Other solo slot (Saturday, international mornings and any other solo-slot game)
+5. Other solo slot (Saturday, Friday, a lone Sunday-afternoon game and any other solo-slot game played in the US)
 6. Fox AGOTW
 7. CBS late national
-8. International (a game played abroad that shares its window)
+8. International (a game played abroad, alone in its window or not)
 
-A solo international game counts under its solo segment. The detail panel lists every flag a game carries, including the total international count.
+Thursday night, Sunday night, Monday night and Holiday keep their games first, so a Monday night game played abroad stays Monday night. Every other international game counts under International, whether or not it is alone in its window, unless it is Fox AGOTW or CBS late national. The detail panel lists every flag a game carries, including the total international count.
 
 ## NFL: Doubleheader weeks and rates
 

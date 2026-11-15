@@ -78,10 +78,16 @@ export function prepareNfl(raw) {
     const s = cols.season[i];
     if (s < minSeason) minSeason = s;
     if (s > maxSeason) maxSeason = s;
-    if (cols.standalone[i]) category[i] = soloCode(slots[cols.slot[i]]);
+    // Contract 3.0.0 precedence: the primetime and holiday solo slots keep their games, then
+    // International takes every other international game that is not AGOTW or CBS national,
+    // solo slot or shared window, then Other solo slot, AGOTW and CBS national.
+    const solo = cols.standalone[i] ? soloCode(slots[cols.slot[i]]) : null;
+    if (solo != null && solo !== CATEGORY_CODES.solo_other) category[i] = solo;
+    else if (cols.international[i] && !cols.agotw[i] && !cols.cbs_national[i]) {
+      category[i] = CATEGORY_CODES.international_other;
+    } else if (solo != null) category[i] = solo;
     else if (cols.agotw[i]) category[i] = CATEGORY_CODES.agotw;
     else if (cols.cbs_national[i]) category[i] = CATEGORY_CODES.cbs_national;
-    else if (cols.international[i]) category[i] = CATEGORY_CODES.international_other;
     else category[i] = CATEGORY_CODES.none;
     for (const f of [cols.home[i], cols.away[i]]) {
       if (!franchiseGames.has(f)) franchiseGames.set(f, []);

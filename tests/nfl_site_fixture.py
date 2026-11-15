@@ -699,7 +699,9 @@ def _special_block(
         "Sunday late": "sunday_late",
         "Other": "other",
     }
+    kept_slots = {"TNF", "SNF", "MNF", "Thanksgiving", "Christmas", "Black Friday"}
     rows: dict[tuple[int, int], dict[str, Any]] = {}
+    moved: dict[tuple[int, int], int] = {}
     for s in specs:
         for franchise in (s["home"], s["away"]):
             row = rows.setdefault((franchise, s["season"]), _empty_special(franchise, s["season"]))
@@ -715,8 +717,14 @@ def _special_block(
                 row["cbs_national"] += 1
             if "I" in flags:
                 row["international"] += 1
-                if not set(flags) & set("SAC"):
+                # Contract 3.0.0: International takes every international game that is not
+                # AGOTW, CBS national or a primetime / holiday solo game, solo slot or not.
+                kept = "S" in flags and s["slot"] in kept_slots
+                if not kept and not set(flags) & set("AC"):
                     row["international_other"] += 1
+                    if "S" in flags:
+                        key = (franchise, s["season"])
+                        moved[key] = moved.get(key, 0) + 1
             if "F" in flags:
                 row["flexed"] += 1
     ordered = [rows[key] for key in sorted(rows, key=lambda k: (k[0], k[1]))]
@@ -736,8 +744,10 @@ def _special_block(
             + row["standalone_thanksgiving"]
             + row["standalone_black_friday"]
         )
-        row["solo_other"] = row["standalone_total"] - (
-            row["solo_thursday"] + row["solo_sunday"] + row["solo_monday"] + row["solo_holiday"]
+        row["solo_other"] = (
+            row["standalone_total"]
+            - (row["solo_thursday"] + row["solo_sunday"] + row["solo_monday"] + row["solo_holiday"])
+            - moved.get((row["franchise"], row["season"]), 0)
         )
     names = list(ordered[0])
     return {name: [row[name] for row in ordered] for name in names}
@@ -959,7 +969,7 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "2.3.0",
+        "schema_version": "3.0.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,

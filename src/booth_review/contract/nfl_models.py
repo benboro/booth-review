@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from booth_review.contract.models import VenueRef
 
-NFL_SCHEMA_VERSION = "2.3.0"
+NFL_SCHEMA_VERSION = "3.0.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -389,13 +389,6 @@ _STANDALONE_COLUMNS: tuple[str, ...] = (
     "standalone_other",
 )
 
-_SOLO_COLUMNS: tuple[str, ...] = (
-    "solo_thursday",
-    "solo_sunday",
-    "solo_monday",
-    "solo_holiday",
-    "solo_other",
-)
 _SOLO_OTHER_PARTS: tuple[str, ...] = (
     "standalone_saturday",
     "standalone_international",
@@ -442,7 +435,7 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["2.3.0"]
+    schema_version: Literal["3.0.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
@@ -639,13 +632,13 @@ class NflSiteData(BaseModel):
                 raise ValueError(
                     f"special.standalone_total[{i}]: does not equal the sum of the standalone slots"
                 )
-            self._check_solo(i)
             if s.special[i] != s.standalone_total[i] + s.agotw[i] + s.cbs_national[i]:
                 raise ValueError(
                     f"special.special[{i}]: does not equal standalone_total + agotw + cbs_national"
                 )
             if s.international_other[i] > s.international[i]:
                 raise ValueError(f"special.international_other[{i}]: exceeds international")
+            self._check_solo(i)
 
     def _check_solo(self, i: int) -> None:
         s = self.special
@@ -658,15 +651,27 @@ class NflSiteData(BaseModel):
                 + s.standalone_thanksgiving[i]
                 + s.standalone_black_friday[i]
             ),
-            "solo_other": sum(getattr(s, name)[i] for name in _SOLO_OTHER_PARTS),
         }
         for name, want in expected.items():
             if getattr(s, name)[i] != want:
                 raise ValueError(f"special.{name}[{i}]: does not match its standalone slots")
-        if sum(getattr(s, name)[i] for name in _SOLO_COLUMNS) != s.standalone_total[i]:
+        # Contract 3.0.0: a solo international game that is not AGOTW or CBS national counts
+        # under international_other, so solo_other holds its standalone slots minus those
+        # games. Every International-slot game is one of them (it kicks off before noon ET
+        # or on a Friday abroad, never in the late Sunday national window).
+        moved = sum(getattr(s, name)[i] for name in _SOLO_OTHER_PARTS) - s.solo_other[i]
+        if moved < s.standalone_international[i]:
             raise ValueError(
-                f"special.solo_other[{i}]: solo columns do not sum to standalone_total"
+                f"special.solo_other[{i}]: counts a solo international game "
+                "(it belongs to international_other)"
             )
+        if moved > s.international_other[i]:
+            raise ValueError(
+                f"special.solo_other[{i}]: its moved solo international games are not "
+                "in international_other"
+            )
+        # With the checks above, the eight stack segments sum to special plus the international
+        # games that are not standalone, AGOTW or CBS national (international_other - moved).
 
     def _check_season_weeks(self) -> None:
         w = self.season_weeks

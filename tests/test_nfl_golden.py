@@ -77,7 +77,10 @@ _NFL_GOLDEN: dict[str, str] = {
     # games.overtimes, and nfl_games.parquet an overtimes column, null for the three synthetic
     # games. Dropping them (and setting the version back to 2.2.0) gives the earlier digests
     # (4992c116abf1... and 8f4900395984...); nothing else changed.
-    "processed/nfl-data.json": ("033237fa794276e4ff0ae9b3c7486edffef49a31a58acd2dfc2b5efdfef9d9f7"),
+    # Re-pinned for the International segment (2026-11-14): NFL contract 3.0.0 moves solo
+    # international games to international_other. The synthetic vault has none, so only the
+    # schema_version changed; setting it back to 2.3.0 gives 033237fa7942....
+    "processed/nfl-data.json": ("c08c8ae37fd7c030df73e2e95fcc73dbbe65f259a7850e49092132a68f5dcfa4"),
     "processed/nfl_games.parquet": (
         "31c0655e30a13215aa8d0ecd596806c3255f77eadd9cc087c908f88b256f7337"
     ),

@@ -3280,7 +3280,7 @@
    }
   ]
  },
- "schema_version": "2.3.0",
+ "schema_version": "3.0.0",
  "season_weeks": {
   "cbs_ambiguous_weeks": [
    1,
@@ -3471,13 +3471,13 @@
   ],
   "international_other": [
    0,
-   0,
+   1,
    0,
    0,
    0,
    0,
    1,
-   0,
+   1,
    0,
    0,
    0,
@@ -3551,13 +3551,13 @@
   ],
   "solo_other": [
    1,
-   1,
-   1,
    0,
    1,
    0,
    1,
+   0,
    1,
+   0,
    0,
    2,
    1,

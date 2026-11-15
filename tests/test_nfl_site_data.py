@@ -162,6 +162,17 @@ def _special_rows(
         ]
         row: dict[str, Any] = dict.fromkeys(NFL_SPECIAL_COLUMNS, 0)
         stand = [g for g in mine if g["is_standalone"]]
+        kept = {label for k, labels in SOLO_GROUPS.items() if k != "other" for label in labels}
+
+        def intl_segment(g: dict[str, Any], kept: set[str] = kept) -> bool:
+            # Contract 3.0.0: every international game not AGOTW, CBS national or a
+            # primetime / holiday solo game is International.
+            return bool(g["is_international"]) and not (
+                (g["is_standalone"] and g["slot_name"] in kept)
+                or g["is_agotw"]
+                or g["is_cbs_national"]
+            )
+
         row.update(
             franchise_id=fid,
             season=season,
@@ -171,17 +182,16 @@ def _special_rows(
             agotw=sum(bool(g["is_agotw"]) for g in mine),
             cbs_national=sum(bool(g["is_cbs_national"]) for g in mine),
             international=sum(bool(g["is_international"]) for g in mine),
-            international_other=sum(
-                bool(g["is_international"])
-                and not (g["is_standalone"] or g["is_agotw"] or g["is_cbs_national"])
-                for g in mine
-            ),
+            international_other=sum(intl_segment(g) for g in mine),
             flexed=sum(bool(g["flexed"]) for g in mine),
         )
         for label, suffix in SLOT_COLUMNS.items():
             row[f"standalone_{suffix}"] = sum(g["slot_name"] == label for g in stand)
         for suffix, labels in SOLO_GROUPS.items():
-            row[f"solo_{suffix}"] = sum(g["slot_name"] in labels for g in stand)
+            row[f"solo_{suffix}"] = sum(
+                g["slot_name"] in labels and not (suffix == "other" and intl_segment(g))
+                for g in stand
+            )
         row["special"] = row["standalone_total"] + row["agotw"] + row["cbs_national"]
         fox_dh, fox_amb, cbs_dh, cbs_amb = week_counts.get(season, (0, 0, 0, 0))
         row.update(
@@ -802,8 +812,39 @@ def test_international_other_counts_once() -> None:
     k = site.lookups.franchises[0].id
     assert k == "alpha"
     assert site.special.international[0] == 2
-    assert site.special.international_other[0] == 1
+    # Contract 3.0.0: the solo international game is International, not Other solo slot.
+    assert site.special.international_other[0] == 2
+    assert site.special.solo_other[0] == 0
     assert site.special.standalone_total[0] == 1
+
+
+def test_monday_night_abroad_stays_monday_night() -> None:
+    site = _single(
+        [
+            _game(game_id="m", slot_name="MNF", is_standalone=True, is_international=True),
+            _game(game_id="s", week=2, slot_name="Saturday", is_standalone=True),
+        ]
+    )
+    s = site.special
+    assert (s.solo_monday[0], s.solo_other[0], s.international_other[0]) == (1, 1, 0)
+
+
+def test_old_solo_international_sums_raise_position_only() -> None:
+    """A table with the 2.x sums (a solo international game under solo_other) is refused."""
+    games = _frame(
+        [
+            _game(
+                game_id="i1", is_international=True, slot_name="International", is_standalone=True
+            ),
+        ]
+    )
+    old = _special_rows(games, {}).with_columns(
+        (pl.col("solo_other") + 1).alias("solo_other"),
+        (pl.col("international_other") - 1).alias("international_other"),
+    )
+    with pytest.raises(SiteBuildError) as err:
+        build_nfl_site_data(NflSiteInputs(games, old, _task1([]), _registry(), _franchises(), ERAS))
+    assert str(err.value) == "special[0]: exclusive category counts do not match games"
 
 
 def test_solo_columns_ship_and_sum_to_standalone() -> None:

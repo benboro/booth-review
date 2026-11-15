@@ -1857,7 +1857,7 @@
       "type": "object"
     }
   },
-  "$id": "booth-review/nfl-data/2.3.0",
+  "$id": "booth-review/nfl-data/3.0.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -1877,7 +1877,7 @@
       "$ref": "#/$defs/NflLookups"
     },
     "schema_version": {
-      "const": "2.3.0",
+      "const": "3.0.0",
       "title": "Schema Version",
       "type": "string"
     },

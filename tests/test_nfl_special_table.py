@@ -167,7 +167,9 @@ def test_international_other_is_exclusive() -> None:
     ]
     home = row_for(special_games_table(table(rows)), "h", 2015)
     assert home["international"] == 2
-    assert home["international_other"] == 1
+    # Contract 3.0.0: the solo international game counts under International too.
+    assert home["international_other"] == 2
+    assert home["solo_other"] == 0
     assert home["special"] == 2
     assert home["standalone_total"] + home["agotw"] + home["cbs_national"] == home["special"]
 
@@ -187,28 +189,35 @@ def test_international_other_with_agotw_and_cbs_excluded() -> None:
     assert row_for(out, "x", 2015)["international_other"] == 1
 
 
-def test_solo_columns_are_exclusive_and_sum_to_standalone_total() -> None:
-    slots = [
-        ("TNF", True),
-        ("SNF", True),
-        ("MNF", True),
-        ("Thanksgiving", True),
-        ("Christmas", True),
-        ("Saturday", True),
-        ("International", True),
-    ]
+def test_solo_columns_are_exclusive_and_leave_out_solo_international() -> None:
+    slots = ["TNF", "SNF", "MNF", "Thanksgiving", "Christmas", "Saturday", "International"]
     rows = [
-        game(f"s{i}", 2015, i + 1, "h", "v", is_standalone=True, slot_name=slot, is_special=True)
-        for i, (slot, _) in enumerate(slots)
+        game(
+            f"s{i}",
+            2015,
+            i + 1,
+            "h",
+            "v",
+            is_standalone=True,
+            slot_name=slot,
+            is_international=slot == "International",
+            is_special=True,
+        )
+        for i, slot in enumerate(slots)
     ]
     home = row_for(special_games_table(table(rows)), "h", 2015)
     assert home["solo_thursday"] == 1
     assert home["solo_sunday"] == 1
     assert home["solo_monday"] == 1
     assert home["solo_holiday"] == 2
-    assert home["solo_other"] == 2
+    assert home["solo_other"] == 1
+    assert home["international_other"] == 1
     solo = sum(home[f"solo_{k}"] for k in ("thursday", "sunday", "monday", "holiday", "other"))
-    assert solo == home["standalone_total"] == 7
+    assert home["standalone_total"] == 7
+    # The five solo columns sum to standalone_total minus the solo international games.
+    assert solo == home["standalone_total"] - 1
+    segments = solo + home["agotw"] + home["cbs_national"] + home["international_other"]
+    assert segments == home["special"]
 
 
 def test_monday_doubleheader_game_adds_nothing_to_solo_monday() -> None:
@@ -217,7 +226,7 @@ def test_monday_doubleheader_game_adds_nothing_to_solo_monday() -> None:
     assert home["solo_monday"] == 0 and home["standalone_total"] == 0
 
 
-def test_standalone_international_is_solo_other_not_international_other() -> None:
+def test_standalone_international_is_international_not_solo_other() -> None:
     rows = [
         game(
             "a",
@@ -232,6 +241,42 @@ def test_standalone_international_is_solo_other_not_international_other() -> Non
         )
     ]
     home = row_for(special_games_table(table(rows)), "h", 2015)
-    assert home["solo_other"] == 1
+    assert home["solo_other"] == 0
+    assert home["standalone_international"] == 1
     assert home["international"] == 1
-    assert home["international_other"] == 0
+    assert home["international_other"] == 1
+
+
+def test_international_segment_precedence() -> None:
+    def solo(gid: str, week: int, slot: str, **over: object) -> dict:
+        return game(
+            gid,
+            2015,
+            week,
+            "h",
+            "v",
+            is_international=True,
+            is_standalone=True,
+            slot_name=slot,
+            is_special=True,
+            **over,
+        )
+
+    rows = [
+        # A Monday night game abroad stays Monday night; holidays keep theirs too.
+        solo("mnf", 1, "MNF"),
+        solo("xmas", 2, "Christmas"),
+        # A lone Saturday or Sunday-late game abroad is International, not Other solo slot.
+        solo("sat", 3, "Saturday"),
+        solo("late", 4, "Sunday late"),
+        # A lone AGOTW abroad is never International; it keeps the pre-3.0 Other solo slot.
+        solo("agotw", 5, "Sunday late", is_agotw=True),
+        # A shared-window game abroad is International, as before.
+        game("shared", 2015, 6, "h", "v", is_international=True),
+    ]
+    home = row_for(special_games_table(table(rows)), "h", 2015)
+    assert home["solo_monday"] == 1
+    assert home["solo_holiday"] == 1
+    assert home["solo_other"] == 1
+    assert home["international_other"] == 3
+    assert home["international"] == 6
