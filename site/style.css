@@ -7629,12 +7629,14 @@ tr.is-matched > :first-child {
   flex: 1 1 auto;
 }
 
+/* No line clamp (user 2026-11-14): iPhone Safari drew the clamp's ellipsis after a matchup that
+   wrapped onto exactly two lines, and a clamp at two lines hid the whole home side of a matchup
+   that needs three. The row grows instead (it has no fixed height); a word longer than the
+   line breaks rather than overflowing. */
 .wk-item-l1 {
+  display: block;
   font: var(--font-body);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow-wrap: break-word;
 }
 
 .wk-item-l2 {
@@ -7987,9 +7989,9 @@ tr.is-matched > :first-child {
 }
 
 /* The phone row's badge centres on the matchup lines (user feedback 2026-11-03), line 1 or
-   lines 1-2 when the matchup wraps, never the booth line or the whole row: the matchup's own
-   wrapper (.wk-item-mu) is its positioning context, and that wrapper is exactly as tall as the
-   lines the 2-line clamp shows. Its right edge is the row's content edge (16px in), so
+   all of the lines when the matchup wraps, never the booth line or the whole row: the
+   matchup's own wrapper (.wk-item-mu) is its positioning context, and that wrapper is exactly
+   as tall as the matchup's lines. Its right edge is the row's content edge (16px in), so
    right: -10px puts the badge 6px in from the row's edge. */
 .wk-item-mu {
   position: relative;

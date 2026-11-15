@@ -4,11 +4,10 @@
  * ranked badge, where the surface sets one inline), so the away team never ends a line with a
  * dangling joiner and the home side never splits while it fits on its own line.
  *
- * The away side stays plain inline text, so it wraps like any text (a phone row's line clamp
- * still counts its lines); the joiner, the home side and the badge form one inline-block
- * (`.mu-part`), so the space before the joiner is the only break between the sides. A home
- * part longer than a whole line still wraps inside itself. A rank and the word after it
- * ("#20 Florida") share a no-wrap run (`.mu-glue`), so a rank never ends a line apart from its
+ * The away side stays plain inline text, so it wraps like any text; the joiner, the home side
+ * and the badge form one inline-block (`.mu-part`), so the space before the joiner is the only
+ * break between the sides. A home part longer than a whole line still wraps inside itself. A
+ * rank and the word after it ("#20 Florida") share a no-wrap run (`.mu-glue`), so a rank never ends a line apart from its
  * team. Text nodes only: a team name is never markup, and the element's textContent is
  * exactly the one-string matchup ("#20 Florida @ #5 Georgia").
  */
