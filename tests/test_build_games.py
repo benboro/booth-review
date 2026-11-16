@@ -294,7 +294,7 @@ def test_committee_poll_carries_forward_over_a_later_ap_only_week() -> None:
         _game(id=9, week=9),
         _game(id=10, week=10),
         _game(id=11, week=11),
-        _game(id=12, week=12),  # no poll of any kind yet
+        _game(id=12, week=12),  # no poll of any kind yet: week 11's stays in force
     ]
     frame = build_games_frame([_sources(games=games, rankings=rankings)])
     rows = {r["game_id"]: r for r in frame.iter_rows(named=True)}
@@ -304,7 +304,36 @@ def test_committee_poll_carries_forward_over_a_later_ap_only_week() -> None:
     assert rows[11]["home_rank"] == 6
     assert rows[11]["away_rank"] is None
     assert rows[11]["rank_poll"] == "Playoff Committee Rankings"
-    assert rows[12]["rank_poll"] is None
+    assert rows[12]["home_rank"] == 6
+    assert rows[12]["away_rank"] is None
+    assert rows[12]["rank_poll"] == "Playoff Committee Rankings"
+
+
+def test_upcoming_week_keeps_the_latest_poll_until_the_next_one_is_out() -> None:
+    rankings = [
+        _poll_week(5, {"AP Top 25": {"Home Team": 3, "Away Team": 8}}),
+        _poll_week(7, {"AP Top 25": {"Home Team": 1}}),
+    ]
+    games = [
+        _game(id=5, week=5),
+        _game(id=6, week=6),  # mid-season gap: no carry-forward from before it
+        _game(id=7, week=7),
+        _game(id=8, week=8),  # next weekend, poll not out yet
+        _game(id=9, week=9),
+    ]
+    frame = build_games_frame([_sources(games=games, rankings=rankings)])
+    rows = {r["game_id"]: r for r in frame.iter_rows(named=True)}
+
+    assert rows[6]["rank_poll"] is None
+    for game_id in (8, 9):
+        assert (rows[game_id]["home_rank"], rows[game_id]["away_rank"]) == (1, None)
+        assert rows[game_id]["rank_poll"] == "AP Top 25"
+
+
+def test_no_rankings_at_all_leaves_ranks_null() -> None:
+    frame = build_games_frame([_sources(games=[_game(id=1, week=3)], rankings=[])])
+    row = frame.row(0, named=True)
+    assert (row["home_rank"], row["away_rank"], row["rank_poll"]) == (None, None, None)
 
 
 def test_unranked_team_gets_null_rank(build_vault: DataPaths) -> None:

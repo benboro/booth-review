@@ -14,7 +14,9 @@ preferring "Playoff Committee Rankings" over "AP Top 25" when both exist for
 that week (matching 506's own rank-prefix convention, which follows AP until
 the committee poll starts, per Phase 1's finding). Once the committee poll
 has started, a week without one carries the latest committee poll forward
-rather than switching back to AP. RANK_WEEK_OFFSET was
+rather than switching back to AP. A regular-season week later than the
+latest poll CFBD has (upcoming games before the next release) keeps that
+latest poll's ranks until the new one comes out. RANK_WEEK_OFFSET was
 picked by running `python -m booth_review.build.games` against the real
 2014-2026 vault: offset 0 agreed with 506's own printed rank digit 96.2% of
 the time (3275/3403 comparisons) against offset -1's 23.8% (748/3149) -- see
@@ -140,7 +142,15 @@ def _ranks_for_game(
         latest = _latest_regular_week_with_rankings(by_week)
         lookup_key = ("regular", latest) if latest is not None else None
     else:
-        lookup_key = ((game.season_type or "regular"), game.week + RANK_WEEK_OFFSET)
+        season_type = game.season_type or "regular"
+        week = game.week + RANK_WEEK_OFFSET
+        if season_type == "regular":
+            # A week whose poll is not out yet (the coming weekend's games, between
+            # the last weekend and the next release) keeps the latest poll in force.
+            latest = _latest_regular_week_with_rankings(by_week)
+            if latest is not None and week > latest:
+                week = latest
+        lookup_key = (season_type, week)
 
     entry = by_week.get(lookup_key) if lookup_key is not None else None
     if entry is None:
