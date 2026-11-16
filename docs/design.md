@@ -221,6 +221,13 @@ records only where the site settles or applies them.
   the legend chip's colour dot, the count right-aligned in tabular semibold figures.
   International (any window) and Flexed cut across the categories, so they show only
   while every chip is on.
+- Each NFL special-game category wears the colour of the network family that carries most
+  of its games, on every NFL tab (user 2026-11-15): Fox AGOTW in FOX green, CBS late
+  national in CBS gold, Sunday night in NBC pink, Monday night in ABC/ESPN blue. Thursday
+  night (Prime Video), International and Other solo slot (NFL Network) are all Other, so
+  they take three greys (dark, mid, light), kept over giving Thursday its own hue. Holiday,
+  split almost evenly between FOX, CBS and NBC, keeps its olive, which no network uses.
+  On Viewership, International's line uses triangle markers so it stays apart from Thursday's.
 - The NFL all-games bars ("Special games only" off) are the CFB Bars' stacked bars
   (`stackedTraces` in `site/modules/bar-chart.js`), one group per network family in the shared
   family colour with the Bars' 3px page-colour gap between groups (2px on a phone), and no
