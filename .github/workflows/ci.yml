@@ -39,6 +39,9 @@ jobs:
     # test id into one shard), so the shards run in parallel instead of one
     # ~28-minute job. Together they run every e2e test exactly once.
     runs-on: ubuntu-latest
+    # A shard takes 10-14 minutes; without a cap a stuck one runs until the
+    # runner is lost (49 minutes on 2026-11-16) or GitHub's 6-hour default.
+    timeout-minutes: 30
     # Microsoft's Playwright image ships Chromium and its system packages, so
     # no shard waits on `playwright install --with-deps`, whose apt downloads
     # sometimes crawled at ~50 kB/s and held one shard back 3-14 minutes.
