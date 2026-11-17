@@ -171,6 +171,9 @@ records only where the site settles or applies them.
 
 - A network logo stands alone in its cell. The network-family dot is shown only when
   there is no logo (Phase 13).
+- A network whose logo changed shows the mark its game's season used (SEC Network+: the 2014
+  mark through 2023, the 2024 mark after); a cell not tied to one season (a Crews row's network,
+  the current weekend) shows the newest mark (user, 2026-11-16).
 - The NFL team "season by season" table is the one table with vertical rules: a 1px
   `--muted` rule on the left of Thursday night, Fox AGOTW, Special games and Flexed, with
   trimmed spanner rules over "Solo slots" and "Sunday windows" (Silver Bulletin is the

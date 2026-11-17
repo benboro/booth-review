@@ -86,6 +86,7 @@ function buildNetworksParagraph(data, i, theme) {
     primary,
     others,
     theme,
+    season: t.season?.[i] ?? null,
   });
 }
 

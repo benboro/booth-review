@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import itertools
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -99,23 +100,41 @@ def _view_box(path: Path) -> tuple[float, float]:
     return float(box[2]), float(box[3])
 
 
-def _js_entries() -> dict[str, tuple[str, int, int, str, str]]:
-    """Map each network id in logos.js to (file, width, height, box, dark_file).
-
-    Handles inline object entries and ids that share a named const object.
-    """
-    text = LOGOS_JS.read_text(encoding="utf-8")
-    obj = (
-        r"\{\s*file:\s*'logos/([^']+)'\s*,\s*width:\s*(\d+)\s*,"
-        r"\s*height:\s*(\d+)\s*,\s*box:\s*'(wordmark|badge)'\s*,"
-        r"\s*darkFile:\s*'logos/dark/([^']+)'\s*\}"
-    )
-    consts = {
+def _js_consts() -> dict[str, tuple[str, int, int, str, str]]:
+    """Each named const logo object in logos.js -> (file, width, height, box, dark_file)."""
+    return {
         m.group(1): (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5), m.group(6))
-        for m in re.finditer(r"const (\w+) = " + obj, text)
+        for m in re.finditer(r"const (\w+) = " + _JS_OBJ, LOGOS_JS.read_text(encoding="utf-8"))
     }
+
+
+def _js_eras() -> dict[str, list[tuple[int, str]]]:
+    """Each network id in logos.js's ERAS map -> [(first season, const name), ...]."""
+    text = LOGOS_JS.read_text(encoding="utf-8")
+    block = text.split("const ERAS = new Map([", 1)[1].split("]);", 1)[0]
+    return {
+        m.group(1): [(int(y), c) for y, c in re.findall(r"\[(\d{4}),\s*(\w+)\]", m.group(2))]
+        for m in re.finditer(r"\['([^']+)',\s*\[(.*?)\]\],?\n", block)
+    }
+
+
+_JS_OBJ = (
+    r"\{\s*file:\s*'logos/([^']+)'\s*,\s*width:\s*(\d+)\s*,"
+    r"\s*height:\s*(\d+)\s*,\s*box:\s*'(wordmark|badge)'\s*,"
+    r"\s*darkFile:\s*'logos/dark/([^']+)'\s*\}"
+)
+
+
+def _js_entries() -> dict[str, tuple[str, int, int, str, str]]:
+    """Map each network id in logos.js's LOGOS map to (file, width, height, box, dark_file).
+
+    Handles inline object entries and ids that share a named const object; for a network
+    with eras this is its newest mark.
+    """
+    text = LOGOS_JS.read_text(encoding="utf-8").split("const ERAS = new Map([", 1)[0]
+    consts = _js_consts()
     entries: dict[str, tuple[str, int, int, str, str]] = {}
-    for m in re.finditer(r"\[\s*'([^']+)'\s*,\s*" + obj + r"\s*\]", text):
+    for m in re.finditer(r"\[\s*'([^']+)'\s*,\s*" + _JS_OBJ + r"\s*\]", text):
         entries[m.group(1)] = (m.group(2), int(m.group(3)), int(m.group(4)), m.group(5), m.group(6))
     for m in re.finditer(r"\[\s*'([^']+)'\s*,\s*(\w+)\s*\]", text):
         entries[m.group(1)] = consts[m.group(2)]
@@ -164,7 +183,7 @@ def test_xmlns_alone_is_not_a_problem() -> None:
 
 def test_vendored_logos_lint_clean() -> None:
     files = _logo_svg_files()
-    assert len(files) == 29
+    assert len(files) == 31
     for path in files:
         assert lint_svg(path.read_bytes()) == [], path.name
 
@@ -196,23 +215,61 @@ def test_manifest_matches_files() -> None:
             assert _dims(dark) == _dims(files[row["file"]]), row["file"]
 
 
+def _file_entries() -> dict[str, tuple[str, int, int, str, str]]:
+    """Every logo file logos.js draws -> its entry: LOGOS's entries plus every era's."""
+    consts = _js_consts()
+    by_file = {e[0]: e for e in _js_entries().values()}
+    for eras in _js_eras().values():
+        for _season, name in eras:
+            by_file[consts[name][0]] = consts[name]
+    return by_file
+
+
 def test_logos_js_matches_files_and_sizes() -> None:
     entries = _js_entries()
+    by_file = _file_entries()
     rows = _manifest_rows()
     files = {p.name for p in _logo_files()}
-    assert {f for f, *_ in entries.values()} == files
+    assert set(by_file) == files
     expected_ids = {i for r in rows for i in r["network_ids"].split(";")}
     assert set(entries) == expected_ids
     for row in rows:
-        for net_id in row["network_ids"].split(";"):
-            file, width, height, box, dark_file = entries[net_id]
-            assert file == row["file"]
-            assert dark_file == file
-            assert box == row["render_box"]
-            # The Mountain West network PNG is drawn 24px high (its brand guide's minimum).
-            assert height == (14 if box == "wordmark" else 24 if file.endswith(".png") else 20)
-            vb_w, vb_h = _dims(LOGO_DIR / file)
-            assert abs(width - round(height * vb_w / vb_h)) <= 1, net_id
+        file, width, height, box, dark_file = by_file[row["file"]]
+        assert dark_file == file
+        assert box == row["render_box"]
+        # The Mountain West network PNG is drawn 24px high (its brand guide's minimum).
+        assert height == (14 if box == "wordmark" else 24 if file.endswith(".png") else 20)
+        vb_w, vb_h = _dims(LOGO_DIR / file)
+        assert abs(width - round(height * vb_w / vb_h)) <= 1, file
+        if not row["seasons_from"]:
+            # One mark for every season: each id's LOGOS entry is this file.
+            for net_id in row["network_ids"].split(";"):
+                assert entries[net_id][0] == row["file"], net_id
+
+
+def test_logo_eras_match_manifest_seasons() -> None:
+    """A network with several marks lists each in the manifest with its season range, the
+    ranges meet end to end, the newest is open-ended, and logos.js's ERAS and LOGOS agree."""
+    consts = _js_consts()
+    eras = _js_eras()
+    entries = _js_entries()
+    by_id: dict[str, list[dict[str, str]]] = {}
+    for row in _manifest_rows():
+        if row["seasons_from"]:
+            for net_id in row["network_ids"].split(";"):
+                by_id.setdefault(net_id, []).append(row)
+        else:
+            assert not row["seasons_to"], row["file"]
+    assert set(by_id) == set(eras) == {"sec-network-plus"}
+    for net_id, rows in by_id.items():
+        rows.sort(key=lambda r: int(r["seasons_from"]))
+        assert [(int(r["seasons_from"]), r["file"]) for r in rows] == [
+            (season, consts[name][0]) for season, name in eras[net_id]
+        ]
+        for older, newer in itertools.pairwise(rows):
+            assert int(older["seasons_to"]) + 1 == int(newer["seasons_from"]), net_id
+        assert rows[-1]["seasons_to"] == ""
+        assert entries[net_id][0] == rows[-1]["file"]
 
 
 def test_logos_js_uses_map_and_builder_avoids_bracket_lookup() -> None:

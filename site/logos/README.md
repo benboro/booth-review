@@ -30,6 +30,18 @@ covered by this repository's MIT license.
   YouTube TV has two edits: an added `viewBox` equal to its width and height, and its one named
   colour `red` written as `#ff0000` (the same colour) so the dark-variant build can read it. No
   game uses the `youtube-tv` id yet.
+- SEC Network+ has two marks, both saved by hand by the user from SEC team websites and approved
+  on 2026-11-16, with https://www.secsports.com/about-secnetwork-plus as their source page:
+  `sec-network-plus.svg` (source file `SEC_Network+.svg`) for 2014-2023 games and
+  `sec-network-plus-2024.svg` (`SEC_Network+_2024.svg`) from 2024. Neither came from Wikimedia
+  Commons, and no licence is stated for them; they are trademarks of the SEC and ESPN, shown only to
+  identify the network. The only edit is the 2014 file's line endings, normalised to LF.
+- A network whose mark changed shows the mark of the game's season: the manifest's
+  `seasons_from` and `seasons_to` columns (empty for a network with one mark) and the `ERAS` map in
+  `site/modules/logos.js` hold the ranges, and a view that is not tied to one season shows the
+  newest mark. SEC Network+ is the only such network. SEC Network keeps its 2014 mark for every
+  season: its 2024 Commons file is CC BY 4.0, which needs an author credit the user chose not
+  to add (2026-11-16).
 - Logos are rendered only through `<img>`, so no script inside a file can run.
 - Dark-theme variants are generated at build time by
   `src/booth_review/build/logos_dark.py` into `logos/dark/<name>.svg` (same viewBox,

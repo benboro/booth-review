@@ -28,7 +28,7 @@ function watchTheme() {
     // Logo <img> cannot see page CSS, so a theme flip swaps to the generated dark file (D-09).
     // The id is a map key set from logoFor(); the Map lookup keeps data rows out of it (T-13-08).
     for (const img of document.querySelectorAll('img.net-logo[data-logo]')) {
-      const logo = logoFor(img.dataset.logo);
+      const logo = logoFor(img.dataset.logo, img.dataset.season);
       if (logo) img.src = theme === 'dark' ? logo.darkFile : logo.file;
     }
   });
@@ -130,15 +130,16 @@ export function sortNetworks(list) {
 /**
  * Builds one network mark (`span.net-mark`).
  * @param {{id: string, name: string, family: string}} network
- * @param {{dot?: boolean}} [opts] - dot: draw the family dot before a fallback name
- *   (default true). A logo always stands alone: the dot is only the fallback's
- *   colour key, never drawn beside a logo (brief §5).
+ * @param {{dot?: boolean, season?: number|null}} [opts] - dot: draw the family dot before a
+ *   fallback name (default true). A logo always stands alone: the dot is only the fallback's
+ *   colour key, never drawn beside a logo (brief §5). season: the game's season, for a network
+ *   whose mark changed over the years (SEC Network+); omitted, the newest mark shows.
  * @returns {HTMLSpanElement}
  */
-export function networkMark({ id, name, family }, { dot = true } = {}) {
+export function networkMark({ id, name, family }, { dot = true, season = null } = {}) {
   const mark = document.createElement('span');
   mark.className = 'net-mark';
-  const entry = logoFor(id);
+  const entry = logoFor(id, season);
   if (dot && !entry) {
     const dotEl = document.createElement('span');
     dotEl.className = 'net-dot';
@@ -154,6 +155,7 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
     img.className = entry.box === 'badge' ? 'net-logo net-logo--badge' : 'net-logo';
     if (entry.height > 20) img.classList.add('net-logo--tall');
     img.dataset.logo = String(id);
+    if (season != null) img.dataset.season = String(season);
     img.src = currentTheme() === 'dark' ? entry.darkFile : entry.file;
     watchTheme();
     img.alt = name;
@@ -175,7 +177,7 @@ export function networkMark({ id, name, family }, { dot = true } = {}) {
  * Builds a `span.net-marks` holding one mark per network, in the given order
  * (primary first), for multi-network cells.
  * @param {Array<{id: string, name: string, family: string}>} list
- * @param {{dot?: boolean}} [opts]
+ * @param {{dot?: boolean, season?: number|null}} [opts]
  * @returns {HTMLSpanElement}
  */
 export function networkMarks(list, opts) {

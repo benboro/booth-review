@@ -59,18 +59,20 @@ export function markText(text) {
  * "Also on: " + a mark per entry of `others` (SITE-05). `primary` and `others`
  * items are `{ id?, name, family }`; an item without an id (or without a
  * vendored logo) shows the family dot plus the name.
+ * `season` picks the mark a network used that season (SEC Network+); omitted, the newest.
  * @param {{primary: {id?: string, name: string, family: string},
- *   others?: {id?: string, name: string, family: string}[], theme?: string}} args */
-export function networksParagraph({ primary, others = [] }) {
+ *   others?: {id?: string, name: string, family: string}[], theme?: string,
+ *   season?: number|null}} args */
+export function networksParagraph({ primary, others = [], season = null }) {
   const p = document.createElement('p');
   p.className = 'panel-networks';
   p.appendChild(markText('Network: '));
-  p.appendChild(networkMark(primary));
+  p.appendChild(networkMark(primary, { season }));
   if (others.length > 0) {
     p.appendChild(markText('; also on: '));
     others.forEach((net, pos) => {
       if (pos > 0) p.appendChild(markText(' '));
-      p.appendChild(networkMark(net));
+      p.appendChild(networkMark(net, { season }));
     });
   }
   return p;
