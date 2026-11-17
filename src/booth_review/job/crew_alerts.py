@@ -29,6 +29,11 @@ once their 506 page is imported, so until then neither stage can flag them.
 already emailed. An email goes out only when something is new; it then lists every
 game still open (new and earlier) in one list per stage and week, plus the new
 reminders. A reminders-only email lists no games.
+
+On a Monday (ET) only already-played games are emailed: 506, AA and ESPN Press Room
+have not published that week's crews yet, so upcoming games and the hand-save
+reminders are held. Held items are not recorded, so the Tuesday run sends them, and
+the ledger keeps Wednesday from sending them again.
 """
 
 from __future__ import annotations
@@ -64,6 +69,8 @@ LEDGER_NAME = "crew_alerts.json"
 LEDGER_REL = f"ledger/{LEDGER_NAME}"
 _LEDGER_KEEP = timedelta(days=45)
 _REMINDER_PREFIX = "reminder:"
+#: Eastern weekdays (Monday is 0) that email played games only; see the module docstring.
+HELD_WEEKDAYS = frozenset({0})
 
 #: Exit code when the email went out but the ledger commit or push failed; the next
 #: run will send the same items again (at-least-once delivery).
@@ -641,8 +648,7 @@ def _run(paths: DataPaths, now: datetime, options: _Options, vault: VaultRepo | 
     missing = find_missing(paths, now, nfl_required=nfl_required)
     ledger = load_ledger(paths)
     new = new_alerts(missing, ledger)
-    new_keys = {m.alert_key for m in new}
-    earlier = [m for m in missing if m.alert_key not in new_keys]
+    earlier = [m for m in missing if m.alert_key in ledger.sent]
     reminders = new_reminders(read_reminders(reminders_file), ledger)
     n_cfb = sum(1 for m in missing if m.league == "cfb")
     print(
@@ -650,6 +656,13 @@ def _run(paths: DataPaths, now: datetime, options: _Options, vault: VaultRepo | 
         f"(cfb {n_cfb}, nfl {len(missing) - n_cfb}), {len(new)} not emailed yet; "
         f"{len(reminders)} new reminders"
     )
+    if now.astimezone(EASTERN).weekday() in HELD_WEEKDAYS:
+        held = sum(1 for m in new if m.stage != "played") + len(reminders)
+        new = [m for m in new if m.stage == "played"]
+        earlier = [m for m in earlier if m.stage == "played"]
+        reminders = []
+        if held:
+            print(f"crew alerts: Monday (ET), {held} upcoming games and reminders held")
     if not new and not reminders:
         return 0
     subject, body = compose(new, reminders, still_open=earlier, aa_weeks=aa_cfb_weeks(paths))
