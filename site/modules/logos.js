@@ -17,6 +17,12 @@ const ESPN_PLUS = { file: 'logos/espn-plus.svg', width: 70, height: 14, box: 'wo
 // One mark for both ids: college football says nfl-network, the NFL and MLB files say nfln.
 const NFL_NETWORK = { file: 'logos/nfl-network.svg', width: 51, height: 20, box: 'badge', darkFile: 'logos/dark/nfl-network.svg' };
 
+// SEC Network+ changed marks in 2024 (user, 2026-11-16): a game shows the mark its season used,
+// like the conference logos (conf-logos.js). SEC Network keeps its 2014 mark for every season:
+// the 2024 Commons file is CC BY 4.0 with no author on record (user, 2026-11-16).
+const SEC_NETWORK_PLUS_2014 = { file: 'logos/sec-network-plus.svg', width: 48, height: 20, box: 'badge', darkFile: 'logos/dark/sec-network-plus.svg' };
+const SEC_NETWORK_PLUS_2024 = { file: 'logos/sec-network-plus-2024.svg', width: 48, height: 20, box: 'badge', darkFile: 'logos/dark/sec-network-plus-2024.svg' };
+
 const LOGOS = new Map([
   ['abc', { file: 'logos/abc.svg', width: 20, height: 20, box: 'badge', darkFile: 'logos/dark/abc.svg' }],
   ['cbs', { file: 'logos/cbs.svg', width: 49, height: 14, box: 'wordmark', darkFile: 'logos/dark/cbs.svg' }],
@@ -31,6 +37,7 @@ const LOGOS = new Map([
   ['espnu', { file: 'logos/espnu.svg', width: 20, height: 20, box: 'badge', darkFile: 'logos/dark/espnu.svg' }],
   ['acc-network', { file: 'logos/acc-network.svg', width: 48, height: 14, box: 'wordmark', darkFile: 'logos/dark/acc-network.svg' }],
   ['sec-network', { file: 'logos/sec-network.svg', width: 39, height: 20, box: 'badge', darkFile: 'logos/dark/sec-network.svg' }],
+  ['sec-network-plus', SEC_NETWORK_PLUS_2024],
   ['fox', { file: 'logos/fox.svg', width: 33, height: 14, box: 'wordmark', darkFile: 'logos/dark/fox.svg' }],
   ['fs1', { file: 'logos/fs1.svg', width: 26, height: 14, box: 'wordmark', darkFile: 'logos/dark/fs1.svg' }],
   ['fs2', { file: 'logos/fs2.svg', width: 28, height: 14, box: 'wordmark', darkFile: 'logos/dark/fs2.svg' }],
@@ -53,11 +60,34 @@ const LOGOS = new Map([
 ]);
 
 /**
- * Returns the logo entry for a network id, or null when it has none.
+ * Network id -> [[first season, entry], ...], oldest era first, for a network whose mark
+ * changed. LOGOS holds each one's newest entry, used when no season is given.
+ * @type {Map<string, Array<[number, {file: string, width: number, height: number, box: 'wordmark'|'badge', darkFile: string}]>>}
+ */
+const ERAS = new Map([
+  ['sec-network-plus', [[2014, SEC_NETWORK_PLUS_2014], [2024, SEC_NETWORK_PLUS_2024]]],
+]);
+
+/**
+ * Returns the logo entry for a network id, or null when it has none. A network with eras
+ * gives the mark of `season`'s era; a missing season gives the newest mark, and a season
+ * before the first era gives the first.
  * @param {unknown} id - a `lookups.networks[].id` value.
+ * @param {number|null|undefined} [season] - the game's season
  * @returns {{file: string, width: number, height: number, box: 'wordmark'|'badge', darkFile: string}|null}
  */
-export function logoFor(id) {
+export function logoFor(id, season) {
   const key = String(id);
-  return LOGOS.has(key) ? LOGOS.get(key) : null;
+  if (!LOGOS.has(key)) return null;
+  if (!ERAS.has(key) || season === null || season === undefined || season === ''
+    || !Number.isFinite(Number(season))) {
+    return LOGOS.get(key);
+  }
+  const year = Number(season);
+  const eras = ERAS.get(key);
+  let entry = eras[0][1];
+  for (const [from, era] of eras) {
+    if (from <= year) entry = era;
+  }
+  return entry;
 }

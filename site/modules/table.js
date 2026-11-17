@@ -183,7 +183,8 @@ function buildRow(data, state, onDetails, i) {
 
   const networkTd = document.createElement('td');
   const net = data.lookups.networks[t.network[i]];
-  networkTd.appendChild(networkMark({ id: net.id, name: net.name, family: net.family }));
+  networkTd.appendChild(networkMark({ id: net.id, name: net.name, family: net.family },
+    { season: t.season?.[i] ?? null }));
   tr.appendChild(networkTd);
 
   const crewTd = document.createElement('td');

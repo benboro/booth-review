@@ -243,7 +243,8 @@ function gameRow(row, mode, ctx, i) {
   }
   const net = data.lookups.networks[data.t.network[i]];
   const netTd = el('td', 'crews-game-network');
-  netTd.append(networkMark({ id: net.id, name: net.name, family: net.family }));
+  netTd.append(networkMark({ id: net.id, name: net.name, family: net.family },
+    { season: data.t.season?.[i] ?? null }));
   tr.append(matchupTd, gameMarksCell(data, i), scoreCell(finalScore(data, i)), el('td', 'date crews-game-date', data.t.date[i]), netTd);
   const viewers = viewersCell(data, i);
   viewers.classList.add('crews-game-viewers');

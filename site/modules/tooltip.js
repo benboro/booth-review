@@ -119,7 +119,8 @@ export function tooltipModel(data, i, { axis, y = 'viewers', selected = new Set(
   const scoreLine = score ? `${score.label}: ${data[score.key][i] ?? 'not available'}` : null;
   const boothLine = boothLabel(data, i);
 
-  return { boothLine, title, dateText, gameType, networks, crew, crewLines, viewersLine, axisLine, scoreLine };
+  const season = t.season?.[i] ?? null;
+  return { boothLine, title, dateText, gameType, networks, season, crew, crewLines, viewersLine, axisLine, scoreLine };
 }
 
 /**
@@ -163,7 +164,7 @@ export function renderTooltipContent(el, model, theme) {
 
   const networksRow = document.createElement('div');
   networksRow.className = 'tooltip-networks';
-  networksRow.appendChild(networkMarks(model.networks, { dot: false }));
+  networksRow.appendChild(networkMarks(model.networks, { dot: false, season: model.season }));
   children.push(networksRow);
 
   const primaryFamily = familyKey(model.networks[0].family);
