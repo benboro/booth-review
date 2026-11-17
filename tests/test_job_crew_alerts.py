@@ -42,6 +42,8 @@ from booth_review.notify.email import (
 
 # Monday 2026-11-09 20:00 ET.
 NOW = datetime(2026, 11, 10, 1, 0, tzinfo=UTC)
+# Tuesday 2026-11-10 20:00 ET: the command holds every email on a Monday.
+TUESDAY = NOW + timedelta(days=1)
 
 CREW = [{"feed": "main", "person": 0, "role": "pbp"}]
 
@@ -460,19 +462,19 @@ def _kw(sent: _Sent, **extra: Any) -> dict[str, Any]:
 
 
 def test_run_emails_once_per_game_and_stage(tmp_path: Path) -> None:
-    paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-10T19:00:00-05:00")]), None)
+    paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-11T19:00:00-05:00")]), None)
     sent = _Sent()
 
-    assert run_crew_alerts(paths, NOW, **_kw(sent)) == 0
+    assert run_crew_alerts(paths, TUESDAY, **_kw(sent)) == 0
     assert len(sent.messages) == 1
     assert load_ledger(paths).sent
 
     # Same game, same stage, a later backup slot: nothing new.
-    assert run_crew_alerts(paths, NOW + timedelta(hours=2), **_kw(sent)) == 0
+    assert run_crew_alerts(paths, TUESDAY + timedelta(hours=2), **_kw(sent)) == 0
     assert len(sent.messages) == 1
 
     # After the game: the played stage is new.
-    assert run_crew_alerts(paths, NOW + timedelta(days=2), **_kw(sent)) == 0
+    assert run_crew_alerts(paths, TUESDAY + timedelta(days=2), **_kw(sent)) == 0
     assert len(sent.messages) == 2
     assert "NO CREW, ALREADY PLAYED" in sent.messages[1][1]
 
@@ -481,10 +483,10 @@ def test_run_second_email_lists_every_open_game_in_one_list(tmp_path: Path) -> N
     first = _cfb_row("2026-11-07T19:30:00-05:00")
     paths = _write_sites(tmp_path, _cfb_site([first]), None)
     sent = _Sent()
-    run_crew_alerts(paths, NOW, **_kw(sent))
+    run_crew_alerts(paths, TUESDAY, **_kw(sent))
     second = _cfb_row("2026-11-07T12:00:00-05:00", away_team=2)
     _write_sites(tmp_path, _cfb_site([first, second]), None)
-    run_crew_alerts(paths, NOW + timedelta(hours=1), **_kw(sent))
+    run_crew_alerts(paths, TUESDAY + timedelta(hours=1), **_kw(sent))
     body = sent.messages[1][1]
     assert "- Ohio at Michigan" in body
     assert "- Michigan State at Michigan" in body
@@ -498,22 +500,80 @@ def test_run_emails_each_reminder_line_once(tmp_path: Path) -> None:
     reminders = tmp_path / "reminders.md"
     reminders.write_text("Counts only.\n- reminder 2026 cfb week 11: save x\n", encoding="utf-8")
     sent = _Sent()
-    run_crew_alerts(paths, NOW, **_kw(sent, reminders_file=reminders))
-    run_crew_alerts(paths, NOW + timedelta(hours=1), **_kw(sent, reminders_file=reminders))
+    run_crew_alerts(paths, TUESDAY, **_kw(sent, reminders_file=reminders))
+    run_crew_alerts(paths, TUESDAY + timedelta(hours=1), **_kw(sent, reminders_file=reminders))
     assert [subject for subject, _ in sent.messages] == ["booth-review: 1 hand-save reminder"]
     reminders.write_text(
         "- reminder 2026 cfb week 11: save x\n- reminder 2026 nfl week 10: y\n", encoding="utf-8"
     )
-    run_crew_alerts(paths, NOW + timedelta(hours=2), **_kw(sent, reminders_file=reminders))
+    run_crew_alerts(paths, TUESDAY + timedelta(hours=2), **_kw(sent, reminders_file=reminders))
     assert len(sent.messages) == 2
     assert "save x" not in sent.messages[1][1]
     assert "nfl week 10: y" in sent.messages[1][1]
 
 
+def test_run_holds_monday_and_sends_it_once_on_tuesday(tmp_path: Path) -> None:
+    # A Wednesday game and a reminder, first seen on the Monday 20:00 ET run.
+    paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-11T19:00:00-05:00")]), None)
+    reminders = tmp_path / "reminders.md"
+    reminders.write_text("- reminder 2026 cfb week 11: save x\n", encoding="utf-8")
+    sent = _Sent()
+    kw = _kw(sent, reminders_file=reminders)
+
+    for hour in (0, 2):  # Monday 20:00 and 22:00 ET
+        assert run_crew_alerts(paths, NOW + timedelta(hours=hour), **kw) == 0
+    assert sent.messages == []
+    assert not (paths.ledger / LEDGER_NAME).exists()
+
+    run_crew_alerts(paths, TUESDAY, **kw)
+    assert [s for s, _ in sent.messages] == [
+        "booth-review: 1 game with no crew, 1 hand-save reminder"
+    ]
+    # Tuesday 22:00 and Wednesday 08:00 ET: already sent, so no second email.
+    for hour in (2, 12):
+        run_crew_alerts(paths, TUESDAY + timedelta(hours=hour), **kw)
+    assert len(sent.messages) == 1
+
+
+def test_run_monday_hold_uses_eastern_time(tmp_path: Path) -> None:
+    # Tuesday 03:00 UTC is still Monday 22:00 ET.
+    paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-11T19:00:00-05:00")]), None)
+    sent = _Sent()
+    run_crew_alerts(paths, datetime(2026, 11, 10, 3, tzinfo=UTC), **_kw(sent))
+    assert sent.messages == []
+    run_crew_alerts(paths, datetime(2026, 11, 10, 5, tzinfo=UTC), **_kw(sent))  # Tue 00:00 ET
+    assert len(sent.messages) == 1
+
+
+def test_run_monday_emails_played_games_only(tmp_path: Path) -> None:
+    played = _cfb_row("2026-11-07T19:30:00-05:00")
+    upcoming = _cfb_row("2026-11-11T19:00:00-05:00", away_team=2)
+    paths = _write_sites(tmp_path, _cfb_site([played, upcoming]), None)
+    reminders = tmp_path / "reminders.md"
+    reminders.write_text("- reminder 2026 cfb week 11: save x\n", encoding="utf-8")
+    sent = _Sent()
+    kw = _kw(sent, reminders_file=reminders)
+
+    run_crew_alerts(paths, NOW, **kw)  # Monday 20:00 ET
+    [(subject, body)] = sent.messages
+    assert subject == "booth-review: 1 game with no crew"
+    assert "NO CREW, ALREADY PLAYED" in body
+    assert "Ohio at Michigan" not in body
+    assert "HAND-SAVE" not in body
+    run_crew_alerts(paths, NOW + timedelta(hours=2), **kw)  # Monday 22:00 ET: nothing new
+    assert len(sent.messages) == 1
+
+    run_crew_alerts(paths, TUESDAY, **kw)
+    subject, body = sent.messages[1]
+    assert subject == "booth-review: 2 games with no crew, 1 hand-save reminder"
+    assert "- Ohio at Michigan" in body
+    assert "save x" in body
+
+
 def test_run_dry_run_sends_and_records_nothing(tmp_path: Path) -> None:
     paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), None)
     sent = _Sent()
-    assert run_crew_alerts(paths, NOW, **_kw(sent, dry_run=True, commit=True)) == 0
+    assert run_crew_alerts(paths, TUESDAY, **_kw(sent, dry_run=True, commit=True)) == 0
     assert sent.messages == []
     assert not (paths.ledger / LEDGER_NAME).exists()
 
@@ -524,7 +584,7 @@ def test_run_without_new_items_needs_no_settings(tmp_path: Path) -> None:
     def no_settings() -> EmailSettings:
         raise AssertionError("settings must not be read")
 
-    assert run_crew_alerts(paths, NOW, commit=False, load_settings=no_settings) == 0
+    assert run_crew_alerts(paths, TUESDAY, commit=False, load_settings=no_settings) == 0
 
 
 def test_run_failed_send_records_nothing(tmp_path: Path) -> None:
@@ -534,7 +594,7 @@ def test_run_failed_send_records_nothing(tmp_path: Path) -> None:
         raise EmailSendError("email not sent (SMTPAuthenticationError)")
 
     with pytest.raises(EmailSendError):
-        run_crew_alerts(paths, NOW, commit=False, load_settings=_settings, send=fail)
+        run_crew_alerts(paths, TUESDAY, commit=False, load_settings=_settings, send=fail)
     assert not (paths.ledger / LEDGER_NAME).exists()
 
 
@@ -542,7 +602,7 @@ def test_run_prints_counts_only(tmp_path: Path, capsys: pytest.CaptureFixture[st
     paths = _write_sites(tmp_path, _cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), None)
     reminders = tmp_path / "reminders.md"
     reminders.write_text("- reminder private-looking line\n", encoding="utf-8")
-    run_crew_alerts(paths, NOW, **_kw(_Sent(), reminders_file=reminders))
+    run_crew_alerts(paths, TUESDAY, **_kw(_Sent(), reminders_file=reminders))
     out = capsys.readouterr().out
     assert "Michigan" not in out
     assert "private-looking" not in out
@@ -573,7 +633,7 @@ def test_run_commits_only_the_ledger(tmp_path: Path) -> None:
     vault = _vault_with_remote(tmp_path)
     paths = _write_sites(vault, _cfb_site([_cfb_row("2026-11-07T19:30:00-05:00")]), None)
     sent = _Sent()
-    assert run_crew_alerts(paths, NOW, load_settings=_settings, send=sent) == 0
+    assert run_crew_alerts(paths, TUESDAY, load_settings=_settings, send=sent) == 0
     assert len(sent.messages) == 1
     subject, *files = _git("log", "-1", "--name-only", "--format=%s", cwd=vault).split("\n")
     assert subject.startswith("notify: crew alert email")
@@ -594,7 +654,7 @@ def test_run_reports_a_failed_ledger_commit_after_sending(
 
     monkeypatch.setattr("booth_review.vault.VaultRepo.commit_batch", refuse)
     sent = _Sent()
-    code = run_crew_alerts(paths, NOW, load_settings=_settings, send=sent)
+    code = run_crew_alerts(paths, TUESDAY, load_settings=_settings, send=sent)
     assert code == EXIT_LEDGER_NOT_SAVED
     assert len(sent.messages) == 1
 
@@ -611,7 +671,7 @@ def test_run_holds_the_vault_lock_while_sending(
     def send(settings: EmailSettings, subject: str, body: str) -> None:
         held.append(vault.resolve() in _VAULT_LOCKS)
 
-    run_crew_alerts(paths, NOW, load_settings=_settings, send=send)
+    run_crew_alerts(paths, TUESDAY, load_settings=_settings, send=send)
     assert held == [True]
 
 
