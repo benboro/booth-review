@@ -351,6 +351,27 @@ def test_panel_unrated_and_unsafe_links(run: Callable[[str], Any]) -> None:
     assert got["anchors"] == 0
 
 
+def test_panel_credits_an_aa_crew(run: Callable[[str], Any]) -> None:
+    got = run("""
+      const p = PN.createDetailPanel(host, {});
+      const post = 'https://awfulannouncing.com/nfl/week-1-announcing-schedule-2025.html';
+      const links = (row) => {
+        p.open(mk(row), null);
+        const d = document.getElementById('nfl-detail-panel');
+        const out = [...d.querySelectorAll('.panel-links a')].map((a) => [a.textContent, a.getAttribute('href')]);
+        p.close();
+        return out;
+      };
+      return {
+        played: links({ crewSource: 'aa', crewSourceUrl: post }),
+        upcoming: links({ upcoming: true, unplayed: true, crewSource: 'aa', crewSourceUrl: post }),
+      };
+    """)
+    post = "https://awfulannouncing.com/nfl/week-1-announcing-schedule-2025.html"
+    assert ["Crew source: Awful Announcing ↗", post] in got["played"]
+    assert got["upcoming"] == [["Crew from Awful Announcing ↗", post]]
+
+
 def test_panel_replaces_content_and_esc_closes(
     nfl_guarded_page: Page, open_flagon_cfb: Callable[..., None]
 ) -> None:

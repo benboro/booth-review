@@ -39,6 +39,9 @@ _NFL_GOLDEN: dict[str, str] = {
     "interim/review_nfl_changes.csv": (
         "cab416b259342944414082b5af4814918d16e2661fbebb0f779b8de57193b680"
     ),
+    "interim/review_nfl_crew_aa.csv": (
+        "cab416b259342944414082b5af4814918d16e2661fbebb0f779b8de57193b680"
+    ),
     "interim/review_nfl_crew_names.csv": (
         "cab416b259342944414082b5af4814918d16e2661fbebb0f779b8de57193b680"
     ),
@@ -80,7 +83,7 @@ _NFL_GOLDEN: dict[str, str] = {
     # Re-pinned for the International segment (2026-11-14): NFL contract 3.0.0 moves solo
     # international games to international_other. The synthetic vault has none, so only the
     # schema_version changed; setting it back to 2.3.0 gives 033237fa7942....
-    "processed/nfl-data.json": ("c08c8ae37fd7c030df73e2e95fcc73dbbe65f259a7850e49092132a68f5dcfa4"),
+    "processed/nfl-data.json": ("3e4da363bc3833c2f8dcd4981b87b351ad11fed4d7f1871c1372a604ec19ff90"),
     "processed/nfl_games.parquet": (
         "31c0655e30a13215aa8d0ecd596806c3255f77eadd9cc087c908f88b256f7337"
     ),

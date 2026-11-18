@@ -492,3 +492,50 @@ def test_people_apply_registers_new_and_only_approved_variants(vault: DataPaths)
     final = _people_csv().read_text()
     assert "ANA FIXTURE" in final
     assert "bo-fixture" in final
+
+
+# -- Awful Announcing (nfl/crew_aa.py) --------------------------------------------------------
+
+AA_POST = """<!DOCTYPE html><html><head><title>Your 2014 NFL Week 1 announcing schedule</title>
+<link rel="canonical" href="https://awfulannouncing.com/nfl/week-1-announcing-schedule-2014.html" />
+<meta property="article:modified_time" content="2014-09-05T12:00:00+00:00" />
+</head><body><div class="entry-content">
+<h3>Sunday, September 7</h3>
+<p><strong>Hill Moles at Pine Elks (1 p.m., Net1): </strong>{crew}</p>
+</div></body></html>"""
+
+
+def _seed_aa(paths: DataPaths, crew: str) -> None:
+    from booth_review.nfl.layout import nfl_aa_crews_path
+
+    post = paths.raw / nfl_aa_crews_path(2014, 1)
+    post.parent.mkdir(parents=True, exist_ok=True)
+    post.write_text(AA_POST.format(crew=crew), encoding="utf-8")
+    # AA's names resolve through the shared "any" crosswalk rows.
+    crosswalk = Path(os.environ["BOOTH_REVIEW_REFERENCE"]) / "nfl_team_crosswalk.csv"
+    with crosswalk.open("a", encoding="utf-8") as handle:
+        handle.write("any,Pine Elks,elks,,,\n")
+
+
+def test_build_fills_a_crew_from_the_aa_post(
+    vault: DataPaths, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _seed(vault, rr=None, crew="Zed Newperson")
+    _seed_aa(vault, "Ana Fixture (play-by-play), Bo Fixture (analyst)")
+    assert main(["nfl", "build", "--season", "2014", "--no-commit"]) == 0
+    games = pl.read_parquet(vault.processed / "nfl_games.parquet")
+    got = games.filter(pl.col("game_id") == "2014_01_MOL_ELK").row(0, named=True)
+    assert (got["pbp_person_id"], got["analyst_person_id"]) == ("ana-fixture", "bo-fixture")
+    assert got["crew_source"] == "aa"
+    assert got["crew_source_url"].startswith("https://awfulannouncing.com/nfl/")
+    out = capsys.readouterr().out
+    assert "crew aa: booths 1, matched 1, filled 1" in out
+    assert "unresolved teams 0" in out and "duplicate games 0" in out
+    assert "Ana" not in out
+
+
+def test_people_scan_counts_aa_names(vault: DataPaths, capsys: pytest.CaptureFixture[str]) -> None:
+    _seed(vault, rr=None)
+    _seed_aa(vault, "Ana Fixture (play-by-play), Yan Newcaller (analyst)")
+    assert main(["nfl", "people", "--season", "2014"]) == 0
+    assert "new_persons 1" in capsys.readouterr().out

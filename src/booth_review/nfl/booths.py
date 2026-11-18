@@ -10,8 +10,9 @@ Each group-season's order comes from, in precedence: the cited published rank
 (`nfl_booth_ranks.csv`), a cited lead-booth override, then flagship-window inference
 (Fox AGOTW, CBS late national, NBC SNF, ESPN/ABC MNF, Amazon TNF; groups with no
 flagship use the booth with the most games). The rest rank by games called. Inference
-votes count only games whose crew came from 506, so a published lineup never votes for
-itself; lineup-filled games still count toward a booth's games. Ambiguous Fox AGOTW
+votes count only games whose crew came from a per-game source (506 or Awful
+Announcing), so a published lineup never votes for itself; lineup-filled games still
+count toward a booth's games. Ambiguous Fox AGOTW
 weeks (D-16) cast no vote. Where a published lead or analyst differs from the inferred
 one the build writes a `booth_rank_disagreements` review (counts only in logs).
 
@@ -33,6 +34,8 @@ from booth_review.nfl.reference import NflBoothRank, NflLeadBoothOverride
 LEAD_CLOSE_MARGIN = 1
 
 _HAS_FLAGSHIP = {g.id: g.flagship is not None for g in NETWORK_GROUPS}
+#: Crew sources that name each game's booth, so they vote and pick the modal analyst.
+PER_GAME_CREW_SOURCES: tuple[str, ...] = ("506", "aa")
 
 GAME_BOOTH_SCHEMA: dict[str, pl.DataType | type[pl.DataType]] = {
     "game_id": pl.String,
@@ -120,9 +123,9 @@ def assign_booths(frame: pl.DataFrame) -> tuple[pl.DataFrame, dict[str, int]]:
     regular: dict[tuple[int, str, str], str | None] = {}
     for (season, grp, pbp), group in kept.group_by(["season", "network_group", "pbp_person_id"]):
         # Lineup-filled games carry the published analyst by construction, so only
-        # 506-sourced games pick the modal analyst; a booth with none falls back to all.
+        # per-game sources pick the modal analyst; a booth with none falls back to all.
         pairs = list(zip(group["analyst_person_id"], group["crew_source"], strict=True))
-        analysts = [a for a, src in pairs if a is not None and src == "506"] or [
+        analysts = [a for a, src in pairs if a is not None and src in PER_GAME_CREW_SOURCES] or [
             a for a, _ in pairs if a is not None
         ]
         regular[(int(season), str(grp), str(pbp))] = _modal(analysts)
@@ -160,10 +163,11 @@ def assign_booths(frame: pl.DataFrame) -> tuple[pl.DataFrame, dict[str, int]]:
 
 
 def _vote_rows(game_booths: pl.DataFrame) -> pl.DataFrame:
-    """Games allowed to vote: 506-sourced, and flagship-window when the group has one."""
-    from_506 = game_booths.filter(pl.col("crew_source") == "506")
+    """Games allowed to vote: a per-game crew source, and flagship-window when the group
+    has one."""
+    per_game = game_booths.filter(pl.col("crew_source").is_in(PER_GAME_CREW_SOURCES))
     flagship_groups = [g for g, has in _HAS_FLAGSHIP.items() if has]
-    return from_506.filter(pl.col("is_flagship") | ~pl.col("network_group").is_in(flagship_groups))
+    return per_game.filter(pl.col("is_flagship") | ~pl.col("network_group").is_in(flagship_groups))
 
 
 def _empty_lead(season: int, group: str, source: str | None) -> dict[str, object]:

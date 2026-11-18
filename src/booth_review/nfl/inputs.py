@@ -9,21 +9,28 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 from booth_review.config import DataPaths
 from booth_review.errors import ParseError, VaultStateError
+from booth_review.nfl.crew_aa import NflAaPage
 from booth_review.nfl.layout import (
     NFLVERSE_SCHEDULES_PATH,
     nfl_506_path,
+    nfl_aa_crews_path,
     nfl_rr_path,
     nflverse_pbp_path,
     wikipedia_path,
 )
 from booth_review.nfl.schedule import NflGame, UpcomingNflGame, parse_schedules, parse_upcoming
+from booth_review.sources.aa.crews import AaCrewsParseError, parse_crews
 from booth_review.sources.ratingsref.parser import RRRecord, parse_record
 from booth_review.sources.sports506.nfl_parser import NflListing506, parse_nfl_week_page
 from booth_review.sources.wikipedia.parser import ChangesResult, parse_scheduling_changes
+from booth_review.transport.cache import Manifest
+
+_TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,35 @@ class NflInputs:
     upcoming: tuple[UpcomingNflGame, ...] = ()
     #: Regular-season rows with no week yet: counted, never placed.
     upcoming_unplaced: int = 0
+    #: Hand-imported Awful Announcing weekly posts (`booth-review import aa`).
+    aa_pages: tuple[NflAaPage, ...] = ()
+    aa_parse_failures: int = 0
+    #: Each 506 week page's browser save time (else its import time), for the AA pass.
+    s506_times: Mapping[tuple[int, int], datetime] = field(default_factory=dict)
+
+
+def _manifest_time(stamp: object) -> datetime | None:
+    if not isinstance(stamp, str):
+        return None
+    try:
+        return datetime.strptime(stamp, _TIME_FORMAT).replace(tzinfo=UTC)
+    except ValueError:
+        return None
+
+
+def _page_times(paths: DataPaths) -> dict[str, datetime]:
+    """The newest written manifest line's saved_at (else fetched_at) per NFL raw path."""
+    times: dict[str, datetime] = {}
+    if not paths.manifest.is_file():
+        return times
+    for entry in Manifest(paths.manifest).entries():
+        path = entry.get("path")
+        if not isinstance(path, str) or not path.startswith("nfl/") or entry.get("status") != 200:
+            continue
+        moment = _manifest_time(entry.get("saved_at")) or _manifest_time(entry.get("fetched_at"))
+        if moment is not None:
+            times[path] = moment
+    return times
 
 
 def _week_of(file_name: str) -> int | None:
@@ -67,6 +103,10 @@ def load_nfl_inputs(paths: DataPaths, seasons: Sequence[int]) -> NflInputs:
     changes: dict[int, ChangesResult] = {}
     change_failures = 0
     pbp_paths: dict[int, Path] = {}
+    page_times = _page_times(paths)
+    aa_pages: list[NflAaPage] = []
+    aa_failures = 0
+    s506_times: dict[tuple[int, int], datetime] = {}
 
     for season in sorted(set(seasons)):
         week_dir = (raw / nfl_506_path(season, 1)).parent
@@ -79,6 +119,23 @@ def load_nfl_inputs(paths: DataPaths, seasons: Sequence[int]) -> NflInputs:
                     )
                 except ParseError:
                     listing_failures += 1
+                saved = page_times.get(nfl_506_path(season, week))
+                if saved is not None:
+                    s506_times[(season, week)] = saved
+
+        aa_dir = (raw / nfl_aa_crews_path(season, 1)).parent
+        if aa_dir.is_dir():
+            posts = [(w, p) for p in aa_dir.glob("wk-*.html") if (w := _week_of(p.name))]
+            for week, post in sorted(posts):
+                try:
+                    parsed = parse_crews(
+                        post.read_text(encoding="utf-8", errors="replace"), season=season
+                    )
+                except AaCrewsParseError:
+                    aa_failures += 1
+                    continue
+                aa_time = parsed.modified or page_times.get(nfl_aa_crews_path(season, week))
+                aa_pages.append(NflAaPage(season, week, parsed, aa_time))
 
         rr_dir = (raw / nfl_rr_path(season, "x")).parent
         if rr_dir.is_dir():
@@ -113,4 +170,7 @@ def load_nfl_inputs(paths: DataPaths, seasons: Sequence[int]) -> NflInputs:
         seasons=tuple(sorted(set(seasons))),
         upcoming=tuple(upcoming),
         upcoming_unplaced=upcoming_unplaced,
+        aa_pages=tuple(aa_pages),
+        aa_parse_failures=aa_failures,
+        s506_times=s506_times,
     )

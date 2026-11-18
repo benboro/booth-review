@@ -117,6 +117,18 @@ def _print_build(outcome: NflBuildOutcome, *, check: bool) -> None:
         print("nfl site data: failed (tables committed)")
     if c.get("site_data_skipped"):
         print("nfl site data: skipped (the site shows the regular season only)")
+    if c.get("aa_booths", 0) or c.get("aa_parse_failures", 0):
+        print(
+            f"crew aa: booths {c.get('aa_booths', 0)}, matched {c.get('aa_matched', 0)}, "
+            f"filled {c.get('aa_filled', 0)}, agreements {c.get('aa_agrees', 0)}, "
+            f"superset {c.get('aa_superset', 0)}, aa won {c.get('aa_won', 0)}, "
+            f"506 won {c.get('aa_s506_won', 0)}, upcoming filled {c.get('upcoming_aa_crews', 0)}, "
+            f"unresolved names {c.get('aa_unresolved_names', 0)}, "
+            f"unresolved teams {c.get('aa_unresolved_team', 0)}, "
+            f"no game {c.get('aa_no_game', 0) + c.get('aa_ambiguous', 0)}, "
+            f"duplicate games {c.get('aa_duplicate', 0)}, "
+            f"unparsed pages {c.get('aa_parse_failures', 0)}"
+        )
     if check and outcome.acceptance is not None:
         text = f"acceptance: {outcome.acceptance.unmatched} unmatched"
         if outcome.acceptance.multi_network:
@@ -196,6 +208,10 @@ def _nfl_people(args: argparse.Namespace) -> int:
         name_counts: Counter[str] = Counter()
         for match in listings.values():
             name_counts.update(match.crew_names)
+        # Awful Announcing booths are used only once every name resolves.
+        for page in inputs.aa_pages:
+            for booth in page.parsed.booths:
+                name_counts.update(name for name, _role in booth.people)
 
         if args.apply:
             approvals, invalid_rows = read_people_decisions(review_path)

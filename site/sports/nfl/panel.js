@@ -97,9 +97,13 @@ function factsParagraph(row) {
 
 function linkItems(row) {
   if (row.upcoming) {
-    return row.crewSource === '506'
-      ? [{ href: row.crewSourceUrl, text: 'Crew from 506 Sports ↗', fallback: 'Crew from 506 Sports' }]
-      : [];
+    if (row.crewSource === '506') {
+      return [{ href: row.crewSourceUrl, text: 'Crew from 506 Sports ↗', fallback: 'Crew from 506 Sports' }];
+    }
+    if (row.crewSource === 'aa') {
+      return [{ href: row.crewSourceUrl, text: 'Crew from Awful Announcing ↗', fallback: 'Crew from Awful Announcing' }];
+    }
+    return [];
   }
   const items = [{ href: row.rrUrl, text: 'View record on Ratings Reference ↗' }];
   items.push({
@@ -112,6 +116,13 @@ function linkItems(row) {
       href: row.crewSourceUrl,
       text: 'Crew source: published lineup ↗',
       fallback: 'Crew source: published lineup',
+    });
+  }
+  if (row.crewSource === 'aa') {
+    items.push({
+      href: row.crewSourceUrl,
+      text: 'Crew source: Awful Announcing ↗',
+      fallback: 'Crew source: Awful Announcing',
     });
   }
   return items;

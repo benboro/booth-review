@@ -67,6 +67,26 @@ def test_crew_bullet_between_feed_watch_and_espn() -> None:
     assert 0 <= feed < crews < espn
 
 
+HAND_SAVED = (
+    "- Awful Announcing hand-saved posts: bring weekly college football and NFL "
+    "announcing-schedule posts saved in a browser into the vault with "
+    "`booth-review import aa [--from <folder>] [--force]` (default folder "
+    "`data/incoming/aa/`; save from the browser or copy with `cp -p` to keep each file's "
+    "save time). It sends no request, imports 2026 only, and identifies each post by its "
+    "canonical link and title. College football posts go to the fetch's cache path, and "
+    "the Tuesday job still fetches its own copy over a hand-saved one; NFL posts go to "
+    "`raw/nfl/aa/crews/2026/`. Credit every AA crew with its exact post."
+)
+
+
+def test_hand_saved_bullet_after_crew_posts_and_before_espn() -> None:
+    text = _agents()
+    crews = text.find("- Awful Announcing crew posts")
+    hand = text.find(_norm(HAND_SAVED))
+    espn = text.find("- ESPN Press Room:")
+    assert 0 <= crews < hand < espn
+
+
 def test_claude_md_is_symlink_to_agents() -> None:
     link = ROOT / "CLAUDE.md"
     assert link.is_symlink()

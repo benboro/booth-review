@@ -33,6 +33,8 @@ import polars as pl
 
 from booth_review.flags.era import MeasurementEra, era_for, load_eras
 from booth_review.nfl.changes import GameChange, match_schedule_changes
+from booth_review.nfl.crew_aa import COUNT_KEYS as AA_COUNT_KEYS
+from booth_review.nfl.crew_aa import apply_aa_to_games, match_aa_booths
 from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.lineups import apply_published_lineups
 from booth_review.nfl.listings import ListingMatch, match_506_listings
@@ -201,6 +203,7 @@ REVIEW_KEYS: tuple[str, ...] = (
     "rr",
     "changes",
     "crew_names",
+    "crew_aa",
     "late_national",
     "acceptance",
 )
@@ -227,6 +230,8 @@ COUNT_KEYS: tuple[str, ...] = (
     "unmatched_rr",
     "unmatched_changes",
     "published_lineup_games",
+    *AA_COUNT_KEYS,
+    "aa_parse_failures",
 )
 
 #: A game counts as played this long after its scheduled kickoff (D-12).
@@ -710,6 +715,13 @@ def assemble_nfl_games(
     frame = frame.select(NFL_GAME_COLUMNS)
     frame, filled = apply_published_lineups(frame, ref.booth_ranks)
     counts["published_lineup_games"] = filled
+    # Awful Announcing: a second crew source, coalesced with 506 (nfl/crew_aa.py).
+    aa = match_aa_booths(inputs.aa_pages, out_games, ref.teams, ref.people)
+    frame, aa_status, aa_reviews = apply_aa_to_games(frame, aa, inputs.s506_times)
+    reviews["crew_aa"].extend(aa_reviews)
+    for key, value in (*aa.counts.items(), *aa_status.items()):
+        counts[key] = counts.get(key, 0) + value
+    counts["aa_parse_failures"] = inputs.aa_parse_failures
     counts["games"] = frame.height
     counts["standalone"] = int(frame["is_standalone"].sum()) if frame.height else 0
     counts["agotw"] = int(frame["is_agotw"].sum()) if frame.height else 0

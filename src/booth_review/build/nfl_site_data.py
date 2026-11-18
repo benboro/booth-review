@@ -58,6 +58,8 @@ from booth_review.transport.cache import atomic_write_bytes
 NFL_SITE_DATA_PATH = "processed/nfl-data.json"
 
 _ET = ZoneInfo("America/New_York")
+#: Played-game crew sources that ship their citation link (506 links per week page).
+_CITED_CREW_SOURCES = frozenset({"published_lineup", "aa"})
 
 NFL_NETWORK_NAMES: Mapping[str, str] = {
     "abc": "ABC",
@@ -403,7 +405,7 @@ def _append_game(
     crew_source = row["crew_source"]
     cols["crew_source"].append(crew_source)
     cols["crew_source_url"].append(
-        row["crew_source_url"] if crew_source == "published_lineup" else None
+        row["crew_source_url"] if crew_source in _CITED_CREW_SOURCES else None
     )
     excitement = row["excitement_score"]
     cols["excitement"].append(None if excitement is None else round(float(excitement), 3))

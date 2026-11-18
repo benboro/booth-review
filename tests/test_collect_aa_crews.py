@@ -18,7 +18,9 @@ from booth_review.runtime import build_runtime
 from booth_review.sources.aa.crews import (
     CREWS_SEASON,
     crews_cache_path,
+    crews_request,
     fetch_week_crews,
+    hand_imported,
 )
 from booth_review.sources.aa.feed import FeedWatchState, save_feed_state, week_key
 
@@ -237,6 +239,46 @@ def test_if_missing_with_cached_file_sends_nothing(git_vault, runtime) -> None:
     result = _fetch(git_vault, rt.cache, mode="if_missing")
     assert result.outcome == "cached" and result.requests == 0
     assert len(handle.requests) == before
+
+
+def test_if_missing_fetches_over_a_hand_imported_copy(git_vault, runtime) -> None:
+    """`booth-review import aa` leaves no validators, so the Tuesday run fetches its
+    own copy; the Friday/Saturday re-checks then have an ETag to send."""
+    rt, handle = runtime
+    _policy(git_vault)
+    _state(git_vault)
+    rel = crews_cache_path(2026, "10")
+    dest = git_vault.raw / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(POST)
+    line = {
+        "url": URL10,
+        "source": "aa",
+        "season": 2026,
+        "kind": "page",
+        "fetched_at": "2026-11-03T20:00:00Z",
+        "status": 200,
+        "etag": None,
+        "last_modified": None,
+        "sha256": "x",
+        "path": rel,
+        "bytes": len(POST),
+        "final_url": URL10,
+        "origin": "manual",
+        "saved_at": "2026-11-03T19:00:00Z",
+    }
+    git_vault.manifest.write_text(json.dumps(line) + "\n", encoding="utf-8")
+    assert hand_imported(git_vault, rel)
+    result = _fetch(git_vault, rt.cache, mode="if_missing")
+    assert result.outcome == "fetched" and result.requests == 1
+    sent = _post_requests(handle)
+    assert len(sent) == 1
+    assert "if-none-match" not in sent[0].headers
+    assert not hand_imported(git_vault, rel)
+    assert rt.cache.stored_validators(crews_request(2026, "10", URL10)) is not None
+    # The next Tuesday run sees the fetched copy and sends nothing.
+    again = _fetch(git_vault, rt.cache, mode="if_missing")
+    assert again.outcome == "cached" and len(_post_requests(handle)) == 1
 
 
 def test_zero_budget_sends_nothing(git_vault, runtime) -> None:

@@ -969,7 +969,7 @@ def build_fixture() -> dict[str, Any]:
     }
     games = _games_block(specs, person_roles)
     payload: dict[str, Any] = {
-        "schema_version": "3.0.0",
+        "schema_version": "3.1.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,

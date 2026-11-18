@@ -55,7 +55,7 @@ INVENTED_STRINGS = ("Northfield Lanterns", "Harbor City", "Ada Quill", "example.
 def _minimal_payload() -> Payload:
     """A tiny valid payload: two games (one rated, one unrated), one row per block."""
     return {
-        "schema_version": "3.0.0",
+        "schema_version": "3.1.0",
         "freshness": {
             "season": 2026,
             "in_progress": True,
@@ -321,6 +321,15 @@ def _lineup_http_url(d: Payload) -> None:
     d["games"]["crew_source_url"][0] = "http://example.com/lineup"
 
 
+def _aa_without_url(d: Payload) -> None:
+    d["games"]["crew_source"][0] = "aa"
+
+
+def _aa_off_host_url(d: Payload) -> None:
+    d["games"]["crew_source"][0] = "aa"
+    d["games"]["crew_source_url"][0] = "https://example.com/nfl/week-1-announcing-schedule.html"
+
+
 def _source_none_with_crew(d: Payload) -> None:
     d["games"]["crew_source"][0] = None
 
@@ -489,6 +498,8 @@ MUTATORS: list[tuple[str, Mutator]] = [
     ("lineup_without_pbp", _lineup_without_pbp),
     ("lineup_without_url", _lineup_without_url),
     ("lineup_http_url", _lineup_http_url),
+    ("aa_without_url", _aa_without_url),
+    ("aa_off_host_url", _aa_off_host_url),
     ("source_none_with_crew", _source_none_with_crew),
     ("source_506_without_crew", _source_506_without_crew),
     ("url_without_lineup", _url_without_lineup),
@@ -675,8 +686,8 @@ def test_schema_file_matches_models() -> None:
 
 
 def test_schema_version_pinned() -> None:
-    assert NFL_SCHEMA_VERSION == "3.0.0"
-    assert render_schema()["$id"] == "booth-review/nfl-data/3.0.0"
+    assert NFL_SCHEMA_VERSION == "3.1.0"
+    assert render_schema()["$id"] == "booth-review/nfl-data/3.1.0"
 
 
 def test_cfb_contract_unchanged() -> None:
@@ -906,6 +917,28 @@ def test_upcoming_game_already_in_games_is_rejected_count_only() -> None:
     with pytest.raises(ValidationError) as info:
         validate_nfl_site_data(data)
     assert "games/upcoming: 1 game(s) appear more than once" in str(info.value)
+
+
+AA_POST = "https://awfulannouncing.com/nfl/week-1-announcing-schedule-2026.html"
+
+
+def test_aa_crew_with_its_post_validates() -> None:
+    data = _fixture()
+    data["games"]["crew_source"][0] = "aa"
+    data["games"]["crew_source_url"][0] = AA_POST
+    validate_nfl_site_data(data)
+    data = _set_upcoming("crew_source", 0, "aa")
+    data["upcoming"]["crew_source_url"][0] = AA_POST
+    validate_nfl_site_data(data)
+
+
+def test_upcoming_aa_crew_must_cite_an_aa_post() -> None:
+    with pytest.raises(ValidationError, match=r"upcoming\.crew_source_url\[0\]"):
+        validate_nfl_site_data(_set_upcoming("crew_source", 0, "aa"))
+    data = _set_upcoming("crew_source", 0, "aa")
+    data["upcoming"]["crew_source_url"][0] = AA_POST.replace("https://", "http://")
+    with pytest.raises(ValidationError, match=r"upcoming\.crew_source_url\[0\]"):
+        validate_nfl_site_data(data)
 
 
 def test_upcoming_rejects_a_published_lineup_source_and_extra_keys() -> None:

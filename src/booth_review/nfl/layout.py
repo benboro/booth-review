@@ -49,6 +49,12 @@ def nfl_506_path(season: int, week: int) -> str:
     return f"nfl/sports506/{season}/wk-{week:02d}.html"
 
 
+def nfl_aa_crews_path(season: int, week: int) -> str:
+    """A hand-imported Awful Announcing NFL weekly announcing-schedule post
+    (`booth-review import aa`); its manifest lines carry source "aa"."""
+    return f"nfl/aa/crews/{season}/wk-{week:02d}.html"
+
+
 def wikipedia_url(season: int) -> str:
     return f"https://en.wikipedia.org/wiki/{season}_NFL_season"
 

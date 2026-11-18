@@ -52,7 +52,7 @@ from booth_review.sources.aa.parser import (
 from booth_review.sources.espnpr.parser import _AT_RE, _VS_RE, _clean
 from booth_review.sources.gapcollect import post_validator
 from booth_review.sources.policy import policy_fresh
-from booth_review.transport.cache import RawCache
+from booth_review.transport.cache import Manifest, RawCache
 from booth_review.transport.types import FetchRequest
 
 _MONTHS = {
@@ -434,6 +434,19 @@ CrewsOutcome = Literal[
 ]
 
 
+MANUAL_ORIGIN = "manual"
+
+
+def hand_imported(paths: DataPaths, cache_path: str) -> bool:
+    """Whether the newest manifest line that wrote `cache_path` is a hand import
+    (`booth-review import aa`)."""
+    latest: dict[str, Any] | None = None
+    for entry in Manifest(paths.manifest).entries():
+        if entry.get("path") == cache_path:
+            latest = entry
+    return latest is not None and latest.get("origin") == MANUAL_ORIGIN
+
+
 def crews_request(season: int, label: str, url: str) -> FetchRequest:
     return FetchRequest(
         source="aa", season=season, url=url, cache_path=crews_cache_path(season, label)
@@ -486,7 +499,10 @@ def fetch_week_crews(
     _check_url(url)
     req = crews_request(season, label, url)
     cached = cache.status(req) == "cached"
-    if mode == "if_missing" and cached:
+    if mode == "if_missing" and cached and not hand_imported(paths, req.cache_path):
+        # A hand-imported copy has no validators, so the Tuesday run still fetches
+        # its own copy over it; the Friday/Saturday re-checks then have an ETag or
+        # Last-Modified to send.
         return CrewsFetchResult("cached", 0, url, req.cache_path, ())
     if mode == "if_missing" and week_key(season, label) in state.crews_failed:
         # The Tuesday request for this week already failed; it is never retried
