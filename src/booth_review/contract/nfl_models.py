@@ -19,12 +19,16 @@ import math
 from collections import Counter
 from collections.abc import Sequence
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from booth_review.contract.models import VenueRef
 
-NFL_SCHEMA_VERSION = "3.0.0"
+#: Awful Announcing's host: an "aa" crew must cite one of its posts.
+AA_HOST = "awfulannouncing.com"
+
+NFL_SCHEMA_VERSION = "3.1.0"
 
 NflSlotLabel = Literal[
     "Christmas",
@@ -224,7 +228,7 @@ class NflGameColumns(BaseModel):
     change_url: list[str | None]
     network: list[int | None]
     crew: list[list[NflCrewEntry]]
-    crew_source: list[Literal["506", "published_lineup"] | None]
+    crew_source: list[Literal["506", "published_lineup", "aa"] | None]
     crew_source_url: list[str | None]
     excitement: list[float | None]
     viewers: list[int | None]
@@ -265,8 +269,9 @@ class NflUpcomingColumns(BaseModel):
     network: list[int | None]
     network_basis: list[Literal["506", "slot"] | None]
     crew: list[list[NflCrewEntry]]
-    # Hand-save imports only; never a published lineup for an upcoming game (D-15).
-    crew_source: list[Literal["506"] | None]
+    # Hand-save imports only (506, or Awful Announcing's weekly post); never a published
+    # lineup for an upcoming game (D-15).
+    crew_source: list[Literal["506", "aa"] | None]
     crew_source_url: list[str | None]
     # Published booth rank (nfl_booth_ranks.csv) for the game's network and season; null
     # when the crew is empty.
@@ -435,7 +440,7 @@ def _check_game_list(block: str, i: int, game_list: Sequence[int], num_games: in
 class NflSiteData(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
 
-    schema_version: Literal["3.0.0"]
+    schema_version: Literal["3.1.0"]
     freshness: NflFreshness
     constants: NflConstants
     lookups: NflLookups
@@ -563,6 +568,13 @@ class NflSiteData(BaseModel):
                 raise ValueError(
                     f"upcoming.crew_source[{i}]: must be set exactly when the game has a crew"
                 )
+            if u.crew_source[i] == "aa":
+                aa_url = u.crew_source_url[i]
+                parts = urlsplit(aa_url) if aa_url is not None else None
+                if parts is None or parts.scheme != "https" or parts.hostname != AA_HOST:
+                    raise ValueError(
+                        f"upcoming.crew_source_url[{i}]: an aa crew must cite its AA post"
+                    )
             if not crew and (u.booth_rank[i] is not None or u.crew_source_url[i] is not None):
                 raise ValueError(
                     f"upcoming.booth_rank[{i}]: booth_rank and crew_source_url need a crew"
@@ -581,13 +593,15 @@ class NflSiteData(BaseModel):
             raise ValueError(f"games.crew_source[{i}]: required when the game has a crew")
         if source is not None and not crew:
             raise ValueError(f"games.crew_source[{i}]: must be null when the crew is empty")
-        if source == "published_lineup":
+        if source in ("published_lineup", "aa"):
             if not any(e.role == "pbp" for e in crew):
-                raise ValueError(f"games.crew_source[{i}]: published_lineup needs a pbp entry")
+                raise ValueError(f"games.crew_source[{i}]: {source} needs a pbp entry")
             if url is None or not url.startswith("https://"):
                 raise ValueError(f"games.crew_source_url[{i}]: must be an https citation")
+            if source == "aa" and urlsplit(url).hostname != AA_HOST:
+                raise ValueError(f"games.crew_source_url[{i}]: must be an Awful Announcing post")
         elif url is not None:
-            raise ValueError(f"games.crew_source_url[{i}]: only for published_lineup games")
+            raise ValueError(f"games.crew_source_url[{i}]: only for published_lineup and aa games")
 
     def _check_points(self, i: int) -> None:
         g = self.games

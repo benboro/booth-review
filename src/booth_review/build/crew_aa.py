@@ -195,9 +195,10 @@ def load_aa_pages(paths: DataPaths, seasons: Sequence[int] | None = None) -> Loa
     """Every cached crews post (raw/aa/crews/<season>/wk-*.html), 2026 only (D-03).
 
     The time compared against 506 is the post's `article:modified_time`, else the
-    fetched_at of the page's latest HTTP 200 manifest line (a 304 line is not a
-    fetch of new content). A page with no on-host canonical link, or one the
-    parser refuses, is returned in `rejected`; it never stops the build.
+    saved_at (a hand import) or fetched_at of the page's latest HTTP 200 manifest
+    line (a 304 line is not a fetch of new content). A page with no on-host
+    canonical link, or one the parser refuses, is returned in `rejected`; it never
+    stops the build.
     """
     wanted = [CREWS_SEASON] if seasons is None else [s for s in seasons if s == CREWS_SEASON]
     found: list[tuple[int, str]] = []
@@ -218,7 +219,8 @@ def load_aa_pages(paths: DataPaths, seasons: Sequence[int] | None = None) -> Loa
             continue
         if entry.get("status") != 200:
             continue
-        moment = _manifest_time(entry.get("fetched_at"))
+        # A hand import (`booth-review import aa`) carries the browser save time.
+        moment = _manifest_time(entry.get("saved_at")) or _manifest_time(entry.get("fetched_at"))
         if moment is not None:
             fetched[path] = moment
 

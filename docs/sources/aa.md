@@ -145,14 +145,75 @@ a 506 crew that AA's booth replaced still does, since 506 listed it. The coverag
 counts them in their own column (`matched_crew_aa`), never as 506 matches. Each
 crew is credited to its exact post, and AA's crews come down if AA objects.
 
+## Hand-saved posts (`booth-review import aa`)
+
+`booth-review import aa [--from <folder>] [--force]` brings weekly
+announcing-schedule posts saved by hand in a browser (default folder
+`data/incoming/aa/`, any filename) into the vault. It sends no request.
+
+- **Identification:** by content, never by file name. The canonical link must be
+  an AA post under `/college-football/` or `/nfl/` whose slug or title says
+  "announcing schedule" (fill-in news articles are ignored). The week number comes
+  from the title, else the slug; the season from the year there, else the
+  published date. Only 2026 is imported.
+- **Checks:** the post must pass the crews parser above, and most of its dated
+  game lines must fall in that week of the vault's schedule (CFBD for college
+  football, nflverse for the NFL). A college football post the feed watch recorded
+  under a different link that week is refused.
+- **Paths:** college football posts go to `raw/aa/crews/2026/wk-NN.html` (the
+  fetch's path) and NFL posts to `raw/nfl/aa/crews/2026/wk-NN.html`. The manifest
+  line is marked `origin: manual` with the browser save time, which the build
+  compares against 506 when the post carries no `article:modified_time`.
+- **The job:** a hand-saved copy has no ETag or Last-Modified of its own. One that
+  replaces a fetched copy (`--force`) keeps that copy's validators, so a re-check
+  that gets a 304 means AA has not changed the post since that fetch. The Tuesday
+  run fetches its own copy of a college football week over a hand import, and the
+  Friday and Saturday re-checks then have validators to send. The job never fetches
+  NFL posts.
+- **Overwrites:** a vault copy that differs is left alone when it is at least as
+  new as the save (reported as `vault_newer`, no complaint); otherwise it is kept
+  unless `--force`. Two different saves of one week are both refused unless
+  `--force`, which keeps the newest.
+
+## NFL crews (2026)
+
+The NFL build (`booth-review nfl build`, `nfl/crew_aa.py`) reads the imported NFL
+posts and coalesces them with 506 by the same rules as college football, per
+game:
+
+1. A game 506 gave no booth (no listing, no resolved play-by-play voice, or a
+   published-lineup fill) takes AA's booth; 506's later names that resolved stay.
+   A published lineup fills only a game neither source names.
+2. AA's people equal to, or all within, 506's crew (play-by-play, analyst and the
+   later names, which can be a third booth member): 506 is kept (an agreement).
+3. AA's people a strict superset of 506's crew: AA's whole booth wins.
+4. Otherwise the newer page wins (AA's `article:modified_time`, else its save or
+   fetch time, against the 506 page's save time); a tie keeps 506. Each
+   superset or newer-page case writes a row to `interim/review_nfl_crew_aa.csv`
+   (person ids only). When AA wins, its whole booth ships and none of 506's names
+   stay.
+
+Upcoming games follow the same rules, write their disagreements to the same file
+(marked `upcoming`), and their booth rank follows the shipped play-by-play voice.
+Two AA lines that match one game (an alt-cast or a corrected line) drop that game,
+whether or not their names resolve. AA-sourced games vote in lead-booth inference and the modal
+analyst like 506 games. Matching uses the team pair (through the `any` rows of
+`nfl_team_crosswalk.csv`) and the game date. A booth is used only when every name
+is in `people.csv`: the NFL build never adds people, so `booth-review nfl people`
+lists AA's names with 506's and `--apply` registers them. The NFL site credits an
+AA crew "Crew source: Awful Announcing" (upcoming: "Crew from Awful Announcing")
+with a link to the post.
+
 ## Storage
 
-The cached sitemaps and posts live only in the private vault, under `raw/aa/`.
+The cached sitemaps and posts live only in the private vault, under `raw/aa/`
+and `raw/nfl/aa/`.
 They are never copied into this repository, its test fixtures, commit messages
 or logs. Tests use synthetic pages.
 
 ## Takedown
 
-If Awful Announcing objects, remove `raw/aa/` from the vault, commit and push
-the vault, and rebuild. It heads no telecast today, so the rated counts do not
+If Awful Announcing objects, remove `raw/aa/` and `raw/nfl/aa/` from the vault,
+commit and push the vault, and rebuild (`booth-review build` and
+`booth-review nfl build`). It heads no telecast today, so the rated counts do not
 change.

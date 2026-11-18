@@ -1,6 +1,6 @@
 # NFL site data contract
 
-`nfl-data.json` is the NFL site file (schema `3.0.0`). It is separate from
+`nfl-data.json` is the NFL site file (schema `3.1.0`). It is separate from
 `site-data.json` (see `docs/site-data.md`, schema `2.8.0`, which this contract never
 touches) and the page loads it only when NFL is chosen, directly or through
 `?sport=nfl`, so a college-football page load is unchanged.
@@ -89,8 +89,8 @@ Every `people`, `networks` and `venues` entry must be referenced by something.
 | `original_slot`, `original_network`, `change_url` | flexed games only: the slot and network before the change, and the article that documents it; otherwise null |
 | `network` | `lookups.networks` index; null when unknown |
 | `crew` | list of `{person, role}` (`pbp`, `analyst`, `unknown`); `person` indexes `lookups.people`; may be empty |
-| `crew_source` | where the crew came from: `"506"` (at least one resolved person id came from the 506 listing), `"published_lineup"` (a cited rank-1 lineup that fills a flagship game with no 506 listing) or null; null exactly when `crew` is empty, and a crew is the resolved play-by-play, analyst and sideline ids the file ships, so a 506 listing whose names did not resolve has a null source |
-| `crew_source_url` | the cited lineup release (an `https://` URL); set only when `crew_source` is `published_lineup`, which also needs a `pbp` entry in `crew` (D-20) |
+| `crew_source` | where the crew came from: `"506"` (at least one resolved person id came from the 506 listing), `"aa"` (Awful Announcing's weekly announcing-schedule post, which fills a game 506 gave no booth or wins a disagreement, `nfl/crew_aa.py`), `"published_lineup"` (a cited rank-1 lineup that fills a flagship game with no 506 listing and no AA booth) or null; null exactly when `crew` is empty, and a crew is the resolved play-by-play, analyst and sideline ids the file ships, so a 506 listing whose names did not resolve has a null source |
+| `crew_source_url` | the cited lineup release, or the Awful Announcing post (an `https://` URL on awfulannouncing.com); set only when `crew_source` is `published_lineup` or `aa`, which also need a `pbp` entry in `crew` (D-20) |
 | `excitement` | GEI-style score, finite; null stays null |
 | `viewers` | people watching, `> 0`; null when no figure |
 | `scope` | `"window"` or `"game"`; set only when `viewers` is set |
@@ -134,9 +134,10 @@ played-game view iterates them. Columns: `season`, `week`, `date`, `kickoff`, `h
   (plain Thursday Prime, Sunday Night on NBC, Monday Night on ESPN) and a 506 page
   overrides it. The slot-table facts come from Wikipedia (CC BY-SA 4.0), credited with
   the article link.
-- `crew` and `crew_source` come from hand-saved 506 imports only (`crew_source` is
-  `"506"` or `null`; a published lineup is never used for an upcoming game). An empty
-  crew is "Crew TBA".
+- `crew` and `crew_source` come from hand-saved imports only: the 506 week page, coalesced
+  with Awful Announcing's weekly post (`crew_source` is `"506"`, `"aa"` or `null`, and an
+  `"aa"` crew cites its AA post in `crew_source_url`; a published lineup is never used for
+  an upcoming game). An empty crew is "Crew TBA".
 - `booth_rank` is the published rank from `data/reference/nfl_booth_ranks.csv` for the
   game's network and season, and is `null` when the crew is empty.
 - Selection (built by `nfl/upcoming.py` into `processed/nfl_upcoming.parquet`): the latest
@@ -273,3 +274,5 @@ removed or retyped field. Changing the CFB contract's version is out of scope he
   that is not a night, holiday, AGOTW or CBS national game. The column names stay; their
   meaning changes, so this is a major bump. The five `solo_*` columns no longer sum to
   `standalone_total`.
+- 3.1.0: `crew_source` `"aa"` on `games` and `upcoming`, an Awful Announcing crew that
+  cites its weekly post in `crew_source_url` (additive minor).

@@ -8,7 +8,8 @@ skipped), with a network and a crew only when a source names them.
 Network sources, in order: the saved 506 NFL page (`network_basis` "506"); else, for a
 plain Thursday, Sunday or Monday night game, the hand-curated slot-rights table
 `nfl_slot_networks.csv` ("slot"); else None (Network TBA). Nothing is guessed. Crews
-come only from the 506 import, never from published lineups (D-15). Every slot-rule
+come from the 506 import, coalesced with Awful Announcing's weekly post (nfl/crew_aa.py),
+never from published lineups (D-15). Every slot-rule
 line lives in `_slot_network`, so dropping the rule is a one-file change.
 """
 
@@ -25,6 +26,14 @@ from booth_review.build.pipeline import _stamp
 from booth_review.config import DataPaths
 from booth_review.errors import ReferenceTableError
 from booth_review.nfl.changes import match_schedule_changes
+from booth_review.nfl.crew_aa import (
+    NFL_AA_SOURCE,
+    REVIEWED_STATUSES,
+    coalesce,
+    count_status,
+    match_aa_booths,
+    review_row,
+)
 from booth_review.nfl.games import PLAYED_AFTER, NflReference
 from booth_review.nfl.inputs import NflInputs
 from booth_review.nfl.layout import NFLVERSE_SCHEDULES_PATH, nfl_506_path, nfl_506_url
@@ -87,6 +96,12 @@ UPCOMING_COUNT_KEYS = (
     "upcoming_network_tba",
     "upcoming_slot_basis",
     "upcoming_slot_table_missing",
+    "upcoming_aa_crews",
+    "upcoming_aa_filled",
+    "upcoming_aa_agrees",
+    "upcoming_aa_superset",
+    "upcoming_aa_won",
+    "upcoming_aa_s506_won",
 )
 
 
@@ -178,8 +193,13 @@ def assemble_upcoming(
     *,
     now: datetime,
     reference_directory: Path,
+    aa_reviews: list[dict[str, object]] | None = None,
 ) -> tuple[pl.DataFrame, dict[str, int]]:
-    """The unplayed games of weeks up to the current one, plus their counts."""
+    """The unplayed games of weeks up to the current one, plus their counts.
+
+    AA disagreements (superset, newer page) are appended to `aa_reviews` when given,
+    marked `upcoming`, for the same review file as the played games.
+    """
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     counts: dict[str, int] = dict.fromkeys(UPCOMING_COUNT_KEYS, 0)
@@ -205,6 +225,7 @@ def assemble_upcoming(
         counts["upcoming_slot_table_missing"] = 1
     listings, _ = match_506_listings(inputs, ref.teams, ref.networks, games=pending)
     changes, _ = match_schedule_changes(inputs, ref.teams, ref.networks)
+    aa = match_aa_booths(inputs.aa_pages, pending, ref.teams, ref.people)
 
     rows: list[dict[str, object]] = []
     for game in pending:
@@ -239,12 +260,44 @@ def assemble_upcoming(
             counts["upcoming_network_tba"] += 1
 
         crew = resolve_crew(match.crew_names if match else (), ref.people)
-        has_crew = bool(crew.pbp_person_id or crew.analyst_person_id or crew.sideline_person_ids)
+        aa_crew = aa.crews.get(game.game_id)
+        pick = coalesce(
+            pbp=crew.pbp_person_id,
+            analyst=crew.analyst_person_id,
+            sideline=crew.sideline_person_ids,
+            s506_booth=crew.pbp_person_id is not None or crew.analyst_person_id is not None,
+            s506_time=inputs.s506_times.get((game.season, game.week)),
+            aa=aa_crew,
+        )
+        if pick.from_aa:
+            counts["upcoming_aa_crews"] += 1
+        count_status(counts, pick.status, prefix="upcoming_")
+        if aa_crew is not None and aa_reviews is not None and pick.status in REVIEWED_STATUSES:
+            aa_reviews.append(
+                review_row(
+                    season=game.season,
+                    week=game.week,
+                    game_id=game.game_id,
+                    pick=pick,
+                    aa=aa_crew,
+                    s506_pbp=crew.pbp_person_id,
+                    s506_analyst=crew.analyst_person_id,
+                    s506_time=inputs.s506_times.get((game.season, game.week)),
+                    upcoming=True,
+                )
+            )
+        has_crew = bool(pick.pbp_person_id or pick.analyst_person_id or pick.sideline_person_ids)
+        source: str | None = None
+        source_url: str | None = None
+        if has_crew and pick.from_aa and aa_crew is not None:
+            source, source_url = NFL_AA_SOURCE, aa_crew.source_url
+        elif has_crew:
+            source, source_url = "506", nfl_506_url(game.season, game.week)
         booth_rank: int | None = None
         group = network_group_of(network_id)
-        if has_crew and group is not None and crew.pbp_person_id is not None:
+        if has_crew and group is not None and pick.pbp_person_id is not None:
             for booth in ref.booth_ranks.get((group, game.season), ()):
-                if booth.pbp_person_id == crew.pbp_person_id:
+                if booth.pbp_person_id == pick.pbp_person_id:
                     booth_rank = booth.rank
                     break
         kickoff = game.kickoff_et
@@ -267,11 +320,11 @@ def assemble_upcoming(
                 "is_neutral": neutral,
                 "network_id": network_id,
                 "network_basis": basis,
-                "pbp_person_id": crew.pbp_person_id,
-                "analyst_person_id": crew.analyst_person_id,
-                "sideline_person_ids": list(crew.sideline_person_ids),
-                "crew_source": "506" if has_crew else None,
-                "crew_source_url": nfl_506_url(game.season, game.week) if has_crew else None,
+                "pbp_person_id": pick.pbp_person_id,
+                "analyst_person_id": pick.analyst_person_id,
+                "sideline_person_ids": list(pick.sideline_person_ids),
+                "crew_source": source,
+                "crew_source_url": source_url,
                 "booth_rank": booth_rank,
             }
         )

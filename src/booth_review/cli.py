@@ -102,6 +102,7 @@ from booth_review.sources.aa.feed import (
     verify_feed,
     week_key,
 )
+from booth_review.sources.aa.importer import AaImporter, AaImportResult, WeekRef
 from booth_review.sources.base import BatchSummary, run_requests
 from booth_review.sources.cfbd.collector import ENDPOINTS, CfbdCollector
 from booth_review.sources.cfbd.parser import parse_games
@@ -449,6 +450,15 @@ def build_parser() -> argparse.ArgumentParser:
     pespnprimp.add_argument("--from", dest="from_dir", type=Path, default=None)
     pespnprimp.add_argument("--force", action="store_true")
     pespnprimp.add_argument("--no-commit", action="store_true")
+
+    paaimp = import_sub.add_parser(
+        "aa",
+        help="import hand-saved Awful Announcing weekly college football and NFL "
+        "announcing-schedule posts (2026 only)",
+    )
+    paaimp.add_argument("--from", dest="from_dir", type=Path, default=None)
+    paaimp.add_argument("--force", action="store_true")
+    paaimp.add_argument("--no-commit", action="store_true")
 
     pknownimp = import_sub.add_parser(
         "known",
@@ -1930,6 +1940,76 @@ def _import_espnpr(args: argparse.Namespace) -> int:
     return 4 if result.has_problems else 0
 
 
+# -- import aa ------------------------------------------------------------------------------
+
+
+def _print_aa_import_result(result: AaImportResult) -> None:
+    """Counts and reasons only, never page text or file names."""
+    for league, season in result.groups():
+
+        def n(refs: list[WeekRef], league: str = league, season: int = season) -> int:
+            return sum(ref.league == league and ref.season == season for ref in refs)
+
+        weeks = sorted(
+            int(r.week) for r in result.imported if r.league == league and r.season == season
+        )
+        print(
+            f"aa {league} {season}: imported {n(result.imported)}"
+            + (f" (weeks {', '.join(map(str, weeks))})" if weeks else "")
+            + f", skipped_existing {n(result.skipped_existing)}"
+            f", vault_newer {n(result.vault_newer)}"
+            f", changed_without_force {n(result.changed_without_force)}"
+        )
+    reasons: dict[str, int] = {}
+    for item in result.skipped_invalid:
+        label = f"{item.league}: {item.reason}" if item.league else item.reason
+        reasons[label] = reasons.get(label, 0) + 1
+    print(
+        f"imported {len(result.imported)}, skipped_existing {len(result.skipped_existing)}, "
+        f"vault_newer {len(result.vault_newer)}, skipped_invalid {len(result.skipped_invalid)}, "
+        f"changed_without_force {len(result.changed_without_force)}"
+    )
+    for reason, count in sorted(reasons.items()):
+        print(f"skipped {count}: {reason}")
+    if result.changed_without_force:
+        print("some posts differ from an older vault copy; use --force to overwrite")
+    if result.superseded:
+        print(f"--force kept the newest save; {result.superseded} older save(s) ignored")
+    if result.unrecognized:
+        print(
+            f"ignored {result.unrecognized} HTML file(s) that aren't AA weekly "
+            "announcing-schedule posts"
+        )
+    for problem in result.problems:
+        print(f"problem: {problem}")
+
+
+def _import_aa(args: argparse.Namespace) -> int:
+    """Hand-saved AA weekly schedule posts into the vault. No client is built here;
+    the only AA requests stay with `collect aa`. Holds the vault lock and commits once
+    per league and season, touching only that crews folder and the ledger, with a
+    count-only message."""
+    paths = DataPaths.from_env()
+    vault = VaultRepo(paths.vault)
+    vault.check()
+    with vault.lock():
+        result = AaImporter(paths).run(incoming_dir=args.from_dir, force=args.force)
+        _print_aa_import_result(result)
+        if not args.no_commit:
+            for league, season in result.groups():
+                if not any(r.league == league and r.season == season for r in result.imported):
+                    continue
+                folder = (
+                    f"raw/aa/crews/{season}" if league == "cfb" else f"raw/nfl/aa/crews/{season}"
+                )
+                counts = result.counts(league, season)
+                vault.commit_batch(
+                    batch_message("import", "aa", f"{league}-{season}", counts),
+                    paths=[folder, "ledger/requests.jsonl"],
+                )
+    return 4 if result.has_problems else 0
+
+
 # -- import known ---------------------------------------------------------------------------
 
 
@@ -2798,6 +2878,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return _import_smw(args)
             if args.source == "espnpr":
                 return _import_espnpr(args)
+            if args.source == "aa":
+                return _import_aa(args)
             if args.source == "known":
                 return _import_known(args)
             raise AssertionError(f"unknown import source: {args.source!r}")

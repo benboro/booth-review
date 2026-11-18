@@ -106,7 +106,11 @@ def run_nfl_build(
             extra: Mapping[str, pl.DataFrame]
             task1_reviews: Mapping[str, list[dict[str, object]]] = {}
             upcoming, upcoming_counts = assemble_upcoming(
-                inputs, ref, now=played_cut, reference_directory=reference_directory
+                inputs,
+                ref,
+                now=played_cut,
+                reference_directory=reference_directory,
+                aa_reviews=table.reviews["crew_aa"],
             )
             weekend, _ = weekend_frame(paths, inputs, upcoming, now=played_cut)
             counts.update(upcoming_counts)

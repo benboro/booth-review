@@ -184,6 +184,14 @@ model, and build phases; read the relevant section before starting a phase.
   - **Data and credit:** the parsed crews are private vault data. The site credits each
     crew to its exact post, and AA's crews come down if AA objects.
   - It ends with the 2026 season.
+- Awful Announcing hand-saved posts: bring weekly college football and NFL
+  announcing-schedule posts saved in a browser into the vault with
+  `booth-review import aa [--from <folder>] [--force]` (default folder
+  `data/incoming/aa/`; save from the browser or copy with `cp -p` to keep each file's
+  save time). It sends no request, imports 2026 only, and identifies each post by its
+  canonical link and title. College football posts go to the fetch's cache path, and
+  the Tuesday job still fetches its own copy over a hand-saved one; NFL posts go to
+  `raw/nfl/aa/crews/2026/`. Credit every AA crew with its exact post.
 - ESPN Press Room: never collect with scripts; Disney's Terms of Use ban automated
   access. Save its pages by hand in a browser (any filename) into
   `data/incoming/espnpr/`, or copy them there with `cp -p` to keep each file's save
