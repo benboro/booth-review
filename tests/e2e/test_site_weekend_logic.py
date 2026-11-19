@@ -369,8 +369,12 @@ def test_cell_colors_are_accessible(weekend_page: Page) -> None:
             const known = W.cellColors(fam, theme, 'known');
             const tint = W.cellColors(fam, theme, 'tba');
             const lost = W.cellColors(fam, theme, 'not-listed');
-            const known_ok = known.fg === '#FFFFFF'
-              && P.contrastRatio(known.bg, known.fg) >= 7 && known.edge === null;
+            // The CW keeps its own family blue with black text, as everywhere else on the site.
+            const known_ok = fam === 'cw'
+              ? known.bg === P.FAMILY_COLORS[theme].cw && known.fg === '#000000'
+                && P.contrastRatio(known.bg, known.fg) >= 4.5 && known.edge === null
+              : known.fg === '#FFFFFF'
+                && P.contrastRatio(known.bg, known.fg) >= 7 && known.edge === null;
             const tint_ok = P.contrastRatio(tint.bg, tint.fg) >= 4.5;
             const edge_ok = P.contrastRatio(tint.edge, P.PAGE_BG[theme]) >= 3;
             const same = tint.bg === lost.bg && tint.bg === P.mixHex(

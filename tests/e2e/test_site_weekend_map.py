@@ -161,7 +161,7 @@ def pick_person(page: Page, person_id: str = "pat-rowan") -> None:
     page.evaluate("(id) => window.__testHooks.setState({ people: [id] })", person_id)
     page.wait_for_function(
         "() => document.querySelector('.wk-map-box').data"
-        ".find((t) => t.name === 'ring-ink').x.length > 0",
+        ".find((t) => t.name === 'dots-matched').x.length > 0",
         timeout=15000,
     )
     settle(page)
@@ -280,8 +280,8 @@ def test_announcers_pick_fades_rings_and_empties_the_splat(wkmap: Wk, theme: str
     assert set(t["dots-faded"]["opacity"]) == {0.15}
     assert set(t["dots-matched"]["opacity"]) == {1}
     assert t["markers"]["opacity"] == [0.15]  # the London game is not Rowan's
-    assert len(t["ring-ink"]["x"]) == 1
-    assert len(t["ring-keyline"]["x"]) == 1
+    assert len(t["ring-ink"]["x"]) == 0  # no pick ring (2026-11-18)
+    assert len(t["ring-keyline"]["x"]) == 0
     # The splat counts only the matching game: once repainted, the Lincoln venue (two games, no
     # match) reads exactly like Atlanta (no match either: bare land), and the Pasadena venue where
     # Rowan calls still carries shading.

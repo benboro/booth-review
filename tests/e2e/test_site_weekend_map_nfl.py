@@ -305,7 +305,7 @@ def test_the_source_line_credits_wikipedia_and_stadium_locations_only_in_map_mod
 
 
 @pytest.mark.parametrize("theme", THEMES)
-def test_a_team_pick_fades_and_rings_as_on_cfb(
+def test_a_team_pick_fades_without_a_ring_as_on_cfb(
     nfl_guarded_page: Page, open_nfl_app: OpenNfl, theme: str
 ) -> None:
     page = nfl_guarded_page
@@ -318,7 +318,7 @@ def test_a_team_pick_fades_and_rings_as_on_cfb(
     page.evaluate("(id) => window.__nflTestHooks.setState({ teams: [id] })", team)
     page.wait_for_function(
         "() => document.querySelector('.wk-map-box').data"
-        ".find((t) => t.name === 'ring-ink').x.length > 0",
+        ".find((t) => t.name === 'dots-matched').x.length > 0",
         timeout=15000,
     )
     settle(page)
@@ -328,7 +328,7 @@ def test_a_team_pick_fades_and_rings_as_on_cfb(
     assert t["dots-faded"]["keys"]
     assert set(t["dots-faded"]["opacity"]) == {0.15}
     assert set(t["dots-matched"]["opacity"]) == {1}
-    assert len(t["ring-ink"]["x"]) == len(t["ring-keyline"]["x"]) >= 1
+    assert len(t["ring-ink"]["x"]) == len(t["ring-keyline"]["x"]) == 0  # no pick ring (2026-11-18)
     assert set(matched).isdisjoint(t["dots-faded"]["keys"])
 
 

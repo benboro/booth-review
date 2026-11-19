@@ -276,10 +276,9 @@ def test_picks_fade_and_ring_without_shifting_layout(wk_page: Page) -> None:
     assert _style(wk_page, _cell("b"), "opacity") == "0.3"
     assert _style(wk_page, _cell("c"), "opacity") == "0.3"
     assert _style(wk_page, _cell("a"), "opacity") == "1"
-    ring = _style(wk_page, _cell("a"), "boxShadow")
-    assert "rgb(30, 35, 33)" in ring and "rgb(245, 247, 246)" in ring
-    assert "inset" in ring
-    # No pick active: nothing fades or rings.
+    # A matched cell wears no ring (2026-11-18); the others fade.
+    assert _style(wk_page, _cell("a"), "boxShadow") == "none"
+    # No pick active: nothing fades.
     _mount(wk_page, games)
     assert _style(wk_page, _cell("b"), "opacity") == "1"
     assert _style(wk_page, _cell("a"), "boxShadow") == "none"
@@ -326,10 +325,9 @@ def test_faded_cell_hides_the_hour_hairlines(wk_page: Page, theme: str) -> None:
     assert all(abs(a - b) <= 3 for a, b in zip(row[0], want, strict=True)), (row[0], want)
 
 
-def test_ring_is_light_in_dark_theme(wk_page: Page) -> None:
+def test_matched_cell_has_no_ring_in_dark_theme(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a"), _known(key="b", home="B")], theme="dark", pass_keys=["a"])
-    ring = _style(wk_page, _cell("a"), "boxShadow")
-    assert "rgb(229, 234, 232)" in ring and "rgb(25, 29, 28)" in ring
+    assert _style(wk_page, _cell("a"), "boxShadow") == "none"
 
 
 def test_networks_pick_fades_whole_rows(wk_page: Page) -> None:
@@ -570,7 +568,7 @@ def test_tba_strip_cell_states(wk_page: Page, theme: str) -> None:
 def test_strip_cells_take_picks(wk_page: Page) -> None:
     _mount(wk_page, [_known(key="a"), *_tba_games(2)], pass_keys=["t0"])
     assert _style(wk_page, _cell("t1"), "opacity") == "0.3"
-    assert "inset" in _style(wk_page, _cell("t0"), "boxShadow")
+    assert _style(wk_page, _cell("t0"), "boxShadow") == "none"
 
 
 def _plus(**kw: Any) -> dict[str, Any]:
@@ -845,8 +843,9 @@ def test_phone_picks_fade_and_ring(phone_page: Page, theme: str) -> None:
     sel = lambda k: f'#wk-host .wk-item[data-wk-id="g:{k}"]'  # noqa: E731
     assert _style(phone_page, sel("f2"), "opacity") == "0.3"
     assert _style(phone_page, sel("f1"), "opacity") == "1"
+    # No ink pick ring (2026-11-18); f1 keeps only its gold lead frame.
     ink = "rgb(30, 35, 33)" if theme == "light" else "rgb(229, 234, 232)"
-    assert ink in _style(phone_page, sel("f1"), "boxShadow")
+    assert ink not in _style(phone_page, sel("f1"), "boxShadow")
     phone_page.locator(sel("f2")).click()
     assert phone_page.evaluate("window.__wk.opened") == ["f2"]
 
