@@ -12,9 +12,9 @@ from datetime import UTC, date, datetime
 import pytest
 
 from booth_review.job.attention import (
+    _506_NFL_WEEK_URL_RE,
     _LINE_RE,
     ATTENTION_TITLE,
-    REMINDER_506_NFL_URL,
     REMINDER_AA_CFB_URL,
     REMINDER_AA_NFL_URL,
     REMINDER_ESPNPR_CFB_URL,
@@ -474,7 +474,7 @@ def test_step_failed_accepts_espnpr_gaps() -> None:
 
 
 def _passes(item: AttentionItem) -> None:
-    assert _LINE_RE.match(item.line)
+    assert _LINE_RE.match(_506_NFL_WEEK_URL_RE.sub("", item.line))
     assert len(item.line) <= 200
     assert item.line in build_attention_body([item], generated_at=_NOW)
 
@@ -518,27 +518,49 @@ def test_reminder_506_nfl_line() -> None:
     assert item.kind == "reminder_506_nfl"
     assert item.line == (
         "reminder 2026 nfl week 9: save the 506 nfl week 9 page before thursday night "
-        f"{REMINDER_506_NFL_URL}, then booth-review import 506 --season 2026 --league nfl"
+        "https://506sports.com/nfl.php?yr=2026&wk=9, then booth-review import 506 "
+        "--season 2026 --league nfl"
     )
     _passes(item)
 
 
 def test_reminder_506_nfl_played_lines() -> None:
-    missing = reminder_506_nfl_played(2026, "9", "missing", ["3", "5"])
-    stale = reminder_506_nfl_played(2026, "9", "stale", ["4"])
-    assert missing.kind == stale.kind == "reminder_506_nfl_played"
-    assert missing.line == (
-        "reminder 2026 nfl week 9: 506 nfl pages not saved for weeks 3, 5, "
-        f"save {REMINDER_506_NFL_URL}"
-    )
-    assert stale.line == (
-        "reminder 2026 nfl week 9: 506 nfl pages saved before their games finished for week 4, "
-        f"save {REMINDER_506_NFL_URL}"
-    )
-    for item in (missing, stale):
+    missing = reminder_506_nfl_played(2026, "9", "missing", ["5", "3"])
+    stale = reminder_506_nfl_played(2026, "18", "stale", ["17"])
+    assert {item.kind for item in [*missing, *stale]} == {"reminder_506_nfl_played"}
+    aa = REMINDER_AA_NFL_URL
+    assert [item.line for item in missing] == [
+        "reminder 2026 nfl week 9: 506 nfl week 3 page not saved, save "
+        f"https://506sports.com/nfl.php?yr=2026&wk=3 or the aa nfl post {aa}",
+        "reminder 2026 nfl week 9: 506 nfl week 5 page not saved, save "
+        f"https://506sports.com/nfl.php?yr=2026&wk=5 or the aa nfl post {aa}",
+    ]
+    # The longest shape (two-digit weeks, stale) still fits the line limit.
+    assert [item.line for item in stale] == [
+        "reminder 2026 nfl week 18: 506 nfl week 17 page saved before its games ended, save "
+        f"https://506sports.com/nfl.php?yr=2026&wk=17 or the aa nfl post {aa}"
+    ]
+    for item in [*missing, *stale]:
         _passes(item)
-    assert missing.line != nfl_506_missing(2026, ["3", "5"]).line
-    assert stale.line != nfl_506_stale(2026, ["4"]).line
+    assert missing[0].line != nfl_506_missing(2026, ["3"]).line
+    assert stale[0].line != nfl_506_stale(2026, ["17"]).line
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://506sports.com/nfl.php?yr=2026&wk=9&x=1",
+        "https://506sports.com/nfl.php?yr=2026&wk=123",
+        "https://506sports.com/nfl.php?yr=26&wk=9",
+        "https://506sports.com/ncaaf.php?yr=2026&wk=9",
+        "https://example.com/nfl.php?yr=2026&wk=9",
+        "https://506sports.com/nfl.php?wk=9&yr=2026",
+    ],
+)
+def test_whitelist_admits_only_exact_506_nfl_week_links(url: str) -> None:
+    item = AttentionItem(kind="reminder_506_nfl", line=f"save {url}", severity="reminder")
+    with pytest.raises(ValueError, match="whitelist"):
+        build_attention_body([item], generated_at=_NOW)
 
 
 def test_reminder_builders_reject_bad_input() -> None:

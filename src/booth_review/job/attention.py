@@ -22,6 +22,7 @@ from datetime import UTC, date, datetime
 from typing import Literal
 from zoneinfo import ZoneInfo
 
+from booth_review.nfl.layout import nfl_506_url
 from booth_review.sources.sports506.collector import WEEK_LABELS
 
 ATTENTION_TITLE = "booth-review job: needs attention"
@@ -31,6 +32,11 @@ ATTENTION_TITLE = "booth-review job: needs attention"
 # No "?", "=", "@", or newline can ever match -- the exact shapes a URL
 # query string or a "KEY=value" secret would need.
 _LINE_RE = re.compile(r"^[A-Za-z0-9 ,()_./:#-]+$")
+# The one shape allowed past _LINE_RE's ban on "?", "=" and "&": a 506 NFL week page
+# link, all digits after the fixed path, so it carries nothing but a season and week.
+_506_NFL_WEEK_URL_RE = re.compile(
+    r"https://506sports\.com/nfl\.php\?yr=\d{4}&wk=\d{1,2}(?![0-9&=?])"
+)
 _ERROR_TYPE_RE = re.compile(r"^[A-Za-z]+$")
 
 _MAX_LINES = 60
@@ -246,9 +252,6 @@ REMINDER_ESPNPR_CFB_URL = "https://espnpressroom.com/press-release-category/coll
 REMINDER_AA_CFB_URL = "https://awfulannouncing.com/category/schedules"
 REMINDER_AA_NFL_URL = "https://awfulannouncing.com/category/schedules"
 REMINDER_FOX_CFB_URL = "https://www.foxsports.com/presspass"
-# Path only: 506's week URL (nfl.php?yr=..&wk=..) holds "?", "=" and "&", which the
-# whitelist rejects, so the line names the week in text instead.
-REMINDER_506_NFL_URL = "https://506sports.com/nfl.php"
 
 
 def _require_cfb_week(label: str) -> None:
@@ -411,18 +414,20 @@ def reminder_506_nfl(season: int, label: str) -> AttentionItem:
     return _reminder(
         "reminder_506_nfl",
         f"reminder {season} nfl week {label}: save the 506 nfl week {label} page before "
-        f"thursday night {REMINDER_506_NFL_URL}, then booth-review import 506 "
+        f"thursday night {nfl_506_url(season, int(label))}, then booth-review import 506 "
         f"--season {season} --league nfl",
     )
 
 
 def reminder_506_nfl_played(
     season: int, label: str, status: str, labels: list[str]
-) -> AttentionItem:
+) -> list[AttentionItem]:
     """Phase 24 D-12: already-played NFL weeks whose 506 page is still `missing` or `stale`.
 
-    `label` is the upcoming week (it keeps the line unique per week for the WR-07
-    compare); `labels` are the played weeks.
+    One line per played week, each with that week's full 506 link and the AA schedules
+    page (`booth-review import aa` also fills NFL crews). `label` is the upcoming week
+    (it keeps the line unique per week for the WR-07 compare); `labels` are the played
+    weeks.
     """
     _require_nfl_week(label)
     if status not in ("missing", "stale"):
@@ -430,12 +435,16 @@ def reminder_506_nfl_played(
     if not labels:
         raise ValueError("labels must name at least one played week")
     _require_nfl_labels(labels)
-    what = "not saved" if status == "missing" else "saved before their games finished"
-    return _reminder(
-        "reminder_506_nfl_played",
-        f"reminder {season} nfl week {label}: 506 nfl pages {what} for {_week_list(labels)}, "
-        f"save {REMINDER_506_NFL_URL}",
-    )
+    what = "not saved" if status == "missing" else "saved before its games ended"
+    return [
+        _reminder(
+            "reminder_506_nfl_played",
+            f"reminder {season} nfl week {label}: 506 nfl week {week} page {what}, "
+            f"save {nfl_506_url(season, int(week))} or the aa nfl post "
+            f"{REMINDER_AA_NFL_URL}",
+        )
+        for week in sorted(labels, key=int)
+    ]
 
 
 def missed_runs(n: int) -> AttentionItem:
@@ -776,7 +785,7 @@ def build_attention_body(items: Sequence[AttentionItem], *, generated_at: dateti
     for item in items:
         if len(item.line) > _MAX_LINE_LEN:
             raise ValueError(f"attention line exceeds {_MAX_LINE_LEN} characters: {item.line!r}")
-        if not _LINE_RE.match(item.line):
+        if not _LINE_RE.match(_506_NFL_WEEK_URL_RE.sub("", item.line)):
             raise ValueError(f"attention line failed the count-only whitelist: {item.line!r}")
         lines.append(f"- {item.line}")
 

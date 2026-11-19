@@ -18,7 +18,6 @@ from nfl_join_helpers import sched_row, schedule_csv
 from booth_review.config import DataPaths
 from booth_review.job import reminders
 from booth_review.job.attention import (
-    REMINDER_506_NFL_URL,
     REMINDER_AA_CFB_URL,
     REMINDER_AA_NFL_URL,
     REMINDER_ESPNPR_CFB_URL,
@@ -243,10 +242,11 @@ def test_thursday_lists_played_missing_and_stale_weeks_and_the_upcoming_page(
         "reminder_506_nfl_played",
         "reminder_506_nfl",
     ]
-    assert "not saved for week 3" in items[0].line
-    assert "saved before their games finished for week 4" in items[1].line
+    assert "506 nfl week 3 page not saved" in items[0].line
+    assert "506 nfl week 4 page saved before its games ended" in items[1].line
     assert "save the 506 nfl week 9 page" in items[2].line
-    assert all(REMINDER_506_NFL_URL in item.line for item in items)
+    for item, week in zip(items, ("3", "4", "9"), strict=True):
+        assert f"https://506sports.com/nfl.php?yr=2026&wk={week}" in item.line
     build_attention_body(items, generated_at=THU_1200)
 
 
@@ -273,8 +273,10 @@ def test_thursday_uses_the_real_gap_report(vault_paths: DataPaths) -> None:
     """Nothing saved: every played week is missing; no stub in between."""
     _write_nfl_schedule(vault_paths)
     items = due_reminders(vault_paths, THU_1200)
-    assert _kinds(items) == ["reminder_506_nfl_played", "reminder_506_nfl"]
-    assert "weeks 1, 2, 3, 4, 5, 6, 7, 8" in items[0].line
+    assert _kinds(items) == [*["reminder_506_nfl_played"] * 8, "reminder_506_nfl"]
+    assert [item.line.split(": 506 nfl ")[1].split(" page")[0] for item in items[:8]] == [
+        f"week {n}" for n in range(1, 9)
+    ]
 
 
 # -- purity -------------------------------------------------------------------------
