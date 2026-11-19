@@ -7411,7 +7411,6 @@ tr.is-matched > :first-child {
 /* The match ring (UI-SPEC decision 5): ink outline with a background keyline inside it. */
 .wk-cell.is-match {
   z-index: 2;
-  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
 }
 
 .wk-cell:focus-visible {
@@ -7658,7 +7657,7 @@ tr.is-matched > :first-child {
 }
 
 .wk-item.is-match {
-  box-shadow: inset 0 0 0 2px var(--ink), inset 0 0 0 3px var(--bg);
+  z-index: 2;
 }
 
 .wk-root--list .wk-tba-body {

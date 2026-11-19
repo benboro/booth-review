@@ -656,12 +656,8 @@ def test_figure_fade_ring_and_hover_ring(map_page: Page) -> None:
     assert out["fadedOpacity"] == [out["faded_const"]] == [0.15]
     assert out["matched"] == ["noon"] and out["matchedOpacity"] == [1]
     assert "noon" not in out["normal"] and "tba" not in out["normal"]
-    size = out["matchedSize"][0]
-    assert out["keyline"]["symbol"] == "circle-open"
-    assert out["keyline"]["size"] == [size + 6]
-    assert out["keyline"]["line"] == {"width": 3, "color": out["page"]}
-    assert out["ink"]["size"] == [size + 10]
-    assert out["ink"]["line"] == {"width": 2, "color": out["ink_color"]}
+    # Matched marks wear no pick ring (2026-11-18): both ring traces stay, empty.
+    assert out["keyline"]["size"] == [] and out["ink"]["size"] == []
     assert out["hover"]["size"][0] == 14 + 8  # the prime diamond, 14 px, plus 8
     assert out["hover"]["line"]["width"] == 1 and out["hoverX"] == 1
 

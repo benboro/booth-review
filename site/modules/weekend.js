@@ -13,7 +13,7 @@
 
 import { sortNetworks } from './network.js';
 import {
-  FAMILY_COLORS, INK, PAGE_BG, contrastRatio, familyKey, mixHex,
+  FAMILY_COLORS, INK, PAGE_BG, PILL_TEXT_COLOR, contrastRatio, familyKey, mixHex,
 } from './palette.js';
 
 /**
@@ -529,6 +529,10 @@ function deepenForWhite(hex) {
 export function cellColors(family, theme, state) {
   const key = familyKey(family);
   const solid = FAMILY_COLORS[theme][key];
+  // The CW keeps its own family blue (deepening for white text turned it into Disney's blue).
+  if (state === 'known' && key === 'cw') {
+    return { bg: solid, fg: PILL_TEXT_COLOR[theme].cw, edge: null };
+  }
   if (state === 'known') return { bg: deepenForWhite(solid), fg: '#FFFFFF', edge: null };
   return { bg: mixHex(solid, PAGE_BG[theme], TINT_WEIGHT), fg: INK[theme], edge: solid };
 }

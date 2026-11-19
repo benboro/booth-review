@@ -173,7 +173,8 @@ export function buildWeekendMapFigure(model, geometry, env) {
   const dots = model.dots ?? [];
   const markers = model.markers ?? [];
   const all = [...dots, ...markers];
-  const ringed = all.filter((p) => !p.faded && p.ringed);
+  // No pick ring on matched marks (2026-11-18): the traces stay, empty, so the figure shape holds.
+  const ringed = [];
   const hovered = env.hoverKey == null ? [] : all.filter((p) => p.key === env.hoverKey);
   const traces = [
     outlineTrace(geometry, theme, env.splat),
