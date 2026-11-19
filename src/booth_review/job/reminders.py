@@ -218,9 +218,9 @@ def _played_506_items(
     items: list[AttentionItem] = []
     if gaps is not None:
         if gaps.missing:
-            items.append(reminder_506_nfl_played(season, label, "missing", gaps.missing))
+            items.extend(reminder_506_nfl_played(season, label, "missing", gaps.missing))
         if gaps.stale:
-            items.append(reminder_506_nfl_played(season, label, "stale", gaps.stale))
+            items.extend(reminder_506_nfl_played(season, label, "stale", gaps.stale))
     return items
 
 
