@@ -22,14 +22,15 @@ be bold, so the same logic reads both conventions without a per-layout
 special case.
 
 The only cleanup applied to any name is structural: whitespace collapse,
-splitting a leading AP-rank integer off a team name, splitting a crew
-string on its ", " delimiter, and splitting a crew cell that lists one crew
-per line (one per outlet) into those lines, each keeping its outlet: the
-trailing "(Outlet)" tag every line carries, or else the network cell's line
-in the same position (see `CrewLine`). A crew cell's linked `<small>` note is
-dropped before any of that. No team, network, or announcer name is
-otherwise altered (AGENTS.md's crosswalk-only rule; team/announcer
-resolution happens later, in Phase 3, through crosswalk tables).
+splitting a leading AP-rank integer off a team name, dropping a bracketed
+playoff seed, splitting a crew string on its ", " delimiter, and splitting a
+crew cell that lists one crew per line (one per outlet) into those lines, each
+keeping its outlet: the trailing "(Outlet)" tag every line carries, or else
+the network cell's line in the same position (see `CrewLine`). A crew cell's
+linked `<small>` note is dropped before any of that. No team, network, or
+announcer name is otherwise altered (AGENTS.md's crosswalk-only rule;
+team/announcer resolution happens later, in Phase 3, through crosswalk
+tables).
 """
 
 from __future__ import annotations
@@ -67,6 +68,10 @@ _ALT_CAST_MARKERS = ("alt-cast", "(alt)")
 _SPANISH_MARKER = "spanish"
 
 FeedKind = Literal["main", "alt", "spanish", "unknown"]
+
+# A playoff seed in brackets, e.g. "[15] Example State" on FCS playoff rows. It
+# is no part of the team name, and is not an AP rank.
+_SEED_RE = re.compile(r"\[\d{1,2}\]")
 
 # A crew line's trailing outlet tag, e.g. "Pat Example, Jordan Sample (ECN)".
 _OUTLET_TAG_RE = re.compile(r"\s*\(([^()]+)\)$")
@@ -129,7 +134,7 @@ def collapse_whitespace(text: str) -> str:
 
 
 def _split_rank(part: str) -> tuple[int | None, str]:
-    part = collapse_whitespace(part)
+    part = collapse_whitespace(_SEED_RE.sub(" ", part))
     match = _RANK_RE.match(part)
     if match is None:
         return None, part

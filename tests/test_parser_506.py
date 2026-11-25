@@ -508,3 +508,27 @@ def test_unlinked_small_text_in_a_crew_cell_is_kept() -> None:
     html = _per_outlet_page_div("Pat Example, <small>Jordan Sample</small>", "ECN")
     (listing,) = parse_week_page(html, season=2026, week_label="8")
     assert listing.crew_names == ("Pat Example", "Jordan Sample")
+
+
+# -- a bracketed playoff seed beside a team name --------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "matchup",
+    [
+        "Prairie State @ <font size=1>[15]</font> Union City",
+        "<font size=1>[2]</font> Prairie State @ Union City",
+        "Prairie State @ <font size=1>[15]</font>Union City",
+    ],
+)
+def test_a_bracketed_seed_is_not_part_of_the_team_name_or_its_rank(matchup: str) -> None:
+    html = (
+        "<html><body><h3>SATURDAY, NOVEMBER 28</h3>\n"
+        f'<div id="cgame"><div id="cmatchup"><b>First Round:</b><br>{matchup}</div>'
+        '<div id="ctime">8:00 PM ET</div><div id="cntwk">ECN</div>'
+        '<div id="canncrs">Pat Example, Jordan Sample</div></div>\n</body></html>'
+    ).encode()
+    (listing,) = parse_week_page(html, season=2026, week_label="13")
+    assert (listing.away_raw, listing.home_raw) == ("Prairie State", "Union City")
+    assert (listing.away_rank, listing.home_rank) == (None, None)
+    assert listing.game_label == "First Round:"
