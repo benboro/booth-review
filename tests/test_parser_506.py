@@ -8,6 +8,7 @@ smoke check in the plan's own verification command, never by these tests.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -477,3 +478,33 @@ def test_a_crew_wrapped_after_a_comma_is_not_read_as_one_crew_per_outlet() -> No
     (listing,) = parse_week_page(html, season=2026, week_label="8")
     assert [line.outlet for line in listing.crew_lines] == [None, None]
     assert listing.crew_names == ("Pat Example", "Jordan Sample", "Casey Demo")
+
+
+# -- a linked note under a crew -------------------------------------------------------------
+
+_NOTE = '<br><small><a href="https://example.com/post">Example statement on a booth</a></small>'
+
+
+@pytest.mark.parametrize(
+    ("page", "season"), [(_per_outlet_page_div, 2026), (_per_outlet_page_table, 2015)]
+)
+def test_a_linked_note_under_a_crew_is_not_a_crew_member(
+    page: Callable[[str, str], bytes], season: int
+) -> None:
+    html = page("Pat Example, Jordan Sample" + _NOTE, "ECN")
+    (listing,) = parse_week_page(html, season=season, week_label="8")
+    assert listing.crew_raw == "Pat Example, Jordan Sample"
+    assert listing.crew_names == ("Pat Example", "Jordan Sample")
+    assert listing.crew_lines == ()
+
+
+def test_a_crew_cell_holding_only_a_linked_note_has_no_crew() -> None:
+    (listing,) = parse_week_page(_per_outlet_page_div(_NOTE, "ECN"), season=2026, week_label="8")
+    assert listing.crew_raw is None
+    assert listing.crew_names == ()
+
+
+def test_unlinked_small_text_in_a_crew_cell_is_kept() -> None:
+    html = _per_outlet_page_div("Pat Example, <small>Jordan Sample</small>", "ECN")
+    (listing,) = parse_week_page(html, season=2026, week_label="8")
+    assert listing.crew_names == ("Pat Example", "Jordan Sample")
