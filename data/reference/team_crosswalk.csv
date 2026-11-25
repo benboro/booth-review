@@ -3,6 +3,7 @@ cfbd,Hawai'i,Hawaiʻi,62,,,CFBD spells the okina as an apostrophe; the site show
 ratingsref,cfb-alabama-am,Alabama A&M,2010,,,RR slug omits the ampersand
 ratingsref,cfb-appalachian-state,App State,2026,,,CFBD's own current short name
 ratingsref,cfb-fiu,Florida International,2229,,,RR slug uses the FIU initialism
+ratingsref,cfb-florida-am,Florida A&M,50,,,RR slug omits the ampersand
 ratingsref,cfb-mcneese-state,McNeese,2377,,,CFBD drops State from McNeese
 ratingsref,cfb-prairie-view-am,Prairie View A&M,2504,,,RR slug omits the ampersand
 ratingsref,cfb-southeastern-louisiana,SE Louisiana,2545,,,CFBD abbreviates Southeastern
@@ -321,3 +322,4 @@ espnpr,Miami (Ohio),Miami (OH),193,,,ESPN Press Room spells out the state qualif
 espnpr,Penn,Pennsylvania,219,,,ESPN Press Room short name for the Ivy League Penn
 espnpr,Coast Guard Academy,Coast Guard,2557,,,ESPN Press Room uses the academy's full name
 espnpr,Merchant Marine Academy,Merchant Marine,2383,,,ESPN Press Room uses the academy's full name
+espnpr,Long Island,Long Island University,2341,,,ESPN Press Room's short name
