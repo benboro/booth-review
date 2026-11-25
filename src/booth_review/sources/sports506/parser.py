@@ -26,7 +26,8 @@ splitting a leading AP-rank integer off a team name, splitting a crew
 string on its ", " delimiter, and splitting a crew cell that lists one crew
 per line (one per outlet) into those lines, each keeping its outlet: the
 trailing "(Outlet)" tag every line carries, or else the network cell's line
-in the same position (see `CrewLine`). No team, network, or announcer name is
+in the same position (see `CrewLine`). A crew cell's linked `<small>` note is
+dropped before any of that. No team, network, or announcer name is
 otherwise altered (AGENTS.md's crosswalk-only rule; team/announcer
 resolution happens later, in Phase 3, through crosswalk tables).
 """
@@ -192,6 +193,16 @@ def _split_crew(text: str) -> tuple[str, ...]:
     return tuple(name.strip() for name in text.split(",") if name.strip())
 
 
+def _drop_linked_notes(tag: Tag | None) -> None:
+    """Remove a crew cell's `<small>` notes that hold a link: 506 prints news
+    about a booth there, and a note's link text is not a crew member."""
+    if tag is None:
+        return
+    for small in tag.find_all("small"):
+        if small.find("a") is not None:
+            small.decompose()
+
+
 def _crew_lines(crew_lines: list[str], network_lines: list[str]) -> tuple[CrewLine, ...]:
     """A crew cell of two or more lines read as one crew per outlet (see
     CrewLine); () for a one-line cell."""
@@ -311,6 +322,7 @@ def _build_listing(
     network_lines = _extract_cell_lines(network_tag)
     network_raw = _cell_text(network_lines) or None
 
+    _drop_linked_notes(crew_tag)
     crew_cell_lines = _extract_cell_lines(crew_tag)
     crew_raw = _cell_text(crew_cell_lines) or None
     crew_lines = _crew_lines(crew_cell_lines, network_lines)
